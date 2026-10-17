@@ -3,32 +3,35 @@
     "id": "F1",
     "severity": "high",
     "segments": [
-      "low_vision"
+      "low_vision",
+      "mobile"
     ],
     "personas": [
-      "rosa"
+      "rosa",
+      "kai"
     ],
-    "step": "Shipping",
-    "page": "/checkout",
-    "selector": "a:has-text('Continue to payment')",
-    "title": "'Continue to payment' is unreadable for large-text users",
+    "step": "Product",
+    "page": "/shop/product/*",
+    "selector": "div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")",
+    "title": "Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
     "evidence": {
-      "sessions": 7,
-      "users": 7,
-      "rageClicks": 7,
+      "sessions": 61,
+      "users": 56,
+      "dropOffRate": 0.677,
+      "rageClicks": 67,
       "sinceRelease": {
-        "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
-        "date": "2026-06-24",
-        "name": "Checkout redesign"
+        "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+        "date": "2026-05-20",
+        "name": "New product page"
       },
       "exampleSessions": [
-        "01a132ad-4abe-7530-90d6-80e451da92db",
-        "01a13586-e7a7-7412-80f8-262fa76181f3",
-        "01a13596-c365-7f10-b94d-79a99d897154"
+        "01a1343b-cf9b-7caf-8305-b9fc774a890b",
+        "01a1347e-dbb7-7c77-9766-faa9a2d1a90e",
+        "01a134ae-98ab-76b2-85f0-12d5106ff92c"
       ],
       "quotes": []
     },
-    "suggestedFix": "Replace the light-gray 11px link with a high-contrast, full-width primary button."
+    "suggestedFix": "Show every size as a visible button that works on tap and without hover, and say which size is missing when Add to Cart is pressed."
   },
   {
     "id": "F2",
@@ -41,23 +44,84 @@
     ],
     "step": "Account",
     "page": "/checkout/account",
-    "title": "Forced account creation blocks mobile checkout",
+    "title": "Mobile shoppers leave at Account, a step the flow doesn't require; 32 failed 'account_submitted' submits (password, phone, username)",
     "evidence": {
-      "sessions": 32,
-      "users": 31,
-      "dropOffRate": 0.6,
+      "sessions": 44,
+      "users": 43,
+      "dropOffRate": 0.679,
       "sinceRelease": {
         "sha": "f00dfeedfixture",
         "date": "2026-09-09",
         "name": "Accounts"
       },
       "exampleSessions": [
-        "01a132ad-4abe-7530-90d6-80e451da92db",
-        "01a134f1-10c3-7eae-bb3b-7dad8cc5a4d6",
-        "01a1351d-e48f-73eb-a8e1-09c686c06a60"
+        "01a1351d-e48f-73eb-a8e1-09c686c06a60",
+        "01a135b5-d490-7451-9a18-97cb8c92cc39",
+        "01a13616-9c29-7556-b0fb-134a584d44ac"
       ],
       "quotes": []
     },
-    "suggestedFix": "Offer guest checkout; make account creation optional after purchase."
+    "suggestedFix": "Make Account optional (e.g. continue as a guest; offer it after the purchase): it isn't a required step, and its form fails people."
+  },
+  {
+    "id": "F3",
+    "severity": "high",
+    "segments": [
+      "mobile"
+    ],
+    "personas": [
+      "kai"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "selector": "button.text-[11px].text-[#c4c4c4].underline-offset-2[type=\"submit\"]:has-text(\"Continue to payment\")",
+    "title": "Mobile shoppers can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
+    "evidence": {
+      "sessions": 3,
+      "users": 3,
+      "dropOffRate": 0.1,
+      "rageClicks": 7,
+      "sinceRelease": {
+        "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+        "date": "2026-06-24",
+        "name": "Checkout redesign"
+      },
+      "exampleSessions": [
+        "01a132ad-4abe-7530-90d6-80e451da92db",
+        "01a143c0-f98c-7ffd-9093-0846005a4195",
+        "01a13596-c365-7f10-b94d-79a99d897154"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Make 'Continue to payment' a high-contrast, full-width primary button with readable text (at least 16px, WCAG AA contrast)."
+  },
+  {
+    "id": "F4",
+    "severity": "low",
+    "segments": [
+      "mobile"
+    ],
+    "personas": [
+      "kai"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
+    "evidence": {
+      "sessions": 3,
+      "users": 3,
+      "sinceRelease": {
+        "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+        "date": "2026-08-05",
+        "name": "Promo codes"
+      },
+      "exampleSessions": [
+        "01a13995-17d0-7538-930f-c4f2b806690f",
+        "01a13f32-b88e-7063-ba7a-2dd50b7dc0f6",
+        "01a14130-41db-7054-bc39-e47d031aee7d"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Keep the shipping form's values when a promo code is applied (don't reset or re-mount the form), and keep the code applied."
   }
 ]

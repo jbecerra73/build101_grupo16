@@ -3,12 +3,15 @@
 //   npm run swarm -- --url https://deploy-preview-12--swarm-ecommerce.netlify.app
 //       [--run <runId>] [--personas rosa,kai,typical] [--seeds-per-persona 10] [--flow buy-tshirt]
 //       [--provider tenki|local] [--snapshot <id>] [--daily-cap 5] [--sha <preview build sha>]
-//       [--model haiku] [--dry-run]
+//       [--model haiku] [--wait posthog|local] [--dry-run]
 //
 // tenki (default) needs TENKI_API_KEY and TENKI_SNAPSHOT_ID (from `npm run swarm:snapshot`), and
 // Claude credentials for the agents: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY, passed to the
 // sandboxes. `--provider local` runs the same workers on this machine. The daily cap
 // (SWARM_DAILY_CAP, default 5) and fresh seeds are tracked in runs/.swarm-ledger.json.
+// The run ends once PostHog shows every agent's swarm_done / swarm_give_up (--wait posthog, the
+// default; needs POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID). --wait local only waits for
+// the agents' result files, e.g. against a store without tracking.
 //
 // Ctrl-C stops the workers and closes every sandbox; a second Ctrl-C quits without waiting
 // (sandboxes then stop at their maxDuration).
@@ -22,7 +25,7 @@ import { peekNextSeed } from "./ledger";
 import { freshSeeds, MAX_SANDBOXES, planSwarm } from "./plan";
 import type { SandboxProvider } from "./provider";
 import { runSwarm } from "./run";
-import { localResultsWaiter } from "./wait";
+import { localResultsWaiter, type SwarmWaiter } from "./wait";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
@@ -43,6 +46,7 @@ const { values: args } = parseArgs({
     "poll-sec": { type: "string", default: "3" },
     "agent-timeout-min": { type: "string", default: "10" },
     "wait-timeout-min": { type: "string", default: "10" },
+    wait: { type: "string", default: "posthog" },
     "dry-run": { type: "boolean", default: false },
   },
 });
@@ -97,6 +101,13 @@ const onSignal = (sig: string) => {
 process.on("SIGINT", () => onSignal("SIGINT"));
 process.on("SIGTERM", () => onSignal("SIGTERM"));
 
+let waiter: SwarmWaiter;
+if (args.wait === "posthog") {
+  const { createPostHogSource } = await import("@frictionswarm/posthog");
+  waiter = createPostHogSource("api");
+} else if (args.wait === "local") waiter = localResultsWaiter(runsDir);
+else throw new Error(`Unknown --wait ${args.wait}; use posthog or local`);
+
 const buildSha = args.sha ?? (await readBuildSha(args.url));
 try {
   const { results } = await runSwarm({
@@ -107,8 +118,7 @@ try {
     personaIds,
     seedsPerPersona,
     provider,
-    // TODO(#32): PostHogSource.waitForSwarm once it exists; this only waits for the agents' local results.
-    waiter: localResultsWaiter(runsDir),
+    waiter,
     runsDir,
     ledgerFile,
     dailyCap: Number(args["daily-cap"]),

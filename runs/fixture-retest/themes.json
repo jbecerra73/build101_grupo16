@@ -1,0 +1,38 @@
+[
+  {
+    "id": "T1",
+    "title": "Gave up at Product",
+    "segments": [
+      "low_vision",
+      "mobile"
+    ],
+    "personas": [
+      "rosa",
+      "kai"
+    ],
+    "sessions": 3,
+    "quotes": [
+      {
+        "sessionId": "01a14baa-2243-7a48-b9a7-07f4c1a2b08a",
+        "agentId": "rosa-1003",
+        "personaId": "rosa",
+        "text": "There's a 'Size' label but no sizes I can choose."
+      },
+      {
+        "sessionId": "01a14baa-2510-77a9-a078-44ed6c0b18d4",
+        "agentId": "rosa-1001",
+        "personaId": "rosa",
+        "text": "It keeps saying select a size but I don't see any sizes."
+      },
+      {
+        "sessionId": "01a14baa-3932-79a5-acc6-606f614566b5",
+        "agentId": "kai-1002",
+        "personaId": "kai",
+        "text": "I tapped the size box but nothing opens. I can't pick a size."
+      }
+    ],
+    "findingIds": [
+      "F1"
+    ]
+  }
+]

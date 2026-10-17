@@ -1,6 +1,6 @@
-// Waiting for the swarm's tracks. The real wait is PostHogSource.waitForSwarm (#32, not built
-// yet): it polls PostHog until every agent's swarm_done / swarm_give_up is ingested. Until then
-// the orchestrator depends on just that method, and the CLI uses localResultsWaiter.
+// Waiting for the swarm's tracks. The real wait is PostHogSource.waitForSwarm (packages/posthog):
+// it polls PostHog until every agent's swarm_done / swarm_give_up is ingested. The orchestrator
+// depends on just that method; localResultsWaiter is the fallback for stores without tracking.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -15,9 +15,9 @@ export class SwarmWaitTimeout extends Error {
   }
 }
 
-/** Stand-in for PostHogSource.waitForSwarm: resolves once every agent's `agents/<agentId>.json`
+/** Fallback for PostHogSource.waitForSwarm: resolves once every agent's `agents/<agentId>.json`
  * has been copied into the local run folder. It proves the agents ended, NOT that PostHog has
- * ingested their events; swap in the real source when #32 lands. */
+ * ingested their events. */
 export function localResultsWaiter(runsDir: string, pollMs = 1000): SwarmWaiter {
   return {
     async waitForSwarm({ runId, agentIds, timeoutMs }) {
