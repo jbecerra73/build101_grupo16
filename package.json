@@ -12,7 +12,10 @@
     "posthog:upload": "tsx tools/posthog-sim/upload.ts",
     "agent": "tsx worker/cli.ts",
     "analyze": "tsx packages/analyzer/src/cli.ts",
-    "fix": "tsx orchestrator/cli.ts"
+    "fix": "tsx orchestrator/cli.ts",
+    "swarm": "tsx orchestrator/swarm/cli.ts",
+    "swarm:snapshot": "tsx orchestrator/swarm/build-snapshot.ts",
+    "swarm:worker": "tsx worker/swarm-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
