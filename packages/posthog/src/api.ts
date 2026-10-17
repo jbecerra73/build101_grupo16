@@ -3,7 +3,7 @@ import { PRODUCTION_HOST, pollSwarm } from "./file";
 import { windowBounds, type DescribedSource } from "./source";
 
 export type ApiSourceOptions = {
-  /** POSTHOG_HOST, e.g. https://us.posthog.com (the API host, not the ingestion host). */
+  /** POSTHOG_APP_HOST, e.g. https://us.posthog.com (the app host, not the ingestion host POSTHOG_HOST). */
   host?: string;
   /** POSTHOG_PROJECT_ID */
   projectId?: string;
@@ -43,7 +43,7 @@ export function rowToEvent(row: unknown[]): PostHogEvent {
 /** PostHog over HogQL: POST {host}/api/projects/{id}/query. */
 export function apiSource(opts: ApiSourceOptions = {}): DescribedSource {
   const env = opts.env ?? process.env;
-  const host = (opts.host ?? (env.POSTHOG_HOST || "https://us.posthog.com")).replace(/\/+$/, "");
+  const host = (opts.host ?? (env.POSTHOG_APP_HOST || "https://us.posthog.com")).replace(/\/+$/, "");
   const projectId = opts.projectId ?? env.POSTHOG_PROJECT_ID;
   const apiKey = opts.apiKey ?? env.POSTHOG_PERSONAL_API_KEY;
   const storeHost = opts.storeHost === undefined ? PRODUCTION_HOST : opts.storeHost;
