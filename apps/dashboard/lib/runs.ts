@@ -53,9 +53,10 @@ export function parseJsonl<T>(text: string): T[] {
 
 const getJson = <T>(runId: string, rel: string) => runStore().getJson<T>(runKey(runId, rel)).catch(() => undefined);
 
-/** PostHog replay links: `${POSTHOG_HOST}/project/${POSTHOG_PROJECT_ID}/replay/<session>`. */
+/** PostHog replay links: `<app host>/project/${POSTHOG_PROJECT_ID}/replay/<id>`, on
+ * POSTHOG_APP_HOST (the UI/query host), else POSTHOG_HOST. */
 export function replayBase(env = process.env): string | undefined {
-  const host = env.POSTHOG_HOST?.replace(/\/+$/, "");
+  const host = (env.POSTHOG_APP_HOST || env.POSTHOG_HOST)?.replace(/\/+$/, "");
   const project = env.POSTHOG_PROJECT_ID;
   return host && project ? `${host}/project/${encodeURIComponent(project)}/replay/` : undefined;
 }

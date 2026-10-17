@@ -115,7 +115,7 @@ export type RunDetail = {
   themes?: Theme[];
   /** Releases seen in the data (from the trend), for markers and window presets. */
   releases?: Release[];
-  /** `${POSTHOG_HOST}/project/${POSTHOG_PROJECT_ID}/replay/` when both are set. */
+  /** `${POSTHOG_APP_HOST || POSTHOG_HOST}/project/${POSTHOG_PROJECT_ID}/replay/` when set. */
   replayBase?: string;
   /** Where the retest's events came from: the run's snapshot, or the live source. */
   eventsFrom?: "snapshot" | "source" | "none";
