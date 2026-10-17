@@ -8,6 +8,7 @@
 //   runs/<runId>/metrics.json       Metrics
 //   runs/<runId>/findings.json      Finding[]
 //   runs/<runId>/fix.json           FixResult (only on runs that triggered a fix)
+//   runs/<runId>/status.json        RunStatus (written by the orchestrator while it works)
 
 export type PersonaId = string;
 
@@ -208,4 +209,38 @@ export type FixResult = {
   baselineRunId: string;
   repo: string;
   attempts: FixAttempt[];
+};
+
+/** Pipeline phase of a baseline run, including its fix and retest. */
+export type RunPhase =
+  | "verifying"
+  | "swarming"
+  | "analyzing"
+  | "fixing"
+  | "waiting-preview"
+  | "retesting"
+  | "comparing"
+  | "done"
+  | "failed";
+
+export type RunStatus = {
+  runId: string;
+  phase: RunPhase;
+  updatedAt: string;
+  /** Human-readable progress line for the dashboard. */
+  message?: string;
+  /** Set once the retest swarm has started. */
+  retestRunId?: string;
+  error?: string;
+};
+
+/** What the dashboard sends to start a pipeline. */
+export type StartRunRequest = {
+  flowId: string;
+  personaIds: PersonaId[];
+  seedsPerPersona: number;
+  /** Defaults to the flow's startUrl (production). */
+  targetUrl?: string;
+  /** Run the coding agent + retest after the baseline. */
+  autoFix: boolean;
 };
