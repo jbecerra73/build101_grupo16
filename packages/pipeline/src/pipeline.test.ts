@@ -15,6 +15,7 @@ import type {
   StartRunRequest,
   Verdict,
 } from "@frictionswarm/shared";
+import { buyTshirt } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeFixLoop, pickTargets } from "./fakeFix";
 import { realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
@@ -173,7 +174,7 @@ describe("startPipeline", () => {
     await expect(startPipeline({ ...req, flowId: "nope" }, opts)).rejects.toThrow(/Unknown flow/);
     await expect(startPipeline({ ...req, seedsPerPersona: 11 }, opts)).rejects.toThrow(/1 to 10/);
     await expect(startPipeline({ ...req, window: { from: "2026-10-17", to: "2026-10-01" } }, opts)).rejects.toThrow(/before/);
-    expect(() => validateRequest({ ...req, source: "s3" as never })).toThrow(/Unknown source/);
+    expect(() => validateRequest({ ...req, source: "s3" as never }, buyTshirt)).toThrow(/Unknown source/);
   });
 
   it("defaults to the last 28 days, today included", () => {

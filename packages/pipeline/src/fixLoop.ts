@@ -6,7 +6,7 @@
 //     below through a guarded dynamic import, so this package builds without it.
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
-import type { Finding, FixResult, Metrics, PersonaId, RunConfig, Severity, Verdict } from "@frictionswarm/shared";
+import type { Finding, Flow, FixResult, Metrics, PersonaId, RunConfig, Severity, Verdict } from "@frictionswarm/shared";
 import { REPO_ROOT } from "./runs";
 import type { SwarmRunner } from "./swarm";
 
@@ -14,7 +14,7 @@ import type { SwarmRunner } from "./swarm";
 export type Analyzer = (runId: string) => Promise<{ metrics: Metrics; findings: Finding[] }>;
 
 /** The analyzer's compareSegmentsToPersonas: analysis (segments) vs retest (personas). */
-export type Compare = (analysis: Metrics, retest: Metrics, targetedPersonas: PersonaId[]) => Verdict;
+export type Compare = (analysis: Metrics, retest: Metrics, targetedPersonas: PersonaId[], flow?: Flow) => Verdict;
 
 export type FixLoopOptions = {
   /** The analysis run whose findings get fixed (fix.json is written there). */
@@ -49,6 +49,7 @@ export function retestConfig(analysis: RunConfig, o: { attempt: number; commitSh
     runId: `${analysis.runId}-retest${o.attempt}`,
     kind: "retest",
     flowId: analysis.flowId,
+    flow: analysis.flow,
     posthog: { source: analysis.posthog.source, buildSha: o.commitSha },
     personaIds,
     seeds: o.seeds,

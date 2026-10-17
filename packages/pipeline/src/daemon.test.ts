@@ -2,10 +2,11 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Finding, FixResult, Metrics, RunConfig, RunStatus, StartRunRequest } from "@frictionswarm/shared";
-import { FsStore, MemoryStore, type OrchestratorHeartbeat, type QueuedRun, type Settings, type SwarmTopology } from "@frictionswarm/store";
+import { buyTshirt, type Finding, type Flow, type FixResult, type Metrics, type RunConfig, type RunStatus, type StartRunRequest } from "@frictionswarm/shared";
+import { FsStore, MemoryStore, putFlow, type OrchestratorHeartbeat, type QueuedRun, type Settings, type SwarmTopology } from "@frictionswarm/store";
 import { Orchestrator, RESTARTED, type DepsFactory } from "./daemon";
 import { fakeFixLoop } from "./fakeFix";
+import { retestConfig } from "./fixLoop";
 import type { Analyzer, Compare } from "./fixLoop";
 import { RunMirror } from "./mirror";
 import { ingested, offlineSwarmRunner } from "./offline";
@@ -146,6 +147,38 @@ describe("orchestrator daemon", () => {
     await enqueue(store, "ok");
     await until(async () => (await status(store, "ok"))?.phase === "done");
     expect(seen[0]).toMatchObject({ swarmSpeed: 7, maxRunsPerDay: 5 });
+  });
+
+  it("snapshots the saved flow into config.json; later edits and retests keep the snapshot", async () => {
+    const { store, orch } = await setup();
+    const couponFlow: Flow = { ...buyTshirt, id: "coupon", goal: "Buy with a coupon." };
+    await putFlow(store, couponFlow);
+    await enqueue(store, "rc", { flowId: "coupon", autoFix: false });
+    await orch.start();
+    await until(async () => {
+      const s = await status(store, "rc");
+      return s && (s.phase === "done" || s.phase === "failed") && s;
+    });
+    await until(async () => !orch.active.size);
+    const config = (await store.getJson<RunConfig>("runs/rc/config.json"))!;
+    expect(config.flow).toEqual(couponFlow);
+
+    await putFlow(store, { ...couponFlow, goal: "changed" });
+    const after = (await store.getJson<RunConfig>("runs/rc/config.json"))!;
+    expect(after.flow?.goal).toBe("Buy with a coupon.");
+    const retest = retestConfig(after, { attempt: 1, commitSha: "abc", previewUrl: "https://p.example", seeds: { rosa: [1] } });
+    expect(retest.flow).toEqual(couponFlow);
+  });
+
+  it("fails a queued run whose flow does not exist", async () => {
+    const { store, orch } = await setup();
+    await enqueue(store, "rm", { flowId: "missing", autoFix: false });
+    await orch.start();
+    const final = await until(async () => {
+      const s = await status(store, "rm");
+      return s && s.phase === "failed" && s;
+    });
+    expect(final.error).toBe('Unknown flow "missing"');
   });
 
   it("refuses an invalid queued request without running it", async () => {

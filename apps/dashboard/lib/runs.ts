@@ -11,6 +11,7 @@
 import "server-only";
 import {
   FLOWS,
+  flowOf,
   PRODUCTION_URL,
   type Finding,
   type Metrics,
@@ -190,7 +191,7 @@ export async function getRun(runId: string, opts: { events?: boolean } = {}): Pr
   const core = await loadCore(runId);
   if (!core) return isValidRunId(runId) ? queuedRun(runId) : undefined;
   const { config, status, metrics, findings, themes, fix } = core;
-  const flow = FLOWS[config.flowId];
+  const flow = flowOf(config);
   const base = {
     runId,
     config,
@@ -242,7 +243,7 @@ export async function getRunSummary(runId: string): Promise<RunSummary | undefin
   let agents = 0;
   if (config.kind === "retest" && !metrics) {
     const { events } = await readSwarmEvents(config, { live: true });
-    provisional = deriveMetrics(config, events, FLOWS[config.flowId]);
+    provisional = deriveMetrics(config, events, flowOf(config));
     agents = groupByAgent(events).size;
   }
   const groups = groupsOf(config, metrics, provisional);

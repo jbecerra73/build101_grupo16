@@ -1,4 +1,4 @@
-import type { Flow } from "./contracts";
+import type { Flow, RunConfig } from "./contracts";
 
 export const PRODUCTION_URL = "https://swarm-ecommerce.netlify.app";
 
@@ -31,3 +31,8 @@ export const buyTshirt: Flow = {
 };
 
 export const FLOWS: Record<string, Flow> = { [buyTshirt.id]: buyTshirt };
+
+/** A run's flow: the snapshot in its config.json, else the built-in one (runs
+ * from before snapshots existed). Own keys only: "constructor" is not a flow. */
+export const flowOf = (config: Pick<RunConfig, "flow" | "flowId">): Flow | undefined =>
+  config.flow ?? (Object.hasOwn(FLOWS, config.flowId) ? FLOWS[config.flowId] : undefined);

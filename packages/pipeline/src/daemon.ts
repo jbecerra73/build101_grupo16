@@ -15,6 +15,7 @@ import type { RunStatus } from "@frictionswarm/shared";
 import {
   createStore,
   FsStore,
+  getFlow,
   HEARTBEAT_EVERY_MS,
   isValidRunId,
   KEYS,
@@ -215,12 +216,13 @@ export class Orchestrator {
     const n = Math.max(1, Math.min(10, Math.floor(req.seedsPerPersona ?? settings.defaultSeedsPerPersona ?? DEFAULT_SEEDS_PER_PERSONA) || 1));
     const seeds = Array.from({ length: n }, (_, i) => nextSeed + i);
     let refusal: string | undefined;
+    const flow = await getFlow(this.store, req.flowId);
     try {
-      validateRequest(req);
+      validateRequest(req, flow);
     } catch (e) {
       refusal = errMsg(e);
     }
-    const config = await analysisConfig(runId, refusal ? { flowId: req.flowId, autoFix: false } : req, this.#now());
+    const config = await analysisConfig(runId, refusal ? { flowId: req.flowId, autoFix: false } : req, this.#now(), flow);
     const dir = join(this.workDir, runId);
     const writeStatus = (s: Partial<RunStatus>) =>
       writeJson(join(dir, "status.json"), { runId, phase: "analyzing", updatedAt: this.#now().toISOString(), ...s });

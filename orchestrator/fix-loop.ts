@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  FLOWS,
+  flowOf,
   PERSONAS,
   previewUrl,
   SEGMENTS,
@@ -9,6 +9,8 @@ import {
   type FixAttempt,
   type FixResult,
   type Finding,
+  type Flow,
+  type Verdict,
   type Metrics,
   type RunConfig,
 } from "../shared";
@@ -53,7 +55,7 @@ export type FixLoopOptions = {
   collect?: (config: RunConfig) => Promise<void>;
   analyze: Analyzer;
   /** Segments vs personas; defaults to the analyzer's compareSegmentsToPersonas. */
-  compare?: typeof compareRuns;
+  compare?: (analysis: Metrics, retest: Metrics, targetedPersonas: string[], flow?: Flow) => Verdict;
   /** Attempt 1's seeds per persona (the pipeline allocates fresh ones); each retry shifts them by
    * a block of 1000. Default: retestSeeds over every segment's persona. */
   retestSeeds?: Record<string, number[]>;
@@ -82,12 +84,12 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const ghImpl = opts.ghImpl ?? gh;
   const codingAgent = opts.codingAgent ?? runCodingAgent;
   const waitForBuild = opts.waitForBuild ?? waitForBuildSha;
-  const compare = opts.compare ?? compareRuns;
+  const compare = opts.compare ?? ((a, r, t, f) => compareRuns(a, r, t, { flow: f }));
   const openShell = opts.shell ?? ((n: number) => tenkiShell(`fix-${baselineRunId}-${n}`));
   const baseDir = join(runsDir, baselineRunId);
   const config = await readJson<RunConfig>(join(baseDir, "config.json"));
   const baseline = await readJson<Metrics>(join(baseDir, "metrics.json"));
-  const flow = FLOWS[config.flowId];
+  const flow = flowOf(config);
   if (!flow) throw new Error(`unknown flow ${config.flowId}`);
   // Every segment's persona re-tests, control included, so a fix can't quietly hurt the others.
   const seedsFor = (n: number) =>
@@ -140,6 +142,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         runId: retestRunId,
         kind: "retest",
         flowId: flow.id,
+        flow: config.flow,
         posthog: { source: config.posthog.source, buildSha: agent.commitSha },
         personaIds,
         seeds,
@@ -158,7 +161,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       const retest = await opts.analyze(retestRunId);
 
       const targeted = [...new Set(targets.flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
-      const verdict = compare(baseline, retest.metrics, targeted);
+      const verdict = compare(baseline, retest.metrics, targeted, flow);
       attempt.verdict = verdict;
       log(`verdict: ${verdict.improved ? "improved" : "not proven"}\n  ${verdict.reasons.join("\n  ")}`);
 

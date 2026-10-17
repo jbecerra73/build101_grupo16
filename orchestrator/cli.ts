@@ -10,7 +10,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { FLOWS, PERSONAS, previewUrl, type FixResult, type Finding, type Metrics, type RunConfig } from "../shared";
+import { flowOf, PERSONAS, previewUrl, type FixResult, type Finding, type Metrics, type RunConfig } from "../shared";
 import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
 import { readJson, RUNS_DIR, verifyProductionBuild } from "./fix-loop";
 import { topFindings } from "./fix-prompt";
@@ -35,10 +35,12 @@ async function openPr(baselineRunId: string) {
   const dir = join(RUNS_DIR, baselineRunId);
   const config = await readJson<RunConfig>(join(dir, "config.json"));
   const findings = topFindings(await readJson<Finding[]>(join(dir, "findings.json")), Number(values.findings));
+  const flow = flowOf(config);
+  if (!flow) throw new Error(`unknown flow ${config.flowId}`);
   const shell = values.local ? localShell(await mkdtemp(join(tmpdir(), "frictionswarm-fix-"))) : await tenkiShell(`fix-${baselineRunId}`);
   log(`shell: ${values.local ? `local ${shell.home}` : "tenki sandbox"}`);
   try {
-    const agent = await runCodingAgent(shell, { runId: baselineRunId, attempt: 1, flow: FLOWS[config.flowId], findings, log });
+    const agent = await runCodingAgent(shell, { runId: baselineRunId, attempt: 1, flow, findings, log });
     const fix: FixResult = {
       baselineRunId,
       repo: STOREFRONT_REPO,

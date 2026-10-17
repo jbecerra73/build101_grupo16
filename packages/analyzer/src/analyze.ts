@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPostHogSource, snapshot, snapshotSource, windowBounds, type PostHogSource } from "@frictionswarm/posthog";
-import { FLOWS, type Finding, type Flow, type Metrics, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
+import { flowOf, type Finding, type Flow, type Metrics, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
 import { generateFindings, type FindingsOptions, type FindingsPath } from "./findings";
 import { historyFromEvents, type History } from "./history";
 import { computeMetrics } from "./metrics";
@@ -63,7 +63,7 @@ export async function analyzeRun(runDir: string, opts: AnalyzeOptions = {}): Pro
   const t0 = Date.now();
   const config = readJson<RunConfig>(join(runDir, "config.json"));
   if (!config) throw new Error(`No readable config.json in ${runDir}`);
-  const flow = opts.flow ?? FLOWS[config.flowId];
+  const flow = opts.flow ?? flowOf(config);
   if (!flow) throw new Error(`Unknown flow ${config.flowId}`);
   const source = opts.source ?? defaultSource(runDir, config);
   const write = opts.write ?? true;

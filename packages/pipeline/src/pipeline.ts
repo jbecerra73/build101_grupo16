@@ -14,6 +14,7 @@ import {
   FLOWS,
   PERSONAS,
   PRODUCTION_URL,
+  type Flow,
   type FixResult,
   type PersonaId,
   type PostHogSourceKind,
@@ -100,8 +101,8 @@ export async function currentReleaseSha(kind: PostHogSourceKind, dataDir = defau
 
 const DATE = /^\d{4}-\d\d-\d\d(T[\d:.]+Z?)?$/;
 
-export function validateRequest(req: StartRunRequest): void {
-  if (!FLOWS[req.flowId]) throw new Error(`Unknown flow "${req.flowId}"`);
+export function validateRequest(req: StartRunRequest, flow: Flow | undefined): void {
+  if (!flow) throw new Error(`Unknown flow "${req.flowId}"`);
   if (typeof req.autoFix !== "boolean") throw new Error("autoFix must be a boolean");
   if (req.source !== undefined && req.source !== "file" && req.source !== "api") throw new Error(`Unknown source "${req.source}" (file|api)`);
   if (req.window) {
@@ -117,12 +118,13 @@ export function validateRequest(req: StartRunRequest): void {
 /** The analysis run's config for a request. The default window (no
  * req.window) is the current production release over the last 28 days; an
  * explicit window covers every release in it. */
-export async function analysisConfig(runId: string, req: StartRunRequest, now = new Date()): Promise<RunConfig> {
+export async function analysisConfig(runId: string, req: StartRunRequest, now = new Date(), flow?: Flow): Promise<RunConfig> {
   const source = req.source ?? (process.env.POSTHOG_SOURCE === "api" ? "api" : "file");
   return {
     runId,
     kind: "analysis",
     flowId: req.flowId,
+    flow,
     window: req.window ?? defaultWindow(now),
     posthog: { source, buildSha: req.window ? "" : await currentReleaseSha(source) },
     personaIds: [],
@@ -141,12 +143,13 @@ export async function startPipeline(
   req: StartRunRequest,
   opts: StartOptions = {},
 ): Promise<{ runId: string; done: Promise<RunStatus> }> {
-  validateRequest(req);
+  const flow = Object.hasOwn(FLOWS, req.flowId) ? FLOWS[req.flowId] : undefined;
+  validateRequest(req, flow);
   const deps = { ...defaultDeps(opts.runsDir, opts.log), ...opts };
   await reserveRun(deps.runsDir, opts.maxRunsPerDay ?? Number(process.env.MAX_RUNS_PER_DAY ?? 10));
   const runId = newRunId();
   const seeds = await allocateSeeds(deps.runsDir, req.seedsPerPersona ?? DEFAULT_SEEDS_PER_PERSONA);
-  await writeJson(join(deps.runsDir, runId, "config.json"), await analysisConfig(runId, req));
+  await writeJson(join(deps.runsDir, runId, "config.json"), await analysisConfig(runId, req, new Date(), flow));
   await writeJson(join(deps.runsDir, runId, "request.json"), req);
   const status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString(), message: "Starting" };
   await writeJson(join(deps.runsDir, runId, "status.json"), status);
@@ -300,11 +303,11 @@ export async function ensureSnapshot(runsDir: string, runId: string, source: Pos
 /** The analyzer's compareSegmentsToPersonas, loaded with the analyzer. Sync
  * callers (the fix loop) get it after the first analysis has loaded the module. */
 export function moduleCompare(): Compare {
-  let compare: Compare | undefined;
+  let compare: Awaited<ReturnType<typeof loadAnalyzer>>["compareSegmentsToPersonas"] | undefined;
   void loadAnalyzer().then((m) => (compare = m.compareSegmentsToPersonas), () => {});
-  return (a, r, t) => {
+  return (a, r, t, flow) => {
     if (!compare) throw new Error("Analyzer not loaded yet: compareSegmentsToPersonas unavailable");
-    return compare(a, r, t);
+    return compare(a, r, t, { flow });
   };
 }
 

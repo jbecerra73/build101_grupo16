@@ -5,7 +5,7 @@
 // no git, no PR: every PR field says "rehearsal".
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { PERSONAS, type FixAttempt, type FixResult, type Finding, type Metrics, type RunConfig } from "@frictionswarm/shared";
+import { flowOf, PERSONAS, type FixAttempt, type FixResult, type Finding, type Metrics, type RunConfig } from "@frictionswarm/shared";
 import { rankFindings, retestConfig, type FixLoop } from "./fixLoop";
 import { readJson, writeJson } from "./runs";
 import { trapOf, type TrapId } from "./traps";
@@ -79,7 +79,7 @@ export const fakeFixLoop =
       const after = await analyze(retest.runId);
 
       const targeted = [...new Set(targets.flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
-      attempt.verdict = compare(analysis, after.metrics, targeted);
+      attempt.verdict = compare(analysis, after.metrics, targeted, flowOf(config));
       attempt.status = attempt.verdict.improved ? "ready" : "not-proven";
       log(`[rehearsal] verdict: ${attempt.status}\n  ${attempt.verdict.reasons.join("\n  ")}`);
       await save();

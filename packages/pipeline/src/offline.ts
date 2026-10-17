@@ -14,7 +14,7 @@
 // landing for another `ingestLagMs` (see `ingested`).
 import { appendFile, copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { FLOWS, PERSONAS, type Finding, type FixResult, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
+import { flowOf, PERSONAS, type Finding, type FixResult, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
 import {
   mulberry32,
   PERSONA_PROFILES,
@@ -120,7 +120,8 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
     const duration = opts.durationMs ?? 30_000;
     const lag = opts.ingestLagMs ?? 4_000;
     const tickMs = opts.tickMs ?? 250;
-    const flow = FLOWS[config.flowId];
+    const flow = flowOf(config);
+    if (!flow) throw new Error(`unknown flow ${config.flowId}`);
     const out = join(/*turbopackIgnore: true*/ runsDir, config.runId);
     const file = swarmFile(dataDir, config.runId);
 
