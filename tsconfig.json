@@ -8,8 +8,15 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "lib": ["ES2024"]
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2024"
+    ]
   },
-  "include": ["shared", "orchestrator"]
+  "include": [
+    "shared",
+    "packages"
+  ]
 }
