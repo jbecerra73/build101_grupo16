@@ -1,0 +1,394 @@
+{
+  "baselineRunId": "fixture-not-proven",
+  "repo": "FrissA/demo-ecommerce (rehearsal)",
+  "attempts": [
+    {
+      "attempt": 1,
+      "findingIds": [
+        "F3"
+      ],
+      "status": "not-proven",
+      "branch": "frictionswarm/rehearsal-fixture-not-proven",
+      "commitSha": "0ae493169457134a07fb7fee55004a8e06abd349",
+      "prNumber": 0,
+      "prUrl": "about:blank#rehearsal-no-pr-opened",
+      "previewUrl": "https://deploy-preview-rehearsal--swarm-ecommerce.netlify.app",
+      "summary": "[rehearsal, no PR opened] Would fix: Mobile shoppers and Desktop shoppers leave Payment seconds after it loads (median 11s): the $15 delivery fee first appears here",
+      "retestRunId": "fixture-not-proven-retest1",
+      "verdict": {
+        "improved": false,
+        "targetedPersonas": [
+          "kai"
+        ],
+        "comparisons": [
+          {
+            "personaId": "rosa",
+            "segmentId": "low_vision",
+            "before": {
+              "segmentId": "low_vision",
+              "n": 320,
+              "users": 284,
+              "completed": 18,
+              "completionRate": 0.05625,
+              "gaveUp": 302,
+              "invalidCompletions": 0,
+              "medianSteps": 16,
+              "medianTimeMs": 162446,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 141,
+                  "droppedHere": 38
+                },
+                {
+                  "step": "Browse",
+                  "reached": 141,
+                  "droppedHere": 36
+                },
+                {
+                  "step": "Product",
+                  "reached": 246,
+                  "droppedHere": 163
+                },
+                {
+                  "step": "Cart",
+                  "reached": 83,
+                  "droppedHere": 20
+                },
+                {
+                  "step": "Account",
+                  "reached": 63,
+                  "droppedHere": 22
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 41,
+                  "droppedHere": 22
+                },
+                {
+                  "step": "Payment",
+                  "reached": 19,
+                  "droppedHere": 1
+                },
+                {
+                  "step": "Payment failed",
+                  "reached": 1,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 18,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "after": {
+              "personaId": "rosa",
+              "n": 10,
+              "users": 10,
+              "completed": 0,
+              "completionRate": 0,
+              "gaveUp": 10,
+              "invalidCompletions": 0,
+              "medianSteps": 0,
+              "medianTimeMs": 0,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Browse",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Product",
+                  "reached": 10,
+                  "droppedHere": 2
+                },
+                {
+                  "step": "Cart",
+                  "reached": 8,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Account",
+                  "reached": 8,
+                  "droppedHere": 2
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 6,
+                  "droppedHere": 6
+                },
+                {
+                  "step": "Payment",
+                  "reached": 0,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 0,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "completionDeltaPts": -5.6,
+            "regressions": [
+              "completion 0% < 5.6%",
+              "Payment conversion 0% (n=6) < 46.3% (95% upper bound 39%)"
+            ]
+          },
+          {
+            "personaId": "kai",
+            "segmentId": "mobile",
+            "before": {
+              "segmentId": "mobile",
+              "n": 2625,
+              "users": 2309,
+              "completed": 78,
+              "completionRate": 0.029714285714285714,
+              "gaveUp": 2547,
+              "invalidCompletions": 0,
+              "medianSteps": 16,
+              "medianTimeMs": 166188,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 1157,
+                  "droppedHere": 330
+                },
+                {
+                  "step": "Browse",
+                  "reached": 1158,
+                  "droppedHere": 370
+                },
+                {
+                  "step": "Product",
+                  "reached": 1925,
+                  "droppedHere": 1398
+                },
+                {
+                  "step": "Cart",
+                  "reached": 527,
+                  "droppedHere": 141
+                },
+                {
+                  "step": "Account",
+                  "reached": 383,
+                  "droppedHere": 238
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 148,
+                  "droppedHere": 35
+                },
+                {
+                  "step": "Payment",
+                  "reached": 113,
+                  "droppedHere": 31
+                },
+                {
+                  "step": "Payment failed",
+                  "reached": 7,
+                  "droppedHere": 4
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 78,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "after": {
+              "personaId": "kai",
+              "n": 10,
+              "users": 10,
+              "completed": 0,
+              "completionRate": 0,
+              "gaveUp": 10,
+              "invalidCompletions": 0,
+              "medianSteps": 0,
+              "medianTimeMs": 0,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Browse",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Product",
+                  "reached": 10,
+                  "droppedHere": 4
+                },
+                {
+                  "step": "Cart",
+                  "reached": 6,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Account",
+                  "reached": 6,
+                  "droppedHere": 6
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 0,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Payment",
+                  "reached": 0,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 0,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "completionDeltaPts": -3,
+            "regressions": [
+              "completion 0% < 3%"
+            ]
+          },
+          {
+            "personaId": "typical",
+            "segmentId": "desktop",
+            "before": {
+              "segmentId": "desktop",
+              "n": 1870,
+              "users": 1624,
+              "completed": 241,
+              "completionRate": 0.12887700534759358,
+              "gaveUp": 1629,
+              "invalidCompletions": 0,
+              "medianSteps": 15,
+              "medianTimeMs": 162745,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 849,
+                  "droppedHere": 245
+                },
+                {
+                  "step": "Browse",
+                  "reached": 840,
+                  "droppedHere": 250
+                },
+                {
+                  "step": "Product",
+                  "reached": 1375,
+                  "droppedHere": 749
+                },
+                {
+                  "step": "Cart",
+                  "reached": 626,
+                  "droppedHere": 167
+                },
+                {
+                  "step": "Account",
+                  "reached": 438,
+                  "droppedHere": 153
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 306,
+                  "droppedHere": 28
+                },
+                {
+                  "step": "Payment",
+                  "reached": 278,
+                  "droppedHere": 35
+                },
+                {
+                  "step": "Payment failed",
+                  "reached": 12,
+                  "droppedHere": 2
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 241,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "after": {
+              "personaId": "typical",
+              "n": 10,
+              "users": 10,
+              "completed": 7,
+              "completionRate": 0.7,
+              "gaveUp": 3,
+              "invalidCompletions": 0,
+              "medianSteps": 19,
+              "medianTimeMs": 73813,
+              "funnel": [
+                {
+                  "step": "Home",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Browse",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Product",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Cart",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Account",
+                  "reached": 10,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Shipping",
+                  "reached": 10,
+                  "droppedHere": 3
+                },
+                {
+                  "step": "Payment",
+                  "reached": 7,
+                  "droppedHere": 0
+                },
+                {
+                  "step": "Confirmation",
+                  "reached": 7,
+                  "droppedHere": 0
+                }
+              ]
+            },
+            "completionDeltaPts": 57.1,
+            "regressions": [
+              "Payment conversion 70% (n=10) < 90.8% (95% upper bound 89.2%)"
+            ]
+          }
+        ],
+        "reasons": [
+          "rosa vs low_vision: completion 0% < 5.6% (n=10 vs 320)",
+          "rosa vs low_vision: Payment conversion 0% (n=6) < 46.3% (95% upper bound 39%) (n=10 vs 320)",
+          "kai vs mobile: completion 0% < 3% (n=10 vs 2625)",
+          "typical vs desktop: Payment conversion 70% (n=10) < 90.8% (95% upper bound 89.2%) (n=10 vs 1870)",
+          "no targeted persona (kai) improved by ≥ 20 pts",
+          "kai Shipping 0% (n=6) vs 28.1%: within small-N margin (95% upper bound 39%, tolerance 15 pts), not a regression"
+        ]
+      }
+    }
+  ]
+}

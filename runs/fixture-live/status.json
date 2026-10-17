@@ -1,0 +1,7 @@
+{
+  "runId": "fixture-live",
+  "phase": "retesting",
+  "message": "Swarm re-testing the preview: 30 agents (rosa, kai, typical), fresh seeds",
+  "retestRunId": "fixture-live-retest1",
+  "updatedAt": "2026-10-17T21:10:52.000Z"
+}
