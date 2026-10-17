@@ -163,12 +163,21 @@ describe("applyDecision", () => {
     expect(asPipelineHook).toBe(applyDecision);
     const runsDir = await fixDir({ prNumber: 41 });
     const calls: string[][] = [];
-    const ghImpl = async (args: string[]) => (calls.push(args), args[1] === "view" ? "mergesha1" : "");
+    const ghImpl = async (args: string[]) => (calls.push(args), args[1] !== "view" ? "" : args.includes("isDraft") ? "false" : "mergesha1");
     const a = await applyDecision({ runsDir, runId: "r", request: request("accept"), log: () => {}, ghImpl });
-    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr merge 41", "pr view 41"]);
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr view 41", "pr merge 41", "pr view 41"]);
     expect(a).toMatchObject({ status: "merged", decision: { decision: "accept", mergeSha: "mergesha1", decidedAt: expect.any(String) } });
     const saved = await readJson<FixResult>(join(runsDir, "r", "fix.json"));
     expect(saved.attempts[0]).toEqual(a);
+  });
+
+  it("accepting a not-proven fix (override) marks its draft PR ready, then merges", async () => {
+    const runsDir = await fixDir({ prNumber: 41, status: "not-proven" });
+    const calls: string[][] = [];
+    const ghImpl = async (args: string[]) => (calls.push(args), args[1] !== "view" ? "" : args.includes("isDraft") ? "true" : "mergesha2");
+    const a = await applyDecision({ runsDir, runId: "r", request: { ...request("accept"), override: true }, log: () => {}, ghImpl });
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr view 41", "pr ready 41", "pr merge 41", "pr view 41"]);
+    expect(a).toMatchObject({ status: "merged", decision: { decision: "accept", override: true, mergeSha: "mergesha2" } });
   });
 
   it("reject closes the PR with the reason", async () => {

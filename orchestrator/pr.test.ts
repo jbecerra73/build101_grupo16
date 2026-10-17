@@ -73,14 +73,32 @@ describe("PR verdict", () => {
 });
 
 describe("PR decision", () => {
-  it("mergePr squash-merges, deletes the branch and returns the merge commit", async () => {
+  /** Records gh calls; `pr view` answers isDraft or the merge commit. */
+  const mergeGh = (draft: boolean) => {
     const calls: string[][] = [];
-    const gh = async (args: string[]) => (calls.push(args), args[1] === "view" ? "abc123def" : "");
+    const gh = async (args: string[]) => {
+      calls.push(args);
+      if (args[1] !== "view") return "";
+      return args.includes("isDraft") ? String(draft) : "abc123def";
+    };
+    return { calls, gh };
+  };
+
+  it("mergePr squash-merges, deletes the branch and returns the merge commit", async () => {
+    const { calls, gh } = mergeGh(false);
     expect(await mergePr("FrissA/demo-ecommerce", 12, gh)).toBe("abc123def");
     expect(calls).toEqual([
+      ["pr", "view", "12", "--repo", "FrissA/demo-ecommerce", "--json", "isDraft", "-q", ".isDraft"],
       ["pr", "merge", "12", "--repo", "FrissA/demo-ecommerce", "--squash", "--delete-branch"],
       ["pr", "view", "12", "--repo", "FrissA/demo-ecommerce", "--json", "mergeCommit", "-q", ".mergeCommit.oid"],
     ]);
+  });
+
+  it("mergePr marks a draft PR ready before merging (gh refuses to merge drafts)", async () => {
+    const { calls, gh } = mergeGh(true);
+    expect(await mergePr("FrissA/demo-ecommerce", 12, gh)).toBe("abc123def");
+    expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["pr view", "pr ready", "pr merge", "pr view"]);
+    expect(calls[1]).toEqual(["pr", "ready", "12", "--repo", "FrissA/demo-ecommerce"]);
   });
 
   it("closePr comments the reason, then closes", async () => {

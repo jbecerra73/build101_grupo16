@@ -152,9 +152,13 @@ export async function finalizePr(ctx: PrContext, agentSummary = "", ghImpl: Gh =
 }
 
 /** The Product Owner accepted: squash-merge into main and delete the branch.
- * Returns the merge commit's sha. */
+ * A not-proven PR is still a draft (only the improved path marks it ready) and
+ * gh refuses to merge drafts, so it is marked ready first. Returns the merge
+ * commit's sha. */
 export async function mergePr(repo: string, prNumber: number, ghImpl: Gh = gh): Promise<string> {
   const pr = String(prNumber);
+  const isDraft = await ghImpl(["pr", "view", pr, "--repo", repo, "--json", "isDraft", "-q", ".isDraft"]);
+  if (isDraft === "true") await ghImpl(["pr", "ready", pr, "--repo", repo]);
   await ghImpl(["pr", "merge", pr, "--repo", repo, "--squash", "--delete-branch"]);
   return ghImpl(["pr", "view", pr, "--repo", repo, "--json", "mergeCommit", "-q", ".mergeCommit.oid"]);
 }
