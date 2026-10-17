@@ -9,6 +9,12 @@
 //   runs/<runId>/findings.json      Finding[]
 //   runs/<runId>/fix.json           FixResult (only on runs that triggered a fix)
 //   runs/<runId>/status.json        RunStatus (written by the orchestrator while it works)
+//   runs/<runId>/agents/<agentId>.json    SwarmAgentResult (re-test swarm, one per agent)
+//   runs/<runId>/screenshots/<agentId>-latest.png   live grid only (re-test swarm)
+//
+// Since the PostHog pivot, swarm agents leave their tracks in PostHog (see analytics.ts);
+// events/*.jsonl and Event remain only in the pre-pivot fixture run and the worker's
+// in-memory trace.
 
 export type PersonaId = string;
 
@@ -246,4 +252,26 @@ export type StartRunRequest = {
   targetUrl?: string;
   /** Run the coding agent + retest after the baseline. */
   autoFix: boolean;
+};
+
+/** How one swarm agent ended, written by the worker when the agent stops. Its clicks and page
+ * views are in PostHog; this is the local record the orchestrator can read without waiting for
+ * ingestion. */
+export type SwarmAgentResult = {
+  runId: string;
+  agentId: string;
+  personaId: PersonaId;
+  seed: number;
+  outcome: "success" | "give_up" | "error";
+  /** Browser actions used (click/type/scroll/back). */
+  actions: number;
+  /** give_up reason or error message. */
+  reason?: string;
+  /** Funnel step and URL where the agent ended. */
+  step?: string;
+  url?: string;
+  /** What the confirmation page echoed back (success only). */
+  confirmation?: Event["confirmation"];
+  startedAt: string;
+  endedAt: string;
 };

@@ -3,15 +3,17 @@
 //   npm run agent -- --persona typical --seed 1 [--url https://...] [--run <runId>] [--headed]
 //
 // The agent is Claude Code headless (`claude -p`, logged-in account or CLAUDE_CODE_OAUTH_TOKEN)
-// whose only tools come from worker/mcp-server.ts. Several invocations with the same --run add
-// agents to the same run folder.
+// whose only tools come from worker/mcp-server.ts. Its tracks go to the store's PostHog (the
+// store must have tracking on, e.g. a deploy preview of FrissA/demo-ecommerce#7); locally it
+// leaves agents/<agentId>.json and the live-grid screenshot. Several invocations with the same
+// --run add agents to the same run folder.
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { FLOWS, PERSONAS, type Event, type RunConfig } from "../shared";
-import { ENDINGS } from "./events";
+import { FLOWS, PERSONAS, type RunConfig, type SwarmAgentResult } from "../shared";
+import { resultFile } from "./trace";
 import { systemPrompt, type ToolName } from "./session";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -108,14 +110,14 @@ function printProgress(line: string) {
   if (msg.type === "result" && msg.result) console.log(`  claude: ${msg.result.trim().slice(0, 200)}`);
 }
 
-function readEvents(): Event[] {
-  const file = join(runDir, "events", `${agentId}.jsonl`);
-  if (!existsSync(file)) return [];
-  return readFileSync(file, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+function readResult(): SwarmAgentResult | undefined {
+  const file = resultFile(runDir, agentId);
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined;
 }
 
 const buildSha = await readBuildSha(targetUrl);
 writeConfig(buildSha);
+rmSync(resultFile(runDir, agentId), { force: true });
 console.log(`run ${runId} · ${agentId} · ${targetUrl} · build ${buildSha} · claude ${args.model}`);
 
 const child = spawn("claude", claudeArgs(), { cwd: runDir, stdio: ["ignore", "pipe", "inherit"] });
@@ -127,29 +129,21 @@ const code: number | null = await new Promise((done) => child.on("close", done))
 clearTimeout(timer);
 process.off("SIGINT", stop);
 
-// The MCP server (Claude Code's child) records its own ending when its stdin closes, which can
-// land just after claude exits. Give it a moment so the log never gets two endings.
-const ended = (es: Event[]) => ENDINGS.has(es.at(-1)?.type ?? "page_view");
-let events = readEvents();
-for (let waited = 0; !ended(events) && waited < 10_000; waited += 250) {
+// The MCP server (Claude Code's child) writes the agent's result when it stops, which can land
+// just after claude exits. Give it a moment before recording an ending ourselves.
+let result = readResult();
+for (let waited = 0; !result && waited < 10_000; waited += 250) {
   await new Promise((r) => setTimeout(r, 250));
-  events = readEvents();
+  result = readResult();
 }
-const last = events.at(-1);
-if (last && !ended(events)) {
-  // The MCP server died before it could record an ending.
-  const end: Event = { ...last, ts: Date.now(), type: "give_up", note: "Stopped without finishing." };
-  delete end.action;
-  delete end.screenshot;
-  appendFileSync(join(runDir, "events", `${agentId}.jsonl`), JSON.stringify(end) + "\n");
-  events.push(end);
+if (!result) {
+  // The MCP server died before it could record an ending (nothing reached PostHog for it).
+  const now = new Date().toISOString();
+  result = { runId, agentId, personaId: persona.id, seed, outcome: "give_up", actions: 0, reason: "Stopped without finishing.", startedAt: now, endedAt: now };
+  writeFileSync(resultFile(runDir, agentId), JSON.stringify(result, null, 2) + "\n");
 }
 
 console.log("");
-for (const e of events) {
-  const what = e.action ? `${e.action.kind} ${e.action.text ?? e.action.selector ?? ""}${e.action.missed ? " (missed)" : ""}` : (e.note ?? "");
-  console.log(`  ${e.type.padEnd(11)} ${(e.step ?? "-").padEnd(13)} ${what}`);
-}
-const outcome = events.at(-1)?.type ?? "no events";
-console.log(`${outcome} · ${events.filter((e) => e.type === "action").length} actions · claude exit ${code} → ${runDir}`);
-process.exitCode = outcome === "success" || outcome === "give_up" ? 0 : 1;
+const where = [result.step, result.reason].filter(Boolean).join(" · ");
+console.log(`${result.outcome} · ${result.actions} actions${where ? ` · ${where}` : ""} · claude exit ${code} → ${resultFile(runDir, agentId)}`);
+process.exitCode = result.outcome === "error" ? 1 : 0;

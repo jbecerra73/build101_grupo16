@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
 import { actionBudget, matchesRoute, type Event, type Flow, type Persona } from "../shared";
-import { EventLog } from "./events";
+import { AgentTrace } from "./trace";
 import { ID_ATTR, observe, type Observation } from "./observe";
 
 export type ToolName = "look" | "click" | "type" | "scroll" | "back" | "think_aloud" | "give_up" | "done";
@@ -58,7 +58,7 @@ export type SessionOptions = {
   successWaitMs?: number;
 };
 
-/** One persona agent in one browser page: runs tool calls, enforces limits, writes the event log.
+/** One persona agent in one browser page: runs tool calls, enforces limits, reports to PostHog (see AgentTrace).
  * Whoever drives it (Claude Code over MCP, or a scripted brain in tests) only sees StepResults. */
 export class AgentSession {
   readonly agentId: string;
@@ -68,7 +68,7 @@ export class AgentSession {
   actions = 0;
   calls = 0;
   outcome?: Outcome;
-  private readonly log: EventLog;
+  private readonly log: AgentTrace;
   private obs?: Observation;
   private lastUrl = "";
   private queue: Promise<unknown> = Promise.resolve();
@@ -79,11 +79,27 @@ export class AgentSession {
     this.agentId = `${o.persona.id}-${o.seed}`;
     this.maxActions = actionBudget(o.persona, o.seed);
     this.maxCalls = this.maxActions * 4;
-    this.log = new EventLog(o.runDir, { runId: o.runId, agentId: this.agentId, personaId: o.persona.id, seed: o.seed }, o.flow);
+    const base = { runId: o.runId, agentId: this.agentId, personaId: o.persona.id, seed: o.seed };
+    this.log = new AgentTrace(o.page, o.runDir, base, o.flow, () => this.actions);
   }
 
+  /** In-memory trace of what the agent did (not persisted; PostHog has the real tracks). */
   get events(): Event[] {
     return this.log.events;
+  }
+
+  /** Whether the store exposed window.posthog when the last swarm event was sent. */
+  get posthog(): boolean | undefined {
+    return this.log.posthog;
+  }
+
+  /** Hands pending swarm events to the page, then leaves it so posthog-js flushes its queue
+   * (it sends on page hide). Call before closing the browser. */
+  async close() {
+    await this.serial(async () => {
+      await this.log.flush();
+      await this.o.page.goto("about:blank", { timeout: 5000 }).catch(() => {});
+    });
   }
 
   get observation(): Observation | undefined {
@@ -229,10 +245,10 @@ export class AgentSession {
     // Park the pointer off the page so menus that only open on hover stay closed.
     if (persona.perception.hideHoverOnly) await page.mouse.move(-1, -1).catch(() => {});
     this.obs = await this.observeStable();
-    if (this.obs.url === this.lastUrl) this.log.saveLatest(this.obs.cleanScreenshot);
-    else {
+    this.log.saveLatest(this.obs.cleanScreenshot);
+    if (this.obs.url !== this.lastUrl) {
       this.lastUrl = this.obs.url;
-      this.log.emit({ type: "page_view", url: this.obs.url, screenshot: this.log.saveScreenshot(this.obs.cleanScreenshot) });
+      this.log.emit({ type: "page_view", url: this.obs.url });
     }
     return this.checkSuccess();
   }
@@ -293,9 +309,12 @@ export class AgentSession {
   }
 }
 
-export function withSwarmTag(url: string, runId: string) {
+/** The storefront reads these on the first URL and tags every PostHog event of the session. */
+export function withSwarmTag(url: string, tag: { runId: string; agentId: string; personaId: string }) {
   const u = new URL(url);
-  u.searchParams.set("swarm", runId);
+  u.searchParams.set("swarm", tag.runId);
+  u.searchParams.set("agent", tag.agentId);
+  u.searchParams.set("persona", tag.personaId);
   return u.toString();
 }
 

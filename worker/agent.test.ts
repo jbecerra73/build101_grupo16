@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buyTshirt, kai, MAX_ACTIONS_PER_AGENT, rosa, typical, type Event, type Flow, type Persona } from "../shared";
+import { buyTshirt, kai, MAX_ACTIONS_PER_AGENT, rosa, typical, type Flow, type Persona, type SwarmAgentResult } from "../shared";
 import { runAgent, type Brain } from "./agent";
 import { describe as describeObs, type Observation } from "./observe";
 import { AgentSession, type ToolCall } from "./session";
@@ -56,8 +56,25 @@ beforeAll(async () => {
 });
 afterAll(async () => browser?.close());
 
-async function newPage(persona: Persona = typical): Promise<Page> {
+type Captured = { event: string; properties: Record<string, unknown>; url: string };
+/** What the page's window.posthog received, per page (survives navigations). */
+const captured = new WeakMap<Page, Captured[]>();
+
+/** A page on the fake store. With `posthog`, the store exposes a window.posthog stub that
+ * forwards every capture to the test, like the real storefront's posthog-js instance. */
+async function newPage(persona: Persona = typical, { posthog = true } = {}): Promise<Page> {
   const page = await browser.newPage({ viewport: persona.viewport, isMobile: persona.viewport.mobile, hasTouch: persona.viewport.mobile });
+  const sink: Captured[] = [];
+  captured.set(page, sink);
+  if (posthog) {
+    await page.exposeFunction("__fsCapture", (event: string, properties: Record<string, unknown>, url: string) => {
+      sink.push({ event, properties, url });
+    });
+    await page.addInitScript(() => {
+      const w = window as unknown as { posthog: unknown; __fsCapture: (...a: unknown[]) => void };
+      w.posthog = { capture: (event: string, properties: unknown) => w.__fsCapture(event, properties, location.href) };
+    });
+  }
   await page.route(`${ORIGIN}/**`, (route) => {
     const u = new URL(route.request().url());
     const key = u.searchParams.get("step") ? `${u.pathname}?step=${u.searchParams.get("step")}` : u.searchParams.has("slow") ? "/slow-success" : u.pathname;
@@ -69,11 +86,12 @@ async function newPage(persona: Persona = typical): Promise<Page> {
   return page;
 }
 
-const readLog = (dir: string, agentId: string): Event[] =>
-  readFileSync(join(dir, "events", `${agentId}.jsonl`), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+const readResult = (dir: string, agentId: string): SwarmAgentResult =>
+  JSON.parse(readFileSync(join(dir, "agents", `${agentId}.json`), "utf8"));
+const swarmEvents = (page: Page) => captured.get(page)!.map(({ event, properties }) => ({ event, properties }));
 
 describe("runAgent", () => {
-  it("completes the flow and writes a run folder in the shared format", async () => {
+  it("completes the flow, tags the session and reports to PostHog", async () => {
     const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
     const brain = new ScriptedBrain([
       (o) => [{ name: "think_aloud", input: { note: "Let's find the cart." } }, ...click("Go to cart")(o)],
@@ -83,35 +101,53 @@ describe("runAgent", () => {
       (o) => [{ name: "type", input: { id: byName(o, "Card number"), text: "4242 4242 4242 4242" } }],
       click("Pay $120"),
     ]);
-    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r1", runDir, seed: 1, settleMs: 50, navWaitMs: 50 });
+    const page = await newPage();
+    const res = await runAgent({ page, brain, persona: typical, flow, runId: "r1", runDir, seed: 1, settleMs: 50, navWaitMs: 50 });
 
     expect(res.outcome).toBe("success");
-    const events = readLog(runDir, "typical-1");
-    expect(events).toEqual(res.events);
-    expect(events.filter((e) => e.type === "page_view").map((e) => e.step)).toEqual([
+    // The storefront reads the tag from the first URL and keeps it for the session.
+    const first = new URL(res.events[0].url!);
+    expect(Object.fromEntries(first.searchParams)).toEqual({ swarm: "r1", agent: "typical-1", persona: "typical" });
+    expect(res.events.filter((e) => e.type === "page_view").map((e) => e.step)).toEqual([
       "Home", "Cart", "Shipping", "Payment", "Confirmation",
     ]);
-    expect(events[0].url).toContain("swarm=r1");
-    expect(events.find((e) => e.type === "think_aloud")?.note).toBe("Let's find the cart.");
-    expect(events.find((e) => e.action?.kind === "type")?.action).toMatchObject({ field: "email", selector: "#email" });
-    expect(events.at(-1)).toMatchObject({
-      type: "success",
-      step: "Confirmation",
+
+    // Narration and ending go through the page's posthog instance.
+    expect(swarmEvents(page)).toEqual([
+      { event: "swarm_think_aloud", properties: { note: "Let's find the cart.", step: "Home" } },
+      { event: "swarm_done", properties: { actions: 6 } },
+    ]);
+    expect(captured.get(page)!.at(-1)!.url).toContain("/checkout/success");
+
+    // Locally: the agent's result and the live-grid screenshot, no event log.
+    expect(readResult(runDir, "typical-1")).toMatchObject({
+      runId: "r1", agentId: "typical-1", personaId: "typical", seed: 1,
+      outcome: "success", actions: 6, step: "Confirmation",
       confirmation: { email: "ana@example.com", cardLast4: "4242", address: "Ana Pérez, 123 Main St, Springfield 12345, United States" },
     });
-    for (const e of events) {
-      expect(e).toMatchObject({ runId: "r1", agentId: "typical-1", personaId: "typical", seed: 1 });
-      if (e.screenshot) expect(existsSync(join(runDir, e.screenshot))).toBe(true);
-    }
     expect(existsSync(join(runDir, "screenshots", "typical-1-latest.png"))).toBe(true);
+    expect(existsSync(join(runDir, "events"))).toBe(false);
   }, 30_000);
 
   it("gives up with a reason when the agent does", async () => {
     const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
     const brain = new ScriptedBrain([() => [{ name: "give_up", input: { reason: "Too confusing." } }]]);
-    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r2", runDir, seed: 2, settleMs: 50, navWaitMs: 50 });
+    const page = await newPage();
+    const res = await runAgent({ page, brain, persona: typical, flow, runId: "r2", runDir, seed: 2, settleMs: 50, navWaitMs: 50 });
     expect(res.outcome).toBe("give_up");
-    expect(res.events.at(-1)).toMatchObject({ type: "give_up", step: "Home", note: "Too confusing." });
+    expect(swarmEvents(page)).toEqual([{ event: "swarm_give_up", properties: { reason: "Too confusing.", step: "Home" } }]);
+    expect(readResult(runDir, "typical-2")).toMatchObject({ outcome: "give_up", reason: "Too confusing.", step: "Home", actions: 0 });
+  }, 30_000);
+
+  it("still runs on a store without PostHog, and says so", async () => {
+    const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
+    const page = await newPage(typical, { posthog: false });
+    const session = new AgentSession({ page, persona: typical, flow, runId: "r5", runDir, seed: 5, settleMs: 50, navWaitMs: 50 });
+    await session.start(ORIGIN);
+    await session.call({ name: "give_up", input: { reason: "nope" } });
+    await session.close();
+    expect(session.posthog).toBe(false);
+    expect(readResult(runDir, "typical-5")).toMatchObject({ outcome: "give_up", reason: "nope" });
   }, 30_000);
 
   it("enforces the hard action cap even if the persona allows more", async () => {
@@ -203,5 +239,10 @@ describe("session endings", () => {
     const endings = s.events.filter((e) => ["success", "give_up", "error"].includes(e.type));
     expect(endings).toHaveLength(1);
     expect(s.events.at(-1)?.type).toBe("give_up");
+    await s.close();
+    const page = (s as unknown as { o: { page: Page } }).o.page;
+    expect(swarmEvents(page).filter((e) => e.event !== "swarm_think_aloud")).toEqual([
+      { event: "swarm_give_up", properties: { reason: "Stopped without finishing.", step: undefined } },
+    ]);
   }, 30_000);
 });

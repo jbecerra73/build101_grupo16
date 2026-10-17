@@ -12,13 +12,13 @@ export type AgentResult = { outcome: Outcome; actions: number; events: Event[] }
 
 export type AgentOptions = SessionOptions & {
   brain: Brain;
-  /** URL to open first; defaults to the flow's start URL tagged with ?swarm=<runId>. */
+  /** URL to open first; defaults to the flow's start URL with the swarm tag (see withSwarmTag). */
   startUrl?: string;
 };
 
 export async function runAgent(o: AgentOptions): Promise<AgentResult> {
   const session = new AgentSession(o);
-  await session.start(o.startUrl ?? withSwarmTag(o.flow.startUrl, o.runId));
+  await session.start(o.startUrl ?? withSwarmTag(o.flow.startUrl, { runId: o.runId, agentId: session.agentId, personaId: o.persona.id }));
   let results: StepResult[] = [];
   while (!session.outcome) {
     const calls = await o.brain.decide({ results, observation: session.observation! });
@@ -36,5 +36,6 @@ export async function runAgent(o: AgentOptions): Promise<AgentResult> {
       if (session.outcome) break;
     }
   }
+  await session.close();
   return { outcome: session.outcome, actions: session.actions, events: session.events };
 }

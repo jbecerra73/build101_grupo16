@@ -8,7 +8,7 @@ export type PageElement = {
   id: string;
   role: string;
   name: string;
-  /** Stable-ish CSS selector for the event log (the agent targets `id`). */
+  /** Stable-ish CSS selector for the trace (the agent targets `id`). */
   selector: string;
   /** id or name attribute of form fields, used as Event.action.field. */
   field?: string;

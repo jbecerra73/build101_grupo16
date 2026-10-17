@@ -1,6 +1,7 @@
 // MCP server for one persona agent, launched by Claude Code over stdio (see cli.ts).
 // Its tools are the only way the model can touch the shop: every call goes through
-// AgentSession, which enforces the persona's limits and writes the event log.
+// AgentSession, which enforces the persona's limits. The store's PostHog snippet records
+// the agent's clicks and page views; AgentSession adds its swarm_* events.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { parseArgs } from "node:util";
@@ -49,6 +50,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   session.abandon("Stopped without finishing.");
+  await session.close().catch(() => {});
   await browser.close().catch(() => {});
   process.exit(0);
 }
@@ -93,4 +95,4 @@ tool("done", "Call when the order is placed and confirmed.");
 
 await server.connect(new StdioServerTransport());
 // Calls are serialized behind start(), so tools wait for the shop to open.
-void session.start(withSwarmTag(args.url ?? flow.startUrl, args.run));
+void session.start(withSwarmTag(args.url ?? flow.startUrl, { runId: args.run, agentId: session.agentId, personaId: persona.id }));
