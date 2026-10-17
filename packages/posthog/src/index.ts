@@ -1,7 +1,7 @@
 // @frictionswarm/posthog: the analyzer's only door to PostHog (SPEC.md, PostHog source).
 //   createPostHogSource()            POSTHOG_SOURCE=file (default) | api
 //   file   data/posthog/events.jsonl + swarm-<runId>.jsonl, streamed (POSTHOG_DATA_DIR)
-//   api    HogQL over POST {POSTHOG_HOST}/api/projects/{POSTHOG_PROJECT_ID}/query
+//   api    HogQL over POST {POSTHOG_APP_HOST}/api/projects/{POSTHOG_PROJECT_ID}/query
 //          with POSTHOG_PERSONAL_API_KEY
 //   snapshot(events, runDir)         writes runs/<id>/posthog.jsonl
 //   snapshotSource(runDir)           replays a past run offline

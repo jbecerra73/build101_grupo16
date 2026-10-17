@@ -138,7 +138,7 @@ describe("api source", () => {
     return { f, calls };
   }
   const row = (e: PostHogEvent) => [e.uuid, e.event, e.distinct_id, e.timestamp.replace("T", " ").replace("Z", ""), JSON.stringify(e.properties)];
-  const env = { POSTHOG_HOST: "https://eu.posthog.com/", POSTHOG_PROJECT_ID: "42", POSTHOG_PERSONAL_API_KEY: "phx_test" };
+  const env = { POSTHOG_APP_HOST: "https://eu.posthog.com/", POSTHOG_PROJECT_ID: "42", POSTHOG_PERSONAL_API_KEY: "phx_test" };
 
   it("paginates HogQL and maps rows to PostHogEvents, excluding swarm traffic", async () => {
     const rows = HISTORY.map(row);
