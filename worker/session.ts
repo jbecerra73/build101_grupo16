@@ -74,11 +74,18 @@ export class AgentSession {
   private queue: Promise<unknown> = Promise.resolve();
   /** Failed attempts per target selector, for persona.actions.maxRetriesSameTarget. */
   private misses = new Map<string, number>();
+  /** persona.patience: drains on page loads, modals and errors; give_up at zero. */
+  patience: number;
+  /** What last cost patience, for the give_up reason. */
+  private drainedBy = "";
+  private modalOpen = false;
+  private formErrors = 0;
 
   constructor(private readonly o: SessionOptions) {
     this.agentId = `${o.persona.id}-${o.seed}`;
     this.maxActions = actionBudget(o.persona, o.seed);
     this.maxCalls = this.maxActions * 4;
+    this.patience = o.persona.patience.start;
     const base = { runId: o.runId, agentId: this.agentId, personaId: o.persona.id, seed: o.seed };
     this.log = new AgentTrace(o.page, o.runDir, base, o.flow, () => this.actions);
   }
@@ -112,7 +119,7 @@ export class AgentSession {
         await this.o.page.goto(url, { waitUntil: "domcontentloaded" });
         await this.settle();
         if (await this.look()) return { text: "Order confirmed. The session is over.", ended: "success", observation: this.obs };
-        return this.result("You opened the shop.");
+        return this.exhausted() ?? this.result("You opened the shop.");
       } catch (err) {
         return this.fail(err);
       }
@@ -152,9 +159,11 @@ export class AgentSession {
   private async free(c: ToolCall): Promise<StepResult> {
     const url = this.o.page.url();
     switch (c.name) {
-      case "look":
+      case "look": {
+        const before = this.patience;
         if (await this.look()) return { text: "Order confirmed. The session is over.", ended: "success", observation: this.obs };
-        return this.result("This is the screen now.");
+        return this.exhausted() ?? this.result(`This is the screen now.${this.patienceNote(before)}`);
+      }
       case "think_aloud":
         this.log.emit({ type: "think_aloud", url, note: String(c.input.note ?? "") });
         return { text: "Noted." };
@@ -172,6 +181,7 @@ export class AgentSession {
     if (this.actions >= this.maxActions) return this.end("give_up", `Ran out of actions (${this.maxActions}).`);
     const { page, persona } = this.o;
     const url = page.url();
+    const before = this.patience;
     let text: string;
     let isError = false;
 
@@ -195,13 +205,23 @@ export class AgentSession {
       const minTap = persona.actions.minTapTargetPx;
       const tooSmall = typed === undefined && minTap && (el.rect.width < minTap || el.rect.height < minTap);
       try {
-        if (tooSmall) throw new Error("tap target too small");
-        if (typed === undefined) await locator.click({ timeout: 5000 });
-        else {
-          await locator.fill(typed, { timeout: 5000 });
-          if (c.input.submit) await locator.press("Enter");
+        if (tooSmall) {
+          // The fat-finger tap still happens, next to the target, so the store's PostHog
+          // records a real click on whatever is there.
+          await locator.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
+          const box = (await locator.boundingBox({ timeout: 5000 }).catch(() => null)) ?? el.rect;
+          const at = missPoint(box, persona.viewport, this.o.seed, this.misses.get(el.selector) ?? 0);
+          await page.mouse.click(at.x, at.y);
+          isError = true;
+          text = `Your tap missed ${named}: it is too small for your thumb and you hit next to it.`;
+        } else {
+          if (typed === undefined) await locator.click({ timeout: 5000 });
+          else {
+            await locator.fill(typed, { timeout: 5000 });
+            if (c.input.submit) await locator.press("Enter");
+          }
+          text = typed === undefined ? `Clicked ${named}.` : `Typed into ${named}.`;
         }
-        text = typed === undefined ? `Clicked ${named}.` : `Typed into ${named}.`;
       } catch {
         isError = true;
         text = typed === undefined ? `Clicking ${id} did nothing.` : `Could not type into ${id}.`;
@@ -215,6 +235,7 @@ export class AgentSession {
             : { kind: "type", selector: el.selector, text: typed, field: el.field, ...(isError ? { missed: true } : {}) },
       });
       if (isError) {
+        this.drain("error", tooSmall ? "missing a tap" : "an action that did nothing");
         const tries = (this.misses.get(el.selector) ?? 0) + 1;
         this.misses.set(el.selector, tries);
         const max = persona.actions.maxRetriesSameTarget;
@@ -230,8 +251,10 @@ export class AgentSession {
     if (c.name !== "scroll") await page.waitForURL((u) => u.toString() !== url, { timeout: this.o.navWaitMs ?? 1500 }).catch(() => {});
     await this.settle();
     if (await this.look()) return { text: `${text} Order confirmed. The session is over.`, ended: "success", observation: this.obs };
+    const out = this.exhausted();
+    if (out) return out;
     if (this.actions >= this.maxActions) return this.end("give_up", `Ran out of actions (${this.maxActions}).`);
-    return this.result(`${text} (${this.maxActions - this.actions} actions left)`, isError);
+    return this.result(`${text} (${this.maxActions - this.actions} actions left)${this.patienceNote(before)}`, isError);
   }
 
   private async settle() {
@@ -239,7 +262,8 @@ export class AgentSession {
     await this.o.page.waitForTimeout(this.o.settleMs ?? 600);
   }
 
-  /** Observe the page; log a page_view when the URL changed. Returns true on success. */
+  /** Observe the page; log a page_view when the URL changed and charge patience for what
+   * appeared (page load, modal, form error). Returns true on success. */
   private async look(): Promise<boolean> {
     const { page, persona } = this.o;
     // Park the pointer off the page so menus that only open on hover stay closed.
@@ -247,10 +271,35 @@ export class AgentSession {
     this.obs = await this.observeStable();
     this.log.saveLatest(this.obs.cleanScreenshot);
     if (this.obs.url !== this.lastUrl) {
+      // The landing page is free; every later one costs.
+      if (this.lastUrl) this.drain("pageLoad", "one page load too many");
       this.lastUrl = this.obs.url;
+      this.formErrors = 0;
       this.log.emit({ type: "page_view", url: this.obs.url });
     }
+    const f = await page.evaluate(friction).catch(() => ({ modal: false, errors: 0 }));
+    if (f.modal && !this.modalOpen) this.drain("modal", "a pop-up");
+    if (f.errors > this.formErrors) this.drain("error", "an error message");
+    this.modalOpen = f.modal;
+    this.formErrors = f.errors;
     return this.checkSuccess();
+  }
+
+  private drain(cost: keyof Persona["patience"]["costs"], why: string) {
+    const c = this.o.persona.patience.costs[cost];
+    if (!c) return;
+    this.patience -= c;
+    this.drainedBy = why;
+  }
+
+  /** The give_up once patience hits zero (checked after success, so finishing always wins). */
+  private exhausted(): StepResult | undefined {
+    if (this.patience > 0 || this.outcome) return undefined;
+    return this.end("give_up", `Ran out of patience after ${this.drainedBy}.`);
+  }
+
+  private patienceNote(before: number) {
+    return this.patience < before ? ` That was annoying (patience ${this.patience}/${this.o.persona.patience.start}).` : "";
   }
 
   /** A navigation that lands mid-observe destroys the page context; settle and observe again. */
@@ -307,6 +356,36 @@ export class AgentSession {
     this.outcome = "error";
     return { text: `Something broke: ${note}. The session is over.`, isError: true, ended: "error" };
   }
+}
+
+/** Runs in the page: whether a modal is showing and how many form errors are visible. No named
+ * inner functions (tsx would wrap them in __name). Boxes of 1px or less are screen-reader-only
+ * (e.g. Next's route announcer is a role=alert), not something the shopper sees. */
+const friction = () => {
+  let modal = false;
+  let errors = 0;
+  for (const el of document.querySelectorAll("dialog[open],[role=dialog],[role=alertdialog],[aria-modal=true],[role=alert],[aria-invalid=true]")) {
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    if (r.width <= 1 || r.height <= 1 || st.visibility === "hidden" || st.display === "none") continue;
+    if (el.matches("dialog,[role=dialog],[role=alertdialog],[aria-modal=true]")) modal = true;
+    else if (el.matches("[aria-invalid=true]") || (el.textContent ?? "").trim()) errors++;
+  }
+  return { modal, errors };
+};
+
+/** Where a fat-finger tap on a too-small target lands: a few px past one of its edges, side and
+ * gap picked by seed and attempt (deterministic), kept inside the viewport. */
+export function missPoint(box: { x: number; y: number; width: number; height: number }, vp: { width: number; height: number }, seed: number, attempt: number) {
+  const h = Math.imul((seed * 31 + attempt) ^ 0x2545f491, 0x9e3779b1) >>> 0;
+  const gap = 6 + ((h >>> 8) % 8);
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  const sides = [[cx, box.y - gap], [box.x + box.width + gap, cy], [cx, box.y + box.height + gap], [box.x - gap, cy]];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = sides[(h + i) % 4];
+    if (x >= 0 && y >= 0 && x < vp.width && y < vp.height) return { x, y };
+  }
+  return { x: Math.min(Math.max(cx, 0), vp.width - 1), y: Math.min(Math.max(cy, 0), vp.height - 1) };
 }
 
 /** The storefront reads these on the first URL and tags every PostHog event of the session. */
