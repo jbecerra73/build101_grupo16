@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   FLOWS,
   PERSONAS,
@@ -18,7 +19,10 @@ import { waitForBuildSha } from "./preview";
 import type { Shell } from "./shell";
 import { compareRuns } from "./verdict";
 
-export const RUNS_DIR = join(import.meta.dirname, "..", "runs");
+// import.meta.url, not import.meta.dirname: bundlers (Next/Turbopack) leave
+// dirname undefined (and treat new URL("..", import.meta.url) as an asset).
+// RUNS_DIR env wins, as in packages/pipeline.
+export const RUNS_DIR = process.env.RUNS_DIR ?? join(dirname(fileURLToPath(import.meta.url)), "..", "runs");
 
 export const readJson = async <T>(path: string): Promise<T> => JSON.parse(await readFile(path, "utf8"));
 const writeJson = async (path: string, data: unknown) => writeFile(path, JSON.stringify(data, null, 2) + "\n");
