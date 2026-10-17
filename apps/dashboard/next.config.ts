@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript sources; the pipeline also pulls in
   // ../../orchestrator via relative imports and the analyzer lazily.
-  transpilePackages: ["@frictionswarm/shared", "@frictionswarm/pipeline", "@frictionswarm/analyzer"],
+  transpilePackages: ["@frictionswarm/shared", "@frictionswarm/pipeline", "@frictionswarm/analyzer", "@frictionswarm/store"],
   // The Agent SDK spawns its bundled Claude Code CLI from its own package
   // folder, and the sandbox client is plain Node: load them from node_modules.
   serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "@anthropic-ai/sdk", "@tenkicloud/sandbox"],

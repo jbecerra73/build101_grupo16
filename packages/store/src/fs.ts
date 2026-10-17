@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { appendFile, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore } from "./types";
 
 /** Folder inside the runs dir that holds the non-run keys (queue/, settings.json, ...). */
@@ -37,7 +37,11 @@ export class FsStore implements RunStore {
   }
   async getBytes(key: string) {
     try {
-      return new Uint8Array(await readFile(/*turbopackIgnore: true*/ this.path(key)));
+      // Refuse symlinks that point outside the store root.
+      const real = await realpath(/*turbopackIgnore: true*/ this.path(key));
+      const rel = relative(await realpath(/*turbopackIgnore: true*/ this.root), real);
+      if (!rel || rel.startsWith("..") || isAbsolute(rel)) return undefined;
+      return new Uint8Array(await readFile(/*turbopackIgnore: true*/ real));
     } catch (e) {
       if (isMissing(e)) return undefined;
       throw e;

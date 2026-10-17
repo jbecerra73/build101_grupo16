@@ -233,6 +233,7 @@ export class Orchestrator {
     if (!refusal && usage.runs >= settings.maxRunsPerDay) refusal = `Run cap reached: ${usage.runs}/${settings.maxRunsPerDay} runs today`;
 
     await writeJson(join(dir, "config.json"), config);
+    await writeJson(join(dir, "request.json"), req); // for retry
     if (refusal) {
       await writeStatus({ phase: "failed", message: "Not started", error: refusal });
       await this.#sync(runId);

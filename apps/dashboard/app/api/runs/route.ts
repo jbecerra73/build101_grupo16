@@ -1,27 +1,25 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { startPipeline } from "@/lib/orchestrator";
+import { type NextRequest } from "next/server";
+import { capOrError, errorJson, json, readBody, touchOrchestrator } from "@/lib/api";
+import { enqueueRun } from "@/lib/orchestrator";
 import { listRuns } from "@/lib/runs";
 import { parseStartRunRequest } from "@/lib/validate";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(await listRuns());
+  touchOrchestrator();
+  return json(await listRuns());
 }
 
+/** Queues a run (QueuedRun in the run store) and returns its pre-assigned id. */
 export async function POST(req: NextRequest) {
-  let body: unknown;
+  const read = await readBody(req);
+  if (!read.ok) return read.res;
+  const parsed = parseStartRunRequest(read.body);
+  if (!parsed.ok) return errorJson(400, parsed.errors.join("; "), parsed.errors);
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ errors: ["Body must be valid JSON"] }, { status: 400 });
-  }
-  const parsed = parseStartRunRequest(body);
-  if (!parsed.ok) return NextResponse.json({ errors: parsed.errors }, { status: 400 });
-  try {
-    const { runId } = await startPipeline(parsed.value);
-    return NextResponse.json({ runId }, { status: 201 });
+    return json(await enqueueRun(parsed.value), 201);
   } catch (err) {
-    return NextResponse.json({ errors: [err instanceof Error ? err.message : "Failed to start run"] }, { status: 500 });
+    return capOrError(err);
   }
 }

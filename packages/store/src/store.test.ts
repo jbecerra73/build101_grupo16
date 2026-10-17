@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BlobsServer } from "@netlify/blobs/server";
@@ -152,6 +152,15 @@ describe("FsStore layout", () => {
     expect(existsSync(join(root, ".control", "orchestrator.json"))).toBe(true);
     // .control is not a run
     expect(await s.listDirs("runs/")).toEqual(["r1"]);
+  });
+
+  it("does not follow symlinks out of the root", async () => {
+    const root = await tmpDir();
+    const outside = await tmpDir();
+    await writeFile(join(outside, "secret.png"), "secret");
+    await mkdir(join(root, "r1", "screenshots"), { recursive: true });
+    await symlink(join(outside, "secret.png"), join(root, "r1", "screenshots", "a.png"));
+    expect(await new FsStore(root).getBytes("runs/r1/screenshots/a.png")).toBeUndefined();
   });
 });
 
