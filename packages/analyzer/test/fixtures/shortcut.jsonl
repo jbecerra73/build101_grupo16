@@ -1,0 +1,4 @@
+{"runId":"t","agentId":"kai-7","personaId":"kai","seed":7,"ts":1000,"type":"page_view","url":"/cart","step":"Cart","screenshot":"screenshots/kai-7-000.png"}
+{"runId":"t","agentId":"kai-7","personaId":"kai","seed":7,"ts":1500,"type":"action","url":"/cart","step":"Cart","action":{"kind":"type","selector":"#email","text":"k@x.io","field":"email"}}
+{"runId":"t","agentId":"kai-7","personaId":"kai","seed":7,"ts":2000,"type":"page_view","url":"/checkout/success","step":"Confirmation","screenshot":"screenshots/kai-7-001.png"}
+{"runId":"t","agentId":"kai-7","personaId":"kai","seed":7,"ts":2500,"type":"success","url":"/checkout/success","step":"Confirmation","confirmation":{"email":"k@x.io"}}

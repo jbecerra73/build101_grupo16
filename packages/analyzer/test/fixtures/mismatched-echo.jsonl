@@ -1,0 +1,15 @@
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":1000,"type":"page_view","url":"/cart","step":"Cart","screenshot":"screenshots/typical-7-000.png"}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":2000,"type":"action","url":"/cart","step":"Cart","action":{"kind":"click","selector":"a[href='/checkout']","text":"Go to Checkout"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":3000,"type":"page_view","url":"/checkout","step":"Shipping","screenshot":"screenshots/typical-7-001.png"}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":4000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#email","text":"Bo@Example.com","field":"email"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":5000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#fullName","text":"Bo Li","field":"fullName"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":6000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#address","text":"9 Elm Rd","field":"address"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":7000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#city","text":"Oslo","field":"city"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":8000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#postalCode","text":"0150","field":"postalCode"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":9000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"type","selector":"#country","text":"Norway","field":"country"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":10000,"type":"action","url":"/checkout","step":"Shipping","action":{"kind":"click","selector":"button:has-text('Continue')","text":"Continue"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":11000,"type":"page_view","url":"/checkout?step=payment","step":"Payment","screenshot":"screenshots/typical-7-002.png"}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":12000,"type":"action","url":"/checkout?step=payment","step":"Payment","action":{"kind":"type","selector":"#cardNumber","text":"5555 4444 3333 1111","field":"cardNumber"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":13000,"type":"action","url":"/checkout?step=payment","step":"Payment","action":{"kind":"click","selector":"button[type=submit]","text":"Pay"}}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":14000,"type":"page_view","url":"/checkout/success","step":"Confirmation","screenshot":"screenshots/typical-7-003.png"}
+{"runId":"t","agentId":"typical-7","personaId":"typical","seed":7,"ts":14500,"type":"success","url":"/checkout/success","step":"Confirmation","confirmation":{"email":"bo@example.com","address":"1 Other St, Oslo","cardLast4":"4242"}}
