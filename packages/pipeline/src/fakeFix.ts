@@ -27,7 +27,14 @@ export type FakeFixOptions = {
 /** The findings the rehearsal "fixes". */
 export function pickTargets(findings: Finding[], traps: TrapId[] | undefined, max: number): Finding[] {
   const ranked = rankFindings(findings);
-  const byTrap = traps?.length ? ranked.filter((f) => traps.includes(trapOf(f)!)) : [];
+  // One finding per trap: the best-ranked one describes it.
+  const seen = new Set<string>();
+  const byTrap = (traps?.length ? ranked : []).filter((f) => {
+    const t = trapOf(f);
+    if (!t || !traps!.includes(t) || seen.has(t)) return false;
+    seen.add(t);
+    return true;
+  });
   return (byTrap.length ? byTrap : ranked).slice(0, max);
 }
 

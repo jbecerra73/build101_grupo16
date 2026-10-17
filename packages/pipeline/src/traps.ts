@@ -16,7 +16,9 @@ export function trapOf(f: Pick<Finding, "step" | "page" | "selector" | "title">)
   if (f.step === "Product" || /size/.test(text)) return "T4";
   if (/promo|coupon|wipe|erase|discount/.test(text)) return "T5";
   if (f.step === "Payment" || /deliver|fee|shipping cost|total/.test(text)) return "T3";
-  if (f.step === "Shipping") return "T1";
+  // T1 is about finding the way on: the invisible "Continue to payment" link
+  // and rage clicks on the card footer, not ordinary validation errors.
+  if (f.step === "Shipping" && /continue to payment|continue button|footer|justify-end|can'?t find|cannot find|unreadable|contrast|light-gray|tiny|rage/.test(text)) return "T1";
   return undefined;
 }
 

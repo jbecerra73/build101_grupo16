@@ -189,6 +189,10 @@ describe("traps", () => {
 
   it("the rehearsal picks the T1/T2 findings, else the top ones", () => {
     expect(pickTargets([F_T3, F_T1, F_T2, F_T4], ["T1", "T2"], 3).map((f) => f.id)).toEqual(["F2", "F1"]);
+    // Validation errors on Shipping are not T1; a second T1 finding is not picked twice.
+    const validation = { ...F_T1, id: "F9", selector: undefined, title: "Shipping form submits fail on validation errors, shoppers retry and continue" };
+    expect(trapOf(validation)).toBeUndefined();
+    expect(pickTargets([F_T1, { ...F_T1, id: "F8" }, F_T2], ["T1", "T2"], 3).map((f) => f.id)).toEqual(["F2", "F1"]);
     expect(pickTargets([F_T5, F_T3], ["T1", "T2"], 1).map((f) => f.id)).toEqual(["F3"]);
   });
 
@@ -215,9 +219,9 @@ describe("offlineSwarmRunner", () => {
     const runsDir = await mkdtemp(join(tmpdir(), "fs-offline-"));
     const dataDir = join(runsDir, "data");
     const config = retest([1, 2]);
-    const run = offlineSwarmRunner({ runsDir, dataDir, durationMs: 600, ingestLagMs: 300, bootMs: 0, tickMs: 10, fixedTraps: async () => ["T1", "T2"] });
+    const run = offlineSwarmRunner({ runsDir, dataDir, durationMs: 1500, ingestLagMs: 1000, bootMs: 0, tickMs: 10, fixedTraps: async () => ["T1", "T2"] });
     const p = run(config);
-    await sleep(250);
+    await sleep(500);
     const midShots = await readdir(join(runsDir, "r-retest1", "screenshots"));
     const midEvents = (await lines(swarmFile(dataDir, "r-retest1"))).length;
     await p;

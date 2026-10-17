@@ -50,7 +50,7 @@ export type OfflineSwarmOptions = {
 /** Fake cost model for the swarm monitor: sandbox time + one Haiku call per action. */
 export const OFFLINE_COST = { sandboxUsdPerSecond: 0.00012, usdPerAction: 0.0025 };
 
-export const defaultDataDir = () => process.env.POSTHOG_DATA_DIR ?? join(REPO_ROOT, "data", "posthog");
+export const defaultDataDir = () => process.env.POSTHOG_DATA_DIR || join(REPO_ROOT, "data", "posthog");
 export const swarmFile = (dataDir: string, runId: string) => join(dataDir, `swarm-${runId}.jsonl`);
 
 /** Funnel step → storefront capture name in apps/dashboard/scripts/shots/<persona>/. */
@@ -116,7 +116,7 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
   return async (config) => {
     const runsDir = opts.runsDir ?? defaultRunsDir();
     const dataDir = opts.dataDir ?? defaultDataDir();
-    const shotsDir = opts.shotsDir ?? process.env.SWARM_SHOTS_DIR ?? join(REPO_ROOT, "apps", "dashboard", "scripts", "shots");
+    const shotsDir = opts.shotsDir ?? (process.env.SWARM_SHOTS_DIR || join(REPO_ROOT, "apps", "dashboard", "scripts", "shots"));
     const duration = opts.durationMs ?? 30_000;
     const lag = opts.ingestLagMs ?? 4_000;
     const tickMs = opts.tickMs ?? 250;
