@@ -26,6 +26,9 @@ export function SiteHeader() {
           <Button variant="ghost" asChild>
             <Link href="/">Runs</Link>
           </Button>
+          <Button variant="ghost" asChild>
+            <Link href="/control">Control</Link>
+          </Button>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <Button asChild>
