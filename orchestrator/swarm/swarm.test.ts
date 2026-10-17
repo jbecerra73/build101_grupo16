@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { RunConfig } from "../../shared";
 import { FakeSandboxProvider, finishingWorker, hangingWorker, type FakeWorker } from "./fake";
-import { claimRun, DailyCapError, FIRST_SEED, peekNextSeed } from "./ledger";
+import { FIRST_SEED, peekNextSeed, reserveSeeds } from "./ledger";
 import { freshSeeds, planSwarm } from "./plan";
 import { sandboxPath } from "./provider";
 import { runSwarm, SwarmAbortedError, type RunSwarmOptions } from "./run";
@@ -38,7 +38,6 @@ function setup(provider: FakeSandboxProvider, over: Partial<RunSwarmOptions> = {
     waiter,
     runsDir,
     ledgerFile: join(runsDir, ".swarm-ledger.json"),
-    dailyCap: 5,
     pollMs: 5,
     log: () => {},
     ...over,
@@ -74,26 +73,12 @@ describe("planSwarm", () => {
 });
 
 describe("ledger", () => {
-  const day1 = new Date("2026-10-17T10:00:00Z");
-  const day2 = new Date("2026-10-18T00:30:00Z");
-
-  it("enforces the daily cap and records nothing for a refused run", () => {
-    const file = join(tmp(), "ledger.json");
-    claimRun(file, { runId: "a", cap: 2, seeds: 10, now: day1 });
-    claimRun(file, { runId: "b", cap: 2, seeds: 10, now: day1 });
-    const before = readFileSync(file, "utf8");
-    expect(() => claimRun(file, { runId: "c", cap: 2, seeds: 10, now: day1 })).toThrow(DailyCapError);
-    expect(readFileSync(file, "utf8")).toBe(before);
-    expect(claimRun(file, { runId: "c", cap: 2, seeds: 10, now: day2 }).runsToday).toBe(1);
-    expect(() => claimRun(file, { runId: "x", cap: 0, seeds: 10, now: day2 })).toThrow(DailyCapError);
-  });
-
-  it("hands out fresh, non-overlapping seeds across runs and days", () => {
+  it("hands out fresh, non-overlapping seeds across runs", () => {
     const file = join(tmp(), "ledger.json");
     expect(peekNextSeed(file)).toBe(FIRST_SEED);
-    expect(claimRun(file, { runId: "a", cap: 5, seeds: 10, now: day1 }).firstSeed).toBe(FIRST_SEED);
-    expect(claimRun(file, { runId: "b", cap: 5, seeds: 10, now: day1 }).firstSeed).toBe(FIRST_SEED + 10);
-    expect(claimRun(file, { runId: "c", cap: 5, seeds: 10, now: day2 }).firstSeed).toBe(FIRST_SEED + 20);
+    expect(reserveSeeds(file, 10)).toBe(FIRST_SEED);
+    expect(reserveSeeds(file, 10)).toBe(FIRST_SEED + 10);
+    expect(peekNextSeed(file)).toBe(FIRST_SEED + 20);
   });
 });
 
@@ -196,14 +181,6 @@ describe("runSwarm", () => {
     abort.abort();
     await expect(run).rejects.toBeInstanceOf(SwarmAbortedError);
     expect(provider.sandboxes.every((s) => s.started[0].stopped && s.closeCalls === 1)).toBe(true);
-  });
-
-  it("refuses to start past the daily cap without creating anything", async () => {
-    const provider = new FakeSandboxProvider();
-    const { opts } = setup(provider, { dailyCap: 1 });
-    await runSwarm(opts);
-    await expect(runSwarm({ ...opts, runId: "r2" })).rejects.toBeInstanceOf(DailyCapError);
-    expect(provider.creates).toBe(5);
   });
 
   it("honours seeds given by the pipeline", async () => {

@@ -2,13 +2,13 @@
 //
 //   npm run swarm -- --url https://deploy-preview-12--swarm-ecommerce.netlify.app
 //       [--run <runId>] [--personas rosa,kai,typical] [--seeds-per-persona 10] [--flow buy-tshirt]
-//       [--provider tenki|local] [--snapshot <id>] [--daily-cap 5] [--sha <preview build sha>]
+//       [--provider tenki|local] [--snapshot <id>] [--sha <preview build sha>]
 //       [--model haiku] [--wait posthog|local] [--dry-run]
 //
 // tenki (default) needs TENKI_API_KEY and TENKI_SNAPSHOT_ID (from `npm run swarm:snapshot`), and
 // Claude credentials for the agents: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY, passed to the
-// sandboxes. `--provider local` runs the same workers on this machine. The daily cap
-// (SWARM_DAILY_CAP, default 5) and fresh seeds are tracked in runs/.swarm-ledger.json.
+// sandboxes. `--provider local` runs the same workers on this machine. Fresh seeds are tracked
+// in runs/.swarm-ledger.json.
 // The run ends once PostHog shows every agent's swarm_done / swarm_give_up (--wait posthog, the
 // default; needs POSTHOG_PERSONAL_API_KEY and POSTHOG_PROJECT_ID). --wait local only waits for
 // the agents' result files, e.g. against a store without tracking.
@@ -38,7 +38,6 @@ const { values: args } = parseArgs({
     "seeds-per-persona": { type: "string", default: "10" },
     provider: { type: "string", default: "tenki" },
     snapshot: { type: "string", default: process.env.TENKI_SNAPSHOT_ID },
-    "daily-cap": { type: "string", default: process.env.SWARM_DAILY_CAP ?? "5" },
     sandboxes: { type: "string", default: String(MAX_SANDBOXES) },
     sha: { type: "string" },
     model: { type: "string", default: process.env.AGENT_MODEL ?? "haiku" },
@@ -121,7 +120,6 @@ try {
     waiter,
     runsDir,
     ledgerFile,
-    dailyCap: Number(args["daily-cap"]),
     maxSandboxes: Number(args.sandboxes),
     pollMs: Number(args["poll-sec"]) * 1000,
     agentTimeoutMs: Number(args["agent-timeout-min"]) * 60_000,

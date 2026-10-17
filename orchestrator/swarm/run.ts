@@ -1,6 +1,6 @@
 // The re-test swarm: up to 5 sandboxes × 6 agents against a deploy preview.
 //
-//   claim a run against the daily cap (and fresh seeds) → plan persona × seed assignments →
+//   reserve fresh seeds → plan persona × seed assignments →
 //   create sandboxes and start one worker in each → poll their latest screenshots into
 //   runs/<runId>/screenshots/ for the live grid → close every sandbox → waitForSwarm.
 //
@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { join } from "node:path";
 import type { PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
 import type { SwarmWorkerInput } from "../../worker/swarm";
-import { claimRun } from "./ledger";
+import { reserveSeeds } from "./ledger";
 import { freshSeeds, planSwarm, type SwarmPlan } from "./plan";
 import { sandboxPath, type Sandbox, type SandboxProcess, type SandboxProvider } from "./provider";
 import type { SwarmWaiter } from "./wait";
@@ -31,9 +31,8 @@ export type RunSwarmOptions = {
   /** PostHogSource (or a stand-in, see wait.ts). */
   waiter: SwarmWaiter;
   runsDir: string;
-  /** Daily cap + seed ledger file (see ledger.ts). */
+  /** Seed ledger file (see ledger.ts). */
   ledgerFile: string;
-  dailyCap: number;
   maxSandboxes?: number;
   agentsPerSandbox?: number;
   /** How often to pull screenshots for the live grid. */
@@ -97,10 +96,9 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   if (!/^[\w.-]+$/.test(o.runId)) throw new Error(`Invalid runId ${o.runId}`);
   if (o.signal?.aborted) throw new SwarmAbortedError();
 
-  // 1. Cap and seeds. A run counts against the cap as soon as it is claimed, even if it fails.
+  // 1. Fresh seeds, unless the pipeline gave them.
   const seedsPerPersona = o.seedsPerPersona ?? 10;
-  const claim = claimRun(o.ledgerFile, { runId: o.runId, cap: o.dailyCap, seeds: o.seeds ? 0 : seedsPerPersona, now: o.now?.() });
-  const seeds = o.seeds ?? freshSeeds(o.personaIds, seedsPerPersona, claim.firstSeed);
+  const seeds = o.seeds ?? freshSeeds(o.personaIds, seedsPerPersona, reserveSeeds(o.ledgerFile, seedsPerPersona));
 
   // 2. Plan and run folder.
   const plan = planSwarm({ runId: o.runId, previewUrl: o.previewUrl, personaIds: o.personaIds, seeds, maxSandboxes: o.maxSandboxes, agentsPerSandbox: o.agentsPerSandbox });
@@ -119,7 +117,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     createdAt: (o.now?.() ?? new Date()).toISOString(),
   };
   writeFileSync(join(runDir, "config.json"), JSON.stringify(config, null, 2) + "\n");
-  log(`swarm ${o.runId}: ${plan.agents.length} agents in ${plan.sandboxes.length} ${o.provider.name} sandbox(es) · run ${claim.runsToday}/${o.dailyCap} today · ${o.previewUrl}`);
+  log(`swarm ${o.runId}: ${plan.agents.length} agents in ${plan.sandboxes.length} ${o.provider.name} sandbox(es) · ${o.previewUrl}`);
 
   const remoteRun = sandboxPath("runs", o.runId);
   const sandboxes: (Sandbox | undefined)[] = plan.sandboxes.map(() => undefined);
