@@ -14,6 +14,7 @@ import {
 import { runFixLoop, verifyProductionBuild, type Analyzer, type FixLoopOptions, type SwarmRunner } from "../../../orchestrator/fix-loop";
 import { readBuildSha } from "../../../orchestrator/preview";
 import { localShell, tenkiShell } from "../../../orchestrator/shell";
+import { fakeFixLoop } from "./fakeFix";
 import { recordedBuildSha, replaySwarmRunner } from "./replay";
 import { allocateSeeds, newRunId, readJson, REPO_ROOT, reserveRun, runsDir as defaultRunsDir, writeJson } from "./runs";
 
@@ -119,7 +120,7 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
     const watcher = setInterval(async () => {
       const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
       const a = fix?.attempts.at(-1);
-      if (a?.status === "draft") void set("waiting-preview", `Draft PR #${a.prNumber}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
+      if (a?.status === "draft") void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
     }, deps.fixWatchMs ?? 500);
     let result: FixResult;
     try {
@@ -140,9 +141,10 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
       clearInterval(watcher);
     }
     const last = result.attempts.at(-1);
+    const pr = last?.prNumber ? `PR #${last.prNumber}` : "rehearsal, no PR";
     const msg =
-      last?.status === "ready" ? `Improved: PR #${last.prNumber} marked ready for review`
-      : last?.status === "not-proven" ? `Fix attempted, not proven: PR #${last.prNumber} closed`
+      last?.status === "ready" ? `Improved: ${pr} marked ready for review`
+      : last?.status === "not-proven" ? `Fix attempted, not proven: ${pr} closed`
       : `Fix loop ended (${last?.status ?? "no attempt"})`;
     return await set("done", msg).then(() => status);
   } catch (e) {
@@ -171,7 +173,8 @@ export function moduleAnalyzer(runsDir: string): Analyzer {
 }
 
 /** Wiring from env: SWARM_RUNNER=replay|p2, RUNS_DIR, REPLAY_DIR, REPLAY_RETEST_DIR,
- * REPLAY_SPEED, VERIFY_BUILD=0|1, FIX_SHELL=tenki|local. */
+ * REPLAY_SPEED, VERIFY_BUILD=0|1, FIX_LOOP=real|fake (fake = offline rehearsal, default
+ * with replay), FIX_STAGE_DELAY_MS, FIX_SHELL=tenki|local. */
 export function defaultDeps(runsDir = defaultRunsDir()): PipelineDeps {
   const runner = process.env.SWARM_RUNNER ?? "replay";
   const replayDir = process.env.REPLAY_DIR ?? join(REPO_ROOT, "runs", "fixture-baseline");
@@ -190,6 +193,8 @@ export function defaultDeps(runsDir = defaultRunsDir()): PipelineDeps {
     };
   else throw new Error(`Unknown SWARM_RUNNER "${runner}" (replay|p2)`);
 
+  const fixMode = process.env.FIX_LOOP ?? (runner === "replay" ? "fake" : "real");
+  if (fixMode !== "fake" && fixMode !== "real") throw new Error(`Unknown FIX_LOOP "${fixMode}" (real|fake)`);
   const verify = process.env.VERIFY_BUILD ? process.env.VERIFY_BUILD !== "0" : runner !== "replay";
   return {
     runsDir,
@@ -202,7 +207,7 @@ export function defaultDeps(runsDir = defaultRunsDir()): PipelineDeps {
       if (!sha) throw new Error(`No <meta name="build-sha"> at ${url}`);
       return sha;
     },
-    fixLoop: (o) =>
+    fixLoop: fixMode === "fake" ? fakeFixLoop({ stageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500) }) : (o) =>
       runFixLoop({
         ...o,
         shell: async () =>

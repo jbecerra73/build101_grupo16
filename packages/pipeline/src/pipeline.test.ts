@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Event, Finding, FixResult, Metrics, RunConfig, RunPhase, RunStatus, StartRunRequest } from "@frictionswarm/shared";
 import { startPipeline, type Analyzer, type FixLoop, type StartOptions } from "./pipeline";
 import { replaySwarmRunner } from "./replay";
+import { fakeFixLoop } from "./fakeFix";
 import { REPO_ROOT, RunCapError } from "./runs";
 
 const FIXTURE = join(REPO_ROOT, "runs", "fixture-baseline");
@@ -176,5 +177,48 @@ describe("replaySwarmRunner", () => {
     expect(partial).toBeGreaterThan(0);
     expect(partial).toBeLessThan(total);
     expect(await lines(join(runsDir, "live", "events", "typical-1.jsonl"))).toHaveLength(total);
+  });
+});
+
+describe("fakeFixLoop (offline rehearsal)", () => {
+  it("runs a real retest + verdict through the injected runner and analyzer, no PR", async () => {
+    const pm = (personaId: string, completed: number) => ({
+      personaId, n: 2, completed, completionRate: completed / 2, gaveUp: 2 - completed, invalidCompletions: 0,
+      medianSteps: completed ? 10 : 0, medianTimeMs: completed ? 30_000 : 0, funnel: [],
+    });
+    const runsDir = await mkdtemp(join(tmpdir(), "fs-rehearsal-"));
+    const retests: RunConfig[] = [];
+    const replay = replaySwarmRunner({ runsDir, speed: 1000, tickMs: 5 });
+    const analyze: Analyzer = async (runId) => {
+      const retest = runId.endsWith("-retest1");
+      const metrics: Metrics = { runId, flowId: "buy-tshirt", buildSha: "x", personas: [pm("rosa", retest ? 2 : 0), pm("kai", 1), pm("typical", 2)] };
+      const findings: Finding[] = [{ id: "F1", severity: "high", personas: ["rosa"], step: "Shipping", page: "/checkout", title: "Tiny continue link", evidence: { screenshots: [], quotes: [], agentCount: 2 }, suggestedFix: "" }];
+      await writeFile(join(runsDir, runId, "metrics.json"), JSON.stringify(metrics));
+      await writeFile(join(runsDir, runId, "findings.json"), JSON.stringify(findings));
+      return { metrics, findings };
+    };
+    const phases: RunPhase[] = [];
+    const { runId, done } = await startPipeline(req, {
+      runsDir, analyze, verifyBuild: async () => "abc1234", fixWatchMs: 5, onStatus: (s) => phases.push(s.phase),
+      runSwarm: async (c) => {
+        if (c.kind === "retest") retests.push(c);
+        await replay(c);
+      },
+      fixLoop: fakeFixLoop({ stageDelayMs: 40 }),
+    });
+    expect(await done).toMatchObject({ phase: "done", message: expect.stringMatching(/rehearsal/) });
+    expect(phases).toEqual(["verifying", "swarming", "analyzing", "fixing", "waiting-preview", "retesting", "comparing", "done"]);
+
+    const base = await json<RunConfig>(join(runsDir, runId, "config.json"));
+    expect(retests).toHaveLength(1);
+    expect(retests[0]).toMatchObject({ kind: "retest", baselineRunId: runId, runId: `${runId}-retest1` });
+    expect(retests[0].seeds.rosa.some((s) => base.seeds.rosa.includes(s))).toBe(false);
+    expect(await readdir(join(runsDir, `${runId}-retest1`, "events"))).toHaveLength(6);
+
+    const fix = await json<FixResult>(join(runsDir, runId, "fix.json"));
+    expect(fix.attempts[0]).toMatchObject({
+      status: "ready", findingIds: ["F1"], prNumber: 0, prUrl: expect.stringContaining("rehearsal"),
+      summary: expect.stringContaining("rehearsal"), verdict: { improved: true, targetedPersonas: ["rosa"] },
+    });
   });
 });
