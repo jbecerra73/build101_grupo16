@@ -99,6 +99,8 @@ function readResult(runDir: string, agentId: string): SwarmAgentResult | undefin
 export async function runClaudeAgent(o: ClaudeAgentOptions): Promise<{ result: SwarmAgentResult; code: number | null }> {
   const agentId = `${o.persona.id}-${o.seed}`;
   rmSync(resultFile(o.runDir, agentId), { force: true });
+  // claude runs in the run folder; spawn fails with ENOENT when the cwd is missing.
+  mkdirSync(o.runDir, { recursive: true });
   const child = spawn("claude", claudeArgs(o), { cwd: o.runDir, stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...o.env } });
   createInterface({ input: child.stdout }).on("line", (line) => {
     const p = progressLine(line);
@@ -109,7 +111,10 @@ export async function runClaudeAgent(o: ClaudeAgentOptions): Promise<{ result: S
   o.signal?.addEventListener("abort", stop, { once: true });
   const code: number | null = await new Promise((done) => {
     child.on("close", done);
-    child.on("error", () => done(null));
+    child.on("error", (err) => {
+      (o.log ?? console.log)(` could not start claude: ${err.message}`);
+      done(null);
+    });
   });
   clearTimeout(timer);
   o.signal?.removeEventListener("abort", stop);
