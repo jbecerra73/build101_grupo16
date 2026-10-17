@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit && npm run typecheck -w @frictionswarm/dashboard",
     "pipeline": "tsx packages/pipeline/src/cli.ts",
     "orchestrator": "tsx packages/pipeline/src/daemon.ts",
+    "orchestrator:tenki": "tsx packages/pipeline/scripts/tenki-orchestrator.ts",
     "posthog:generate": "tsx tools/posthog-sim/generate.ts",
     "posthog:upload": "tsx tools/posthog-sim/upload.ts",
     "agent": "tsx worker/cli.ts",
