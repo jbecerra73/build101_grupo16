@@ -4,7 +4,7 @@
 //   offlineSwarmRunner  `npm run posthog:generate -- --swarm <runId> …` → data/posthog/swarm-<runId>.jsonl
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import type { RunConfig } from "../../shared";
+import { flowOf, type RunConfig } from "../../shared";
 import { runSwarm, type RunSwarmOptions } from "./run";
 
 /** Same shape as SwarmRunner in orchestrator/fix-loop.ts (p3/orchestrator, not on main yet). */
@@ -13,7 +13,7 @@ export type SwarmRunner = (config: RunConfig) => Promise<void>;
 const REPO = resolve(import.meta.dirname, "..", "..");
 
 export function liveSwarmRunner(
-  o: Omit<RunSwarmOptions, "runId" | "flowId" | "previewUrl" | "buildSha" | "personaIds" | "seeds" | "baselineRunId">,
+  o: Omit<RunSwarmOptions, "runId" | "flowId" | "flow" | "previewUrl" | "buildSha" | "personaIds" | "seeds" | "baselineRunId">,
 ): SwarmRunner {
   return async (config) => {
     const hasSeeds = config.personaIds.some((p) => (config.seeds[p]?.length ?? 0) > 0);
@@ -21,6 +21,7 @@ export function liveSwarmRunner(
       ...o,
       runId: config.runId,
       flowId: config.flowId,
+      flow: flowOf(config),
       previewUrl: config.targetUrl,
       buildSha: config.posthog.buildSha,
       personaIds: config.personaIds,

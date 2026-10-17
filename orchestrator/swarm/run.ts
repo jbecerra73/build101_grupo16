@@ -9,7 +9,7 @@
 // gets config.json, screenshots/ and agents/<agentId>.json.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
+import type { Flow, PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
 import type { SwarmWorkerInput } from "../../worker/swarm";
 import { reserveSeeds } from "./ledger";
 import { freshSeeds, planSwarm, type SwarmPlan } from "./plan";
@@ -19,6 +19,8 @@ import type { SwarmWaiter } from "./wait";
 export type RunSwarmOptions = {
   runId: string;
   flowId: string;
+  /** The run's flow snapshot; the worker uses it instead of looking flowId up. */
+  flow?: Flow;
   /** Deploy preview URL; agents open it with their swarm tag. */
   previewUrl: string;
   /** The preview's build_sha (RunConfig.posthog.buildSha). */
@@ -180,6 +182,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     const input: SwarmWorkerInput = {
       runId: o.runId,
       flowId: o.flowId,
+      flow: o.flow,
       targetUrl: o.previewUrl,
       agents: plan.sandboxes[i].map(({ personaId, seed }) => ({ personaId, seed })),
     };

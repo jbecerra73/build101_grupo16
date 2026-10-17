@@ -2,8 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { SwarmAgentResult } from "../shared";
-import { pool, runSwarmWorker, type SwarmWorkerInput } from "./swarm";
+import { buyTshirt, type SwarmAgentResult } from "../shared";
+import { pool, runSwarmWorker, workerFlow, type SwarmWorkerInput } from "./swarm";
 
 describe("pool", () => {
   it("never runs more than the limit at once and keeps results in order", async () => {
@@ -18,6 +18,16 @@ describe("pool", () => {
     });
     expect(peak).toBe(4);
     expect(out.map((r) => (r.status === "fulfilled" ? r.value : "x"))).toEqual([2, 4, 6, 8, "x", 12, 14, 16, 18]);
+  });
+});
+
+describe("workerFlow", () => {
+  it("prefers the input's flow snapshot, falls back to built-ins by own key only", () => {
+    const stored = { ...buyTshirt, id: "coupon" };
+    expect(workerFlow({ flowId: "coupon", flow: stored })).toBe(stored);
+    expect(workerFlow({ flowId: "coupon" })).toBeUndefined();
+    expect(workerFlow({ flowId: "buy-tshirt" })).toBe(buyTshirt);
+    expect(workerFlow({ flowId: "constructor" })).toBeUndefined();
   });
 });
 
