@@ -89,6 +89,11 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   );
   log("installing dependencies");
   await run(shell, `cd ${cwd} && npm ci --no-audit --no-fund`, { timeoutMs: 600_000 });
+  // The sandbox image's claude can be too old for CODING_MODEL: use the latest, under home
+  const claudeBin = `${shell.home}/.npm-global/bin/claude`;
+  await run(shell, `npm install -g --prefix ${shell.home}/.npm-global --no-audit --no-fund @anthropic-ai/claude-code@latest`, {
+    timeoutMs: 300_000,
+  });
 
   log(`running Claude Code (${CODING_MODEL}) on ${input.findings.length} finding(s)`);
   const promptFile = `${shell.home}/fix-prompt.md`;
@@ -96,9 +101,10 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   // No GitHub token in the agent's environment: it edits files, we push
   const claudeEnv: Record<string, string> = { GH_TOKEN: "", GITHUB_TOKEN: "" };
   if (process.env.ANTHROPIC_API_KEY) claudeEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) claudeEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
   const out = await run(
     shell,
-    `cd ${cwd} && claude -p "$(cat ${promptFile})" --model ${CODING_MODEL} --output-format json ` +
+    `cd ${cwd} && ${claudeBin} -p "$(cat ${promptFile})" --model ${CODING_MODEL} --output-format json ` +
       `--permission-mode acceptEdits --allowedTools "Read,Edit,Write,Glob,Grep,Bash(npm run build),Bash(npm run lint)"`,
     { env: claudeEnv, timeoutMs: 30 * 60_000 },
   );
