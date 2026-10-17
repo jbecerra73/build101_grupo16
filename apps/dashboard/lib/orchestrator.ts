@@ -1,46 +1,49 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { FLOWS, type RunConfig, type RunStatus, type StartRunRequest } from "@frictionswarm/shared";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { startPipeline as start } from "@frictionswarm/pipeline";
+import type { StartRunRequest } from "@frictionswarm/shared";
 import { runsDir } from "./runs";
 
 /**
- * Starts the FrictionSwarm pipeline (verify build → swarm → analyze → fix → retest).
- *
- * TODO(P3): wire to the real orchestrator once it lands:
- *
- *   import { startPipeline as start } from "@frictionswarm/pipeline";
- *   export const startPipeline = (req: StartRunRequest) => start(req);
- *
- * Until then this STUB only creates the run folder (config.json + a status.json
- * stuck in "verifying") so the New run → Run page flow can be exercised. No
- * agents are launched and nothing else is written.
+ * Server-process setup for the pipeline, done once when this module loads:
+ * - loads the repo-root `.env.local` (e.g. CLAUDE_CODE_OAUTH_TOKEN for the
+ *   analyzer); variables already set in the environment win;
+ * - fills in the offline demo defaults (replayed swarm + rehearsal fix loop)
+ *   for anything not set. See apps/dashboard/.env.example.
+ * Paths are passed explicitly because the pipeline's own repo-root detection
+ * relies on import.meta.url, which points into .next/ once bundled.
+ */
+function setupEnv() {
+  const runs = runsDir();
+  const root = dirname(runs);
+  const envFile = join(/*turbopackIgnore: true*/ root, ".env.local");
+  if (existsSync(/*turbopackIgnore: true*/ envFile)) process.loadEnvFile(envFile);
+  const defaults: Record<string, string> = {
+    RUNS_DIR: runs,
+    SWARM_RUNNER: "replay",
+    REPLAY_DIR: join(runs, "fixture-baseline"),
+    REPLAY_RETEST_DIR: join(runs, "fixture-retest"),
+    REPLAY_SPEED: "1.5",
+  };
+  for (const [k, v] of Object.entries(defaults)) process.env[k] ??= v;
+}
+setupEnv();
+
+const log = (line: string) => console.log(`[pipeline] ${line}`);
+
+/**
+ * Starts the FrictionSwarm pipeline (verify build → swarm → analyze → fix →
+ * retest → compare) inside this Next server process and returns as soon as
+ * runs/<runId>/ exists. Progress is written to the run folder, which the run
+ * page polls; `done` is deliberately not awaited.
  */
 export async function startPipeline(req: StartRunRequest): Promise<{ runId: string }> {
-  const flow = FLOWS[req.flowId];
-  const now = new Date();
-  const runId = `run-${now.toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-")}-${randomBytes(2).toString("hex")}`;
-  const seeds = Object.fromEntries(req.personaIds.map((p) => [p, Array.from({ length: req.seedsPerPersona }, (_, i) => i + 1)]));
-  const config: RunConfig = {
-    runId,
-    kind: "baseline",
-    flowId: req.flowId,
-    personaIds: req.personaIds,
-    seeds,
-    targetUrl: req.targetUrl ?? flow.startUrl,
-    buildSha: "pending",
-    createdAt: now.toISOString(),
-  };
-  const status: RunStatus = {
-    runId,
-    phase: "verifying",
-    updatedAt: now.toISOString(),
-    message: `Orchestrator not wired yet (dashboard stub, lib/orchestrator.ts). autoFix=${req.autoFix}`,
-  };
-  const dir = join(/*turbopackIgnore: true*/ runsDir(), runId);
-  await mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
-  await writeFile(/*turbopackIgnore: true*/ join(dir, "config.json"), JSON.stringify(config, null, 2) + "\n");
-  await writeFile(/*turbopackIgnore: true*/ join(dir, "status.json"), JSON.stringify(status, null, 2) + "\n");
+  const { runId, done } = await start(req, {
+    runsDir: runsDir(),
+    log,
+    onStatus: (s) => log(`${s.runId} ${s.phase}: ${s.message ?? ""}${s.error ? ` (error: ${s.error})` : ""}`),
+  });
+  void done;
   return { runId };
 }

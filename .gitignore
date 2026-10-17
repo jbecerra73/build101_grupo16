@@ -8,3 +8,5 @@ next-env.d.ts
 # Live pipeline runs (fixtures stay tracked)
 runs/.usage.json
 runs/20*/
+runs/run-*/
+runs/*.tmp
