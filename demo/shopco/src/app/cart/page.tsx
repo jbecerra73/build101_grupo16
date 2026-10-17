@@ -99,11 +99,13 @@ export default function CartPage() {
                   </Button>
                 </div>
                 <Button
-                  type="button"
+                  asChild
                   className="text-sm md:text-base font-medium bg-black rounded-full w-full py-4 h-[54px] md:h-[60px] group"
                 >
-                  Go to Checkout{" "}
-                  <FaArrowRight className="text-xl ml-2 group-hover:translate-x-1 transition-all" />
+                  <Link href="/checkout">
+                    Go to Checkout{" "}
+                    <FaArrowRight className="text-xl ml-2 group-hover:translate-x-1 transition-all" />
+                  </Link>
                 </Button>
               </div>
             </div>
