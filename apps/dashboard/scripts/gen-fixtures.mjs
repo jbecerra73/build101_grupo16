@@ -143,7 +143,9 @@ const baseConfig = readJson(join(BASE, "config.json"));
     ["view", "/cart", "screenshots/kai-1-001.png"], ["click", "a[href='/checkout']", "Go to Checkout"],
     ["view", "/checkout", "screenshots/typical-1-004.png"],
     ["think", seed === 11 ? "oh nice, guest checkout. no account needed" : "no sign up wall this time, ok"],
-    ["type", "email", "ana@example.com"], ["click", "button:has-text('Use saved address')", "Use saved address"],
+    // Every required field is typed: a "Use saved address" shortcut would make
+    // the completion invalid for the analyzer (SPEC validity) and fail the verdict.
+    ...shippingFields,
     ["click", "button:has-text('Continue to payment')", "Continue to payment"],
     ["view", "/checkout?step=payment", "screenshots/typical-1-005.png"],
     ["type", "cardNumber", "4242 4242 4242 4242"], ["click", "button[type=submit]", "Pay $120"],
