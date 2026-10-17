@@ -1,4 +1,4 @@
-import type { Event, Flow } from "@frictionswarm/shared";
+import { actionBudget, PERSONAS, type Event, type Flow, type Persona } from "@frictionswarm/shared";
 
 export type Validity = { valid: boolean; reasons: string[] };
 
@@ -12,11 +12,22 @@ export function typedFields(events: Event[]): Map<string, string> {
   return m;
 }
 
-/** SPEC completion validity: success AND required steps AND required fields AND confirmation echo. */
-export function validateCompletion(flow: Flow, events: Event[]): Validity {
+/** The agent's seeded action budget (actionBudget), or undefined for an unknown persona. */
+export function agentBudget(events: Event[], personas: Record<string, Persona> = PERSONAS): number | undefined {
+  const first = events[0];
+  const persona = first && personas[first.personaId];
+  return persona ? actionBudget(persona, first.seed) : undefined;
+}
+
+/** SPEC completion validity: success AND required steps AND required fields AND confirmation echo,
+ * AND no more actions than the agent's seeded budget. */
+export function validateCompletion(flow: Flow, events: Event[], personas: Record<string, Persona> = PERSONAS): Validity {
   const reasons: string[] = [];
   const success = events.findLast((e) => e.type === "success");
   if (!success) reasons.push("no success event");
+
+  const budget = agentBudget(events, personas);
+  if (budget !== undefined && events.filter((e) => e.type === "action").length > budget) reasons.push("exceeded action budget");
 
   const seen = new Set(events.map((e) => e.step).filter(Boolean));
   const missingSteps = flow.required.steps.filter((s) => !seen.has(s));

@@ -1,4 +1,4 @@
-// npm run analyze -- runs/<id>   (writes metrics.json + findings.json; loads .env.local from the repo root)
+// npm run analyze -- runs/<id>   (writes metrics.json + findings.json + themes.json; loads .env.local from the repo root)
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { analyzeRun } from "./analyze";
@@ -13,10 +13,11 @@ if (!dir) {
   process.exit(1);
 }
 const runDir = resolve(process.env.INIT_CWD ?? process.cwd(), dir);
-const { metrics, findings, path, error } = await analyzeRun(runDir, { log: (l) => console.error(l) });
+const { metrics, findings, themes, path, themesPath, error } = await analyzeRun(runDir, { log: (l) => console.error(l) });
 if (error) console.error(error);
-console.log(`findings path: ${path}`);
+console.log(`findings path: ${path}, themes path: ${themesPath}`);
 for (const p of metrics.personas)
   console.log(`${p.personaId}: ${p.completed}/${p.n} completed, ${p.gaveUp} gave up, ${p.invalidCompletions} invalid`);
 for (const f of findings) console.log(`${f.id} [${f.severity}] ${f.step} ${f.title} (${f.personas.join(", ")})`);
-console.log(`wrote ${join(runDir, "metrics.json")} and findings.json`);
+for (const t of themes) console.log(`${t.id} ${t.title} (${t.agentCount} agents: ${t.personas.join(", ")})`);
+console.log(`wrote ${join(runDir, "metrics.json")}, findings.json and themes.json`);

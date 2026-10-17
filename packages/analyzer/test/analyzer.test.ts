@@ -2,9 +2,13 @@ import { appendFileSync, cpSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buyTshirt, type Event, type Metrics, type RunConfig } from "@frictionswarm/shared";
+import { actionBudget, buyTshirt, PERSONAS, type Event, type Metrics, type RunConfig } from "@frictionswarm/shared";
 import {
+  agentBudget,
+  AnswerSchema,
   computeMetrics,
+  heuristicThemes,
+  sanitizeThemes,
   createAnalyzer,
   extractJson,
   frictionSignals,
@@ -169,7 +173,7 @@ describe("findings", () => {
   it("accepts an explicit empty answer, but not one whose findings were all dropped", async () => {
     let calls = 0;
     const empty = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => (calls++, { findings: [] }) });
-    expect(empty).toEqual({ findings: [], path: "custom" });
+    expect(empty).toMatchObject({ findings: [], path: "custom", themesPath: "heuristic" });
     expect(calls).toBe(1);
     const ghost = { severity: "low", personas: ["ghost"], step: "Cart", page: "/cart", selector: null, title: "x", evidence: { screenshots: [], quotes: [], agentCount: 1 }, suggestedFix: "y" };
     const dropped = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => ({ findings: [ghost] }) });
@@ -188,15 +192,150 @@ describe("findings", () => {
   });
 });
 
+describe("themes", () => {
+  const metrics = computeMetrics(run.config, buyTshirt, run.events);
+  const finding = (title: string, personas: string[], step: string) => ({
+    severity: "high", personas, step, page: "/checkout", selector: null, title,
+    evidence: { screenshots: [], quotes: [], agentCount: 1 }, suggestedFix: "x",
+  });
+
+  it("heuristic makes one theme per give-up step on the fixture, quoting each reason", () => {
+    const findings = heuristicFindings(buyTshirt, run.events, frictionSignals(buyTshirt, run.events));
+    const themes = heuristicThemes(run.events, findings);
+    expect(themes.map((t) => t.title).sort()).toEqual(["Gave up at Account", "Gave up at Shipping"]);
+    expect(themes.map((t) => t.id)).toEqual(["T1", "T2"]);
+    const shipping = themes.find((t) => t.title === "Gave up at Shipping")!;
+    expect(shipping).toMatchObject({
+      personas: ["rosa"],
+      agentCount: 1,
+      quotes: [{ personaId: "rosa", agentId: "rosa-1", text: "I can't find how to continue to payment. There is no button I can read." }],
+    });
+    const rosaFinding = findings.find((f) => f.step === "Shipping" && f.personas.includes("rosa"))!;
+    expect(shipping.findingIds).toContain(rosaFinding.id);
+    expect(themes.find((t) => t.title === "Gave up at Account")).toMatchObject({ personas: ["kai"], agentCount: 1 });
+  });
+
+  it("heuristic themes are the fallback without credentials", async () => {
+    const res = await generateFindings(run, metrics, { flow: buyTshirt, ...noLlm });
+    expect(res.themesPath).toBe("heuristic");
+    expect(res.themes).toEqual(heuristicThemes(run.events, res.findings));
+  });
+
+  it("validates model themes from the same answer as the findings", async () => {
+    const model = async () => ({
+      findings: [
+        finding("ghost finding", ["ghost"], "Cart"),
+        finding("Invisible continue link", ["rosa"], "Shipping"),
+        finding("Forced sign-up", ["kai"], "Account"),
+      ],
+      themes: [
+        {
+          title: "Could not see how to continue",
+          agentIds: ["rosa-1", "typical-1", "nobody-9"],
+          quotes: [
+            { agentId: "rosa-1", text: "There is no button I can read." },
+            { agentId: "rosa-1", text: "I love this shop" },
+            { agentId: "kai-1", text: "There is no button I can read." },
+          ],
+          findingIds: ["F2", "F1", "F9"],
+        },
+        {
+          title: "Refused a forced sign-up",
+          agentIds: ["kai-1"],
+          quotes: [{ agentId: "kai-1", text: "9 fields just to buy a shirt?? no way" }],
+          findingIds: ["F3"],
+        },
+        { title: "Made up", agentIds: ["ghost-1"], quotes: [{ agentId: "ghost-1", text: "hi" }], findingIds: [] },
+      ],
+    });
+    const res = await generateFindings(run, metrics, { flow: buyTshirt, model });
+    expect(res).toMatchObject({ path: "custom", themesPath: "custom" });
+    expect(res.findings.map((f) => [f.id, f.title])).toEqual([["F1", "Invisible continue link"], ["F2", "Forced sign-up"]]);
+    expect(res.themes).toEqual([
+      {
+        id: "T1", title: "Could not see how to continue", personas: ["rosa"], agentCount: 1,
+        quotes: [{ personaId: "rosa", agentId: "rosa-1", text: "There is no button I can read." }],
+        findingIds: ["F1"],
+      },
+      {
+        id: "T2", title: "Refused a forced sign-up", personas: ["kai"], agentCount: 1,
+        quotes: [{ personaId: "kai", agentId: "kai-1", text: "9 fields just to buy a shirt?? no way" }],
+        findingIds: ["F2"],
+      },
+    ]);
+  });
+
+  it("keeps model findings but uses heuristic themes when the answer has none", async () => {
+    const res = await generateFindings(run, metrics, {
+      flow: buyTshirt,
+      model: async () => ({ findings: [finding("Invisible continue link", ["rosa"], "Shipping")] }),
+    });
+    expect(res).toMatchObject({ path: "custom", themesPath: "heuristic" });
+    expect(res.findings[0].title).toBe("Invisible continue link");
+    expect(res.themes).toEqual(heuristicThemes(run.events, res.findings));
+    const bogus = await generateFindings(run, metrics, {
+      flow: buyTshirt,
+      model: async () => ({
+        findings: [finding("Invisible continue link", ["rosa"], "Shipping")],
+        themes: [{ title: "x", agentIds: ["ghost-1"], quotes: [], findingIds: [] }],
+      }),
+    });
+    expect(bogus.themesPath).toBe("heuristic");
+  });
+
+  it("puts themes in the structured-output schema", () => {
+    expect(AnswerSchema.shape.themes).toBeDefined();
+    expect(sanitizeThemes([], run.events, new Map())).toEqual([]);
+  });
+});
+
+describe("action budget", () => {
+  const typicalOk = fx("valid-success");
+  const kai = (seed: number, evs: Event[]) => evs.map((e) => ({ ...e, personaId: "kai", agentId: `kai-${seed}`, seed }));
+
+  it("counts an agent over its seeded budget as invalid", () => {
+    // valid-success has 10 actions: fine for typical (25) and for kai seeds with budget >= 10.
+    expect(typicalOk.filter((e) => e.type === "action")).toHaveLength(10);
+    const fits = [1, 2, 3, 4, 5, 6, 7, 8].find((s) => actionBudget(PERSONAS.kai, s) >= 10)!;
+    const tight = [1, 2, 3, 4, 5, 6, 7, 8].find((s) => actionBudget(PERSONAS.kai, s) < 10)!;
+    expect(validateCompletion(buyTshirt, kai(fits, typicalOk))).toEqual({ valid: true, reasons: [] });
+    const over = validateCompletion(buyTshirt, kai(tight, typicalOk));
+    expect(over).toEqual({ valid: false, reasons: ["exceeded action budget"] });
+    expect(agentBudget(kai(tight, typicalOk))).toBe(actionBudget(PERSONAS.kai, tight));
+
+    const m = computeMetrics(config(["kai"]), buyTshirt, [...kai(fits, typicalOk), ...kai(tight, typicalOk)]);
+    expect(m.personas[0]).toMatchObject({ n: 2, completed: 1, invalidCompletions: 1 });
+  });
+
+  it("every fixture agent stays within its budget", () => {
+    for (const dir of ["fixture-baseline", "fixture-retest", "fixture-not-proven", "fixture-live"]) {
+      for (const evs of readRun(join(FIXTURE, "..", dir)).byAgent.values()) {
+        const n = evs.filter((e) => e.type === "action").length;
+        expect(n, `${dir}/${evs[0].agentId}`).toBeLessThanOrEqual(agentBudget(evs)!);
+      }
+    }
+  });
+});
+
 describe("createAnalyzer", () => {
-  it("writes metrics.json + findings.json for a run id", async () => {
+  it("writes metrics.json + findings.json + themes.json for a run id", async () => {
     const runsDir = mkdtempSync(join(tmpdir(), "analyzer-runs-"));
     cpSync(FIXTURE, join(runsDir, "fixture-baseline"), { recursive: true });
-    const analyze = createAnalyzer({ runsDir, ...noLlm });
+    const lines: string[] = [];
+    const analyze = createAnalyzer({ runsDir, ...noLlm, log: (l) => lines.push(l) });
     const { metrics, findings } = await analyze("fixture-baseline");
     const written = (f: string) => JSON.parse(readFileSync(join(runsDir, "fixture-baseline", f), "utf8"));
     expect(written("metrics.json") as Metrics).toEqual(metrics);
     expect(written("findings.json")).toEqual(findings);
+    expect(written("themes.json")).toEqual(heuristicThemes(run.events, findings));
     expect(findings.length).toBeGreaterThan(0);
+    expect(lines[0]).toMatch(/findings via heuristic, 2 themes via heuristic/);
+  });
+
+  it("the committed fixtures' metrics.json equal what the analyzer computes", () => {
+    for (const dir of ["fixture-baseline", "fixture-retest", "fixture-not-proven"]) {
+      const r = readRun(join(FIXTURE, "..", dir));
+      expect(computeMetrics(r.config, buyTshirt, r.events), dir).toEqual(r.metrics);
+    }
   });
 });

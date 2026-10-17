@@ -4,14 +4,22 @@ import { FLOWS, type Finding, type Flow, type Metrics } from "@frictionswarm/sha
 import { generateFindings, type FindingsOptions, type FindingsPath } from "./findings";
 import { computeMetrics } from "./metrics";
 import { readRun } from "./run";
+import type { Theme } from "./themes";
 
 export type AnalyzeOptions = Omit<FindingsOptions, "flow"> & {
   flow?: Flow;
-  /** Write metrics.json + findings.json into the run folder. Default true. */
+  /** Write metrics.json + findings.json + themes.json into the run folder. Default true. */
   write?: boolean;
 };
 
-export type AnalyzeResult = { metrics: Metrics; findings: Finding[]; path: FindingsPath; error?: string };
+export type AnalyzeResult = {
+  metrics: Metrics;
+  findings: Finding[];
+  themes: Theme[];
+  path: FindingsPath;
+  themesPath: FindingsPath;
+  error?: string;
+};
 
 const writeJson = (path: string, data: unknown) => writeFile(path, JSON.stringify(data, null, 2) + "\n");
 
@@ -24,6 +32,7 @@ export async function analyzeRun(runDir: string, opts: AnalyzeOptions = {}): Pro
   if (opts.write ?? true) {
     await writeJson(join(runDir, "metrics.json"), metrics);
     await writeJson(join(runDir, "findings.json"), res.findings);
+    await writeJson(join(runDir, "themes.json"), res.themes);
   }
   return { metrics, ...res };
 }
@@ -31,8 +40,10 @@ export async function analyzeRun(runDir: string, opts: AnalyzeOptions = {}): Pro
 /** Adapter for the orchestrator's `Analyzer` port: (runId) => { metrics, findings }. */
 export function createAnalyzer({ runsDir, ...opts }: AnalyzeOptions & { runsDir: string }) {
   return async (runId: string): Promise<{ metrics: Metrics; findings: Finding[] }> => {
-    const { metrics, findings, path, error } = await analyzeRun(join(runsDir, runId), opts);
-    opts.log?.(`analyzed ${runId}: ${findings.length} findings via ${path}${error ? ` (${error})` : ""}`);
+    const { metrics, findings, themes, path, themesPath, error } = await analyzeRun(join(runsDir, runId), opts);
+    opts.log?.(
+      `analyzed ${runId}: ${findings.length} findings via ${path}, ${themes.length} themes via ${themesPath}${error ? ` (${error})` : ""}`,
+    );
     return { metrics, findings };
   };
 }
