@@ -125,7 +125,7 @@ describe("runAgent", () => {
       outcome: "success", actions: 6, step: "Confirmation",
       confirmation: { email: "ana@example.com", cardLast4: "4242", address: "Ana Pérez, 123 Main St, Springfield 12345, United States" },
     });
-    expect(existsSync(join(runDir, "screenshots", "typical-1-latest.png"))).toBe(true);
+    expect(existsSync(join(runDir, "screenshots", "typical-1.png"))).toBe(true);
     expect(existsSync(join(runDir, "events"))).toBe(false);
   }, 30_000);
 

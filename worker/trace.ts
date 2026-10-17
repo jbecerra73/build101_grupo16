@@ -1,20 +1,32 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright";
-import { resolveStep, type Event, type Flow, type SwarmAgentResult, type SwarmEvent, type SwarmEventProperties } from "../shared";
+import { resolveStep, type Flow, type PersonaId, type SwarmAgentResult, type SwarmEvent, type SwarmEventProperties } from "../shared";
 
-type Base = Pick<Event, "runId" | "agentId" | "personaId" | "seed">;
+type Base = { runId: string; agentId: string; personaId: PersonaId; seed: number };
 
-export const ENDINGS = new Set<Event["type"]>(["success", "give_up", "error"]);
+/** One entry of the worker's in-memory trace (what the agent did, for tests and debugging). */
+export type TraceEntry = Base & {
+  ts: number;
+  type: "page_view" | "action" | "think_aloud" | "error" | "give_up" | "success";
+  url?: string;
+  /** Funnel step, resolved via the flow's route map. */
+  step?: string;
+  action?: { kind: "click" | "type" | "scroll" | "back"; selector?: string; text?: string; missed?: boolean; field?: string };
+  note?: string;
+  confirmation?: SwarmAgentResult["confirmation"];
+};
+
+export const ENDINGS = new Set<TraceEntry["type"]>(["success", "give_up", "error"]);
 
 export const resultFile = (runDir: string, agentId: string) => join(runDir, "agents", `${agentId}.json`);
 
 /** One agent's record. The storefront's own PostHog snippet captures its page views and clicks;
  * this sends the agent's narration and ending as `swarm_*` events through the page's
  * `window.posthog`, keeps the live-grid screenshot, and writes `agents/<agentId>.json` on the
- * ending. `events` is an in-memory trace for tests and debugging, never written to disk. */
+ * ending. `events` is the in-memory trace, never written to disk. */
 export class AgentTrace {
-  readonly events: Event[] = [];
+  readonly events: TraceEntry[] = [];
   /** Whether the page had `window.posthog` the last time a swarm event was sent. */
   posthog?: boolean;
   private readonly startedAt = new Date().toISOString();
@@ -33,17 +45,17 @@ export class AgentTrace {
     mkdirSync(join(runDir, "agents"), { recursive: true });
   }
 
-  /** `<agentId>-latest.png` for the dashboard's live grid (display only). */
+  /** `screenshots/<agentId>.png`, the latest screen for the dashboard's live grid (display only). */
   saveLatest(png: Buffer) {
-    writeFileSync(join(this.runDir, "screenshots", `${this.base.agentId}-latest.png`), png);
+    writeFileSync(join(this.runDir, "screenshots", `${this.base.agentId}.png`), png);
   }
 
-  emit(e: Omit<Event, keyof Base | "ts" | "step">): Event | undefined {
+  emit(e: Omit<TraceEntry, keyof Base | "ts" | "step">): TraceEntry | undefined {
     if (this.ended) return undefined;
     const { type, url, ...rest } = e;
     this.ended = ENDINGS.has(type);
     const step = url ? resolveStep(this.flow, url) : undefined;
-    const event: Event = { ...this.base, ts: Date.now(), type, url, step, ...rest };
+    const event: TraceEntry = { ...this.base, ts: Date.now(), type, url, step, ...rest };
     this.events.push(event);
 
     if (type === "think_aloud") this.capture("swarm_think_aloud", { note: e.note ?? "", step });
@@ -78,7 +90,7 @@ export class AgentTrace {
     this.pending.push(sent);
   }
 
-  private writeResult(end: Event) {
+  private writeResult(end: TraceEntry) {
     const result: SwarmAgentResult = {
       ...this.base,
       outcome: end.type as SwarmAgentResult["outcome"],

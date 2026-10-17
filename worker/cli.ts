@@ -57,7 +57,7 @@ function writeConfig(buildSha: string) {
   const file = join(runDir, "config.json");
   const config: RunConfig = existsSync(file)
     ? JSON.parse(readFileSync(file, "utf8"))
-    : { runId, kind: "baseline", flowId: flow.id, personaIds: [], seeds: {}, targetUrl, buildSha, createdAt: new Date().toISOString() };
+    : { runId, kind: "retest", flowId: flow.id, posthog: { source: "api", buildSha }, personaIds: [], seeds: {}, targetUrl, createdAt: new Date().toISOString() };
   if (!config.personaIds.includes(persona.id)) config.personaIds.push(persona.id);
   config.seeds[persona.id] = [...new Set([...(config.seeds[persona.id] ?? []), seed])].sort((a, b) => a - b);
   writeFileSync(file, JSON.stringify(config, null, 2) + "\n");

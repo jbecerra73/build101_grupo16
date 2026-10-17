@@ -1,4 +1,4 @@
-import type { Event } from "../shared";
+import type { TraceEntry } from "./trace";
 import type { Observation } from "./observe";
 import { AgentSession, BROWSER_ACTIONS, withSwarmTag, type Outcome, type SessionOptions, type StepResult, type ToolCall } from "./session";
 
@@ -8,7 +8,7 @@ export interface Brain {
   decide(turn: { results: StepResult[]; observation: Observation }): Promise<ToolCall[]>;
 }
 
-export type AgentResult = { outcome: Outcome; actions: number; events: Event[] };
+export type AgentResult = { outcome: Outcome; actions: number; events: TraceEntry[] };
 
 export type AgentOptions = SessionOptions & {
   brain: Brain;

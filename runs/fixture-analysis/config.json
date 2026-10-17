@@ -1,0 +1,11 @@
+{
+  "runId": "fixture-analysis",
+  "kind": "analysis",
+  "flowId": "buy-tshirt",
+  "window": { "from": "2026-10-13", "to": "2026-10-16" },
+  "posthog": { "source": "file", "buildSha": "f00dfeedfixture" },
+  "personaIds": [],
+  "seeds": {},
+  "targetUrl": "https://swarm-ecommerce.netlify.app",
+  "createdAt": "2026-10-17T21:00:00.000Z"
+}

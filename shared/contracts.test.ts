@@ -1,25 +1,22 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   actionBudget,
   buyTshirt,
+  isSwarm,
   PERSONAS,
   resolveStep,
-  type Event,
+  SEGMENTS,
   type Finding,
-  type Metrics,
+  type PostHogEvent,
   type RunConfig,
 } from "./index";
 
-const RUN = join(__dirname, "..", "runs", "fixture-baseline");
-const readJson = <T>(f: string): T => JSON.parse(readFileSync(join(RUN, f), "utf8"));
-const events: Event[] = readdirSync(join(RUN, "events")).flatMap((f) =>
-  readFileSync(join(RUN, "events", f), "utf8")
-    .trim()
-    .split("\n")
-    .map((l) => JSON.parse(l)),
-);
+const RUNS = join(__dirname, "..", "runs");
+const readJson = <T>(...p: string[]): T => JSON.parse(readFileSync(join(RUNS, ...p), "utf8"));
+const readEvents = (run: string): PostHogEvent[] =>
+  readFileSync(join(RUNS, run, "posthog.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
 describe("resolveStep", () => {
   it.each([
@@ -53,49 +50,53 @@ describe("demo flow", () => {
     const names = buyTshirt.steps.map((s) => s.name);
     for (const s of buyTshirt.required.steps) expect(names).toContain(s);
   });
+  it("every segment maps to a known persona", () => {
+    for (const s of SEGMENTS) expect(PERSONAS[s.personaId]).toBeDefined();
+  });
 });
 
-describe("fixture run folder", () => {
-  const config = readJson<RunConfig>("config.json");
+describe("fixture analysis run", () => {
+  const config = readJson<RunConfig>("fixture-analysis", "config.json");
+  const events = readEvents("fixture-analysis");
 
-  it("has one events file per configured agent", () => {
-    const agents = Object.entries(config.seeds).flatMap(([p, seeds]) => seeds.map((s) => `${p}-${s}`));
-    expect(readdirSync(join(RUN, "events")).sort()).toEqual(agents.map((a) => `${a}.jsonl`).sort());
+  it("is an analysis of real users only", () => {
+    expect(config.kind).toBe("analysis");
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.some(isSwarm)).toBe(false);
   });
 
-  it("events are consistent with config, personas and route map", () => {
+  it("every $pageview resolves to a funnel step", () => {
+    for (const e of events.filter((e) => e.event === "$pageview"))
+      expect(resolveStep(buyTshirt, e.properties.$current_url!)).toBeDefined();
+  });
+
+  it("findings use the new shape and point at sessions in the snapshot", () => {
+    const sessions = new Set(events.map((e) => e.properties.$session_id));
+    for (const f of readJson<Finding[]>("fixture-analysis", "findings.json")) {
+      expect(f.segments.length).toBeGreaterThan(0);
+      expect(f.personas).toEqual(f.segments.map((s) => SEGMENTS.find((x) => x.id === s)!.personaId));
+      for (const s of f.evidence.exampleSessions) expect(sessions.has(s)).toBe(true);
+      expect(f.evidence.sessions).toBeGreaterThanOrEqual(f.evidence.exampleSessions.length);
+    }
+  });
+});
+
+describe("fixture retest run", () => {
+  const config = readJson<RunConfig>("fixture-retest", "config.json");
+  const events = readEvents("fixture-retest");
+
+  it("is a swarm on the preview build, one session per configured agent", () => {
+    expect(config.kind).toBe("retest");
     for (const e of events) {
-      expect(e.runId).toBe(config.runId);
-      expect(PERSONAS[e.personaId]).toBeDefined();
-      expect(e.agentId).toBe(`${e.personaId}-${e.seed}`);
-      if (e.url) expect(e.step).toBe(resolveStep(buyTshirt, e.url));
-      if (e.screenshot) expect(existsSync(join(RUN, e.screenshot))).toBe(true);
+      expect(e.properties.swarm_run).toBe(config.runId);
+      expect(e.properties.build_sha).toBe(config.posthog.buildSha);
     }
+    const agents = Object.entries(config.seeds).flatMap(([p, seeds]) => seeds.map((s) => `${p}-${s}`));
+    expect(new Set(events.map((e) => e.properties.swarm_agent))).toEqual(new Set(agents));
+    expect(new Set(events.map((e) => e.properties.$session_id)).size).toBe(agents.length);
   });
 
-  it("covers success, give-up, shortcut to confirmation and the control persona", () => {
-    const byAgent = Map.groupBy(events, (e) => e.agentId);
-    const ends = [...byAgent.values()].map((evs) => evs.at(-1)!);
-    expect(ends.some((e) => e.type === "give_up")).toBe(true);
-    expect(ends.some((e) => e.type === "success" && PERSONAS[e.personaId].control)).toBe(true);
-    const shortcut = [...byAgent.values()].find(
-      (evs) => evs.some((e) => e.type === "success") && !evs.some((e) => e.step === "Payment"),
-    );
-    expect(shortcut).toBeDefined();
-  });
-
-  it("metrics count the shortcut as an invalid completion", () => {
-    const metrics = readJson<Metrics>("metrics.json");
-    const kai = metrics.personas.find((p) => p.personaId === "kai")!;
-    expect(kai).toMatchObject({ n: 2, completed: 0, gaveUp: 1, invalidCompletions: 1 });
-    const typical = metrics.personas.find((p) => p.personaId === "typical")!;
-    expect(typical.completionRate).toBe(1);
-  });
-
-  it("findings reference existing screenshots and known personas", () => {
-    for (const f of readJson<Finding[]>("findings.json")) {
-      for (const p of f.personas) expect(PERSONAS[p]).toBeDefined();
-      for (const s of f.evidence.screenshots) expect(existsSync(join(RUN, s))).toBe(true);
-    }
+  it("agents narrate with swarm_* events", () => {
+    expect(events.some((e) => e.event === "swarm_done" || e.event === "swarm_give_up")).toBe(true);
   });
 });

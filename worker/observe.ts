@@ -10,7 +10,7 @@ export type PageElement = {
   name: string;
   /** Stable-ish CSS selector for the trace (the agent targets `id`). */
   selector: string;
-  /** id or name attribute of form fields, used as Event.action.field. */
+  /** id or name attribute of form fields, recorded on `type` actions in the trace. */
   field?: string;
   value?: string;
   rect: { x: number; y: number; width: number; height: number };

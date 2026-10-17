@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
-import { actionBudget, matchesRoute, type Event, type Flow, type Persona } from "../shared";
-import { AgentTrace } from "./trace";
+import { actionBudget, matchesRoute, type Flow, type Persona, type SwarmAgentResult } from "../shared";
+import { AgentTrace, type TraceEntry } from "./trace";
 import { ID_ATTR, observe, type Observation } from "./observe";
 
 export type ToolName = "look" | "click" | "type" | "scroll" | "back" | "think_aloud" | "give_up" | "done";
@@ -84,7 +84,7 @@ export class AgentSession {
   }
 
   /** In-memory trace of what the agent did (not persisted; PostHog has the real tracks). */
-  get events(): Event[] {
+  get events(): TraceEntry[] {
     return this.log.events;
   }
 
@@ -319,7 +319,7 @@ export function withSwarmTag(url: string, tag: { runId: string; agentId: string;
 }
 
 /** Pull what the confirmation page echoed back (see storefront /checkout/success). */
-export function readConfirmation(body: string): Event["confirmation"] {
+export function readConfirmation(body: string): SwarmAgentResult["confirmation"] {
   const email = body.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/)?.[0];
   const cardLast4 = body.match(/ending in\s+(\d{4})/i)?.[1];
   const address = body.match(/Shipping to\s*\n?\s*([^\n]+)/i)?.[1]?.trim();
