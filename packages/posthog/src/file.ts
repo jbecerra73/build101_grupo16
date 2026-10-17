@@ -27,7 +27,7 @@ export type FileSourceOptions = {
 };
 
 export const defaultDataDir = (env: Record<string, string | undefined> = process.env) =>
-  env.POSTHOG_DATA_DIR ?? join(import.meta.dirname, "..", "..", "..", "data", "posthog");
+  env.POSTHOG_DATA_DIR || join(import.meta.dirname, "..", "..", "..", "data", "posthog");
 
 /** Stream a JSONL file line by line (never loads it whole). Blank and unparseable lines are
  * skipped (a file being appended may end with a half-written line). `keep` sees the raw line

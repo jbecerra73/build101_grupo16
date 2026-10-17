@@ -20,7 +20,7 @@ export type PostHogSourceOptions = FileSourceOptions & ApiSourceOptions;
 /** A source for `kind`, defaulting to POSTHOG_SOURCE, then "file". */
 export function createPostHogSource(kind?: PostHogSourceKind, opts: PostHogSourceOptions = {}): DescribedSource {
   const env = opts.env ?? process.env;
-  const k = kind ?? (env.POSTHOG_SOURCE as PostHogSourceKind | undefined) ?? "file";
+  const k = kind ?? ((env.POSTHOG_SOURCE || undefined) as PostHogSourceKind | undefined) ?? "file";
   if (k === "file") return fileSource({ ...opts, dataDir: opts.dataDir ?? defaultDataDir(env) });
   if (k === "api") return apiSource(opts);
   throw new Error(`unknown POSTHOG_SOURCE ${k} (file | api)`);

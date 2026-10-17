@@ -43,7 +43,7 @@ export function rowToEvent(row: unknown[]): PostHogEvent {
 /** PostHog over HogQL: POST {host}/api/projects/{id}/query. */
 export function apiSource(opts: ApiSourceOptions = {}): DescribedSource {
   const env = opts.env ?? process.env;
-  const host = (opts.host ?? env.POSTHOG_HOST ?? "https://us.posthog.com").replace(/\/+$/, "");
+  const host = (opts.host ?? (env.POSTHOG_HOST || "https://us.posthog.com")).replace(/\/+$/, "");
   const projectId = opts.projectId ?? env.POSTHOG_PROJECT_ID;
   const apiKey = opts.apiKey ?? env.POSTHOG_PERSONAL_API_KEY;
   const storeHost = opts.storeHost === undefined ? PRODUCTION_HOST : opts.storeHost;
