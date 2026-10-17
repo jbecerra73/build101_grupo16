@@ -27,7 +27,7 @@ flowchart LR
     subgraph Tenki["tenki cloud — 5 concurrent sandboxes"]
         subgraph SB["Sandbox ×5 (Chromium snapshot)"]
             Worker["Swarm worker<br/>6 Playwright contexts"]
-            Agents["Agent loop ×6<br/>persona filters · patience<br/>≤25 actions"]
+            Agents["Agent loop ×6<br/>persona filters · patience<br/>≤40 actions"]
             Shots[("/home/tenki<br/>latest screenshot")]
         end
         Coder["Coding agent sandbox<br/>Claude Code headless (claude -p)<br/>storefront clone + gh"]

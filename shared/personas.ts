@@ -20,7 +20,7 @@ export const rosa: Persona = {
     minFontPx: 14,
     hideHoverOnly: true,
   },
-  actions: { maxActions: 25, maxRetriesSameTarget: 2 },
+  actions: { maxActions: 40, maxRetriesSameTarget: 2 },
   patience: { start: 10, costs: { pageLoad: 0, modal: 2, error: 3 } },
 };
 
@@ -45,14 +45,14 @@ export const typical: Persona = {
   control: true,
   viewport: { width: 1280, height: 800, mobile: false },
   perception: { mode: "screenshot+a11y" },
-  actions: { maxActions: 25, maxRetriesSameTarget: 4 },
+  actions: { maxActions: 40, maxRetriesSameTarget: 4 },
   patience: { start: 20, costs: { pageLoad: 0, modal: 1, error: 1 } },
 };
 
 export const PERSONAS: Record<string, Persona> = { rosa, kai, typical };
 
-/** Hard cap regardless of persona (SPEC: 25 actions per agent). */
-export const MAX_ACTIONS_PER_AGENT = 25;
+/** Hard cap regardless of persona (SPEC: 40 actions per agent; a full checkout with the T2 sign-up wall takes ~30). */
+export const MAX_ACTIONS_PER_AGENT = 40;
 
 /** An agent's action budget: drawn from maxActionsRange by seed (deterministic,
  * so a seed always gets the same budget), capped at MAX_ACTIONS_PER_AGENT. */
