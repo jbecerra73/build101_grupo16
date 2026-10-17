@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dashboard": "npm run dev -w @frictionswarm/dashboard",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @frictionswarm/dashboard",
     "fix": "tsx orchestrator/cli.ts",
     "pipeline": "tsx packages/pipeline/src/cli.ts",
     "analyze": "tsx packages/analyzer/src/cli.ts"

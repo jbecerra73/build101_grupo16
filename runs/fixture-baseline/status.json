@@ -1,0 +1,7 @@
+{
+  "runId": "fixture-baseline",
+  "phase": "done",
+  "updatedAt": "2026-10-17T20:31:00.000Z",
+  "message": "Fix proven: PR #7 marked ready for review",
+  "retestRunId": "fixture-retest"
+}

@@ -1,0 +1,6 @@
+{
+  "runId": "fixture-live",
+  "phase": "swarming",
+  "updatedAt": "2026-10-17T21:30:30.000Z",
+  "message": "Swarm #1: 9 agents on 2 tenki sandboxes"
+}

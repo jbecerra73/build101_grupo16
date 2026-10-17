@@ -1,0 +1,5 @@
+{"runId":"fixture-live","agentId":"typical-3","personaId":"typical","seed":3,"ts":1792272602100,"type":"page_view","url":"https://swarm-ecommerce.netlify.app/?swarm=fixture-live","step":"Home","screenshot":"screenshots/typical-3-000.png"}
+{"runId":"fixture-live","agentId":"typical-3","personaId":"typical","seed":3,"ts":1792272603600,"type":"action","url":"https://swarm-ecommerce.netlify.app/?swarm=fixture-live","step":"Home","action":{"kind":"click","selector":"a[href='/shop']","text":"Shop Now"}}
+{"runId":"fixture-live","agentId":"typical-3","personaId":"typical","seed":3,"ts":1792272604800,"type":"page_view","url":"https://swarm-ecommerce.netlify.app/shop?swarm=fixture-live","step":"Browse","screenshot":"screenshots/typical-3-001.png"}
+{"runId":"fixture-live","agentId":"typical-3","personaId":"typical","seed":3,"ts":1792272606300,"type":"action","url":"https://swarm-ecommerce.netlify.app/shop?swarm=fixture-live","step":"Browse","action":{"kind":"click","selector":"a[href^='/shop/product/1']","text":"T-shirt with Tape Details"}}
+{"runId":"fixture-live","agentId":"typ
