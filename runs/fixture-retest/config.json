@@ -1,0 +1,11 @@
+{
+  "runId": "fixture-retest",
+  "kind": "retest",
+  "flowId": "buy-tshirt",
+  "posthog": { "source": "file", "buildSha": "c0ffee0fixture" },
+  "personaIds": ["rosa", "kai", "typical"],
+  "seeds": { "rosa": [1001, 1002, 1003], "kai": [1001, 1002, 1003], "typical": [1001, 1002, 1003] },
+  "targetUrl": "https://deploy-preview-12--swarm-ecommerce.netlify.app",
+  "baselineRunId": "fixture-analysis",
+  "createdAt": "2026-10-17T21:00:00.000Z"
+}

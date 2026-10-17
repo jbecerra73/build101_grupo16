@@ -1,0 +1,63 @@
+[
+  {
+    "id": "F1",
+    "severity": "high",
+    "segments": [
+      "low_vision"
+    ],
+    "personas": [
+      "rosa"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "selector": "a:has-text('Continue to payment')",
+    "title": "'Continue to payment' is unreadable for large-text users",
+    "evidence": {
+      "sessions": 7,
+      "users": 7,
+      "rageClicks": 7,
+      "sinceRelease": {
+        "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+        "date": "2026-06-24",
+        "name": "Checkout redesign"
+      },
+      "exampleSessions": [
+        "01a132ad-4abe-7530-90d6-80e451da92db",
+        "01a13586-e7a7-7412-80f8-262fa76181f3",
+        "01a13596-c365-7f10-b94d-79a99d897154"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Replace the light-gray 11px link with a high-contrast, full-width primary button."
+  },
+  {
+    "id": "F2",
+    "severity": "high",
+    "segments": [
+      "mobile"
+    ],
+    "personas": [
+      "kai"
+    ],
+    "step": "Account",
+    "page": "/checkout/account",
+    "title": "Forced account creation blocks mobile checkout",
+    "evidence": {
+      "sessions": 32,
+      "users": 31,
+      "dropOffRate": 0.6,
+      "sinceRelease": {
+        "sha": "f00dfeedfixture",
+        "date": "2026-09-09",
+        "name": "Accounts"
+      },
+      "exampleSessions": [
+        "01a132ad-4abe-7530-90d6-80e451da92db",
+        "01a134f1-10c3-7eae-bb3b-7dad8cc5a4d6",
+        "01a1351d-e48f-73eb-a8e1-09c686c06a60"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Offer guest checkout; make account creation optional after purchase."
+  }
+]
