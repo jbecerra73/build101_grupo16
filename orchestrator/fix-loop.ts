@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { ApplyDecision } from "@frictionswarm/pipeline";
 import {
   flowOf,
   PERSONAS,
@@ -16,7 +17,7 @@ import {
 } from "../shared";
 import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
 import { topFindings } from "./fix-prompt";
-import { finalizePr, gh, uploadEvidence, type Gh } from "./pr";
+import { closePr, finalizePr, gh, mergePr, prDiff, uploadEvidence, type Gh } from "./pr";
 import { waitForBuildSha } from "./preview";
 import { tenkiShell, type Shell } from "./shell";
 import { compareRuns } from "./verdict";
@@ -63,6 +64,9 @@ export type FixLoopOptions = {
   shell?: (attempt: number) => Promise<Shell>;
   /** Findings handed to the coding agent per attempt (SPEC: top 1–3). */
   maxFindings?: number;
+  /** The findings the Product Owner chose: attempt 1 fixes exactly these, in order, without
+   * re-ranking (unknown ids throw). A retry still takes the re-test's top findings. */
+  findingIds?: string[];
   /** 1 normally; 2 retries once with the re-test's findings (stretch). */
   maxAttempts?: number;
   /** Agents per persona on the re-test (SPEC: 10). */
@@ -76,7 +80,17 @@ export type FixLoopOptions = {
   waitForBuild?: typeof waitForBuildSha;
 };
 
-/** Analysis findings → coding agent → draft PR → preview → re-test → verdict → PR ready or closed.
+/** The findings with these ids, in this order. Throws on an unknown id. */
+function chosenFindings(findings: Finding[], ids: string[]): Finding[] {
+  return ids.map((id) => {
+    const f = findings.find((x) => x.id === id);
+    if (!f) throw new Error(`Unknown finding "${id}"`);
+    return f;
+  });
+}
+
+/** Analysis findings → coding agent → draft PR (diff saved to fix/pr.diff) → preview → re-test →
+ * verdict → PR ready or labelled not-proven, left open for the Product Owner's decision.
  * Progress is written to runs/<baseline>/fix.json after every stage for the dashboard. */
 export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const { baselineRunId, maxFindings = 3, maxAttempts = 1, seedsPerPersona = 10, repo = STOREFRONT_REPO, runsDir = RUNS_DIR } = opts;
@@ -100,9 +114,10 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const result: FixResult = { baselineRunId, repo, attempts: [] };
   const save = () => writeJson(join(baseDir, "fix.json"), result);
   let findings = await readJson<Finding[]>(join(baseDir, "findings.json"));
+  const chosen = opts.findingIds && chosenFindings(findings, opts.findingIds);
 
   for (let n = 1; n <= maxAttempts; n++) {
-    const targets = topFindings(findings, maxFindings);
+    const targets = n === 1 && chosen ? chosen : topFindings(findings, maxFindings);
     if (targets.length === 0) {
       log("no findings left to fix");
       break;
@@ -129,6 +144,13 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         status: "draft",
       });
       await save();
+      // Saved for the dashboard and the PO's decision; the deployed dashboard has no GitHub access.
+      await prDiff(repo, agent.prNumber, ghImpl)
+        .then(async (diff) => {
+          await mkdir(join(baseDir, "fix"), { recursive: true });
+          await writeFile(join(baseDir, "fix", "pr.diff"), diff + "\n");
+        })
+        .catch((e) => log(`could not save the PR diff: ${e instanceof Error ? e.message : String(e)}`));
 
       log(`waiting for ${attempt.previewUrl} to serve ${agent.commitSha.slice(0, 7)}`);
       await waitForBuild(attempt.previewUrl!, agent.commitSha, {
@@ -199,3 +221,32 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   }
   return result;
 }
+
+/** The Product Owner's decision on the last attempt's PR: accept → squash-merge (records the merge
+ * sha), reject → comment the reason and close. Updates fix.json. Plugs into the pipeline as its
+ * real ApplyDecision; ghImpl is for tests. */
+export const applyDecision = async ({
+  runsDir,
+  runId,
+  request,
+  log,
+  ghImpl = gh,
+}: Parameters<ApplyDecision>[0] & { ghImpl?: Gh }): ReturnType<ApplyDecision> => {
+  const file = join(runsDir, runId, "fix.json");
+  const result = await readJson<FixResult>(file);
+  const attempt = result.attempts.at(-1);
+  if (!attempt?.prNumber) throw new Error("No PR to decide on");
+  const { decision, reason, override } = request;
+  const recorded = { decision, ...(reason ? { reason } : {}), ...(override ? { override: true } : {}) };
+  if (decision === "accept") {
+    const mergeSha = await mergePr(result.repo, attempt.prNumber, ghImpl);
+    Object.assign(attempt, { status: "merged", decision: { ...recorded, decidedAt: new Date().toISOString(), mergeSha } } satisfies Partial<FixAttempt>);
+    log(`merged PR #${attempt.prNumber} into main (${mergeSha.slice(0, 7)})`);
+  } else {
+    await closePr(result.repo, attempt.prNumber, reason, ghImpl);
+    Object.assign(attempt, { status: "rejected", decision: { ...recorded, decidedAt: new Date().toISOString() } } satisfies Partial<FixAttempt>);
+    log(`closed PR #${attempt.prNumber}${reason ? `: ${reason}` : ""}`);
+  }
+  await writeJson(file, result);
+  return attempt;
+};

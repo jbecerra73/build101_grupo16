@@ -1,10 +1,10 @@
-import { cp, mkdtemp } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { FixLoop } from "@frictionswarm/pipeline";
+import type { ApplyDecision, FixLoop } from "@frictionswarm/pipeline";
 import { describe, expect, it } from "vitest";
 import { buyTshirt, type FixResult, type Finding, type Metrics, type PersonaMetrics, type RunConfig } from "../shared";
-import { readJson, retestSeeds, runFixLoop, type FixLoopOptions } from "./fix-loop";
+import { applyDecision, readJson, retestSeeds, runFixLoop, type FixLoopOptions } from "./fix-loop";
 
 // Every agent reaches each required step; the ones that don't complete stop before Confirmation.
 const funnel = (completed: number) =>
@@ -37,7 +37,7 @@ async function setup(retests: Metrics[], retestFindings: Finding[] = []) {
     waitForBuild: async () => {},
     runSwarm: async (c) => void swarmConfigs.push(c),
     analyze: async () => ({ metrics: retests.shift()!, findings: retestFindings }),
-    ghImpl: async (args) => (ghCalls.push(args), args[0] === "api" ? "" : ""),
+    ghImpl: async (args) => (ghCalls.push(args), args[1] === "diff" ? "diff --git a/src/app/checkout/page.tsx b/src/app/checkout/page.tsx" : ""),
   };
   return { runsDir, opts, swarmConfigs, agentCalls, ghCalls };
 }
@@ -66,7 +66,7 @@ describe("runFixLoop", () => {
     expect(retest.seeds.kai).toEqual(Array.from({ length: 10 }, (_, i) => 1001 + i));
 
     expect(result.attempts[0]).toMatchObject({ status: "ready", prNumber: 41, retestRunId: "fixture-analysis-retest1" });
-    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["edit", "ready"]);
+    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["diff", "edit", "ready"]);
     const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
     expect(saved.attempts[0].verdict?.improved).toBe(true);
   });
@@ -89,11 +89,40 @@ describe("runFixLoop", () => {
     expect(result.attempts[0].status).toBe("ready");
   });
 
-  it("not proven: closes with the label after one attempt by default", async () => {
+  it("not proven: labels the PR and leaves it open for the decision, after one attempt by default", async () => {
     const { opts, ghCalls } = await setup([metrics("r1", 0, 0, 1)]);
     const result = await runFixLoop(opts);
     expect(result.attempts.map((a) => a.status)).toEqual(["not-proven"]);
-    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["comment", "edit", "close"]);
+    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["diff", "comment", "edit"]);
+  });
+
+  it("fixes exactly the chosen findings, in order, and saves the PR diff", async () => {
+    const { runsDir, opts, agentCalls } = await setup([metrics("r1", 6, 7, 10)]);
+    await runFixLoop({ ...opts, findingIds: ["F3", "F1"] });
+    expect(agentCalls).toEqual([{ attempt: 1, findingIds: ["F3", "F1"] }]);
+    const diff = await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8");
+    expect(diff).toContain("diff --git a/src/app/checkout/page.tsx b/src/app/checkout/page.tsx");
+  });
+
+  it("rejects an unknown chosen finding", async () => {
+    const { opts, agentCalls } = await setup([]);
+    await expect(runFixLoop({ ...opts, findingIds: ["nope"] })).rejects.toThrow('Unknown finding "nope"');
+    expect(agentCalls).toEqual([]);
+  });
+
+  it("a PR diff that can't be fetched is logged, not fatal", async () => {
+    const { opts } = await setup([metrics("r1", 6, 7, 10)]);
+    const logs: string[] = [];
+    const result = await runFixLoop({
+      ...opts,
+      log: (l) => void logs.push(l),
+      ghImpl: async (args) => {
+        if (args[1] === "diff") throw new Error("gh pr diff failed: boom");
+        return "";
+      },
+    });
+    expect(result.attempts[0].status).toBe("ready");
+    expect(logs.some((l) => l.includes("could not save the PR diff") && l.includes("boom"))).toBe(true);
   });
 
   it("retry (stretch): a second attempt uses the re-test's findings, never a third", async () => {
@@ -116,5 +145,43 @@ describe("runFixLoop", () => {
     ).rejects.toThrow("guardrail");
     const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
     expect(saved.attempts[0]).toMatchObject({ status: "failed", error: "guardrail: no changes" });
+  });
+});
+
+describe("applyDecision", () => {
+  const fixDir = async (attempt: Partial<FixResult["attempts"][number]>) => {
+    const runsDir = await mkdtemp(join(tmpdir(), "fs-decision-"));
+    await cp(join(import.meta.dirname, "..", "runs", "fixture-analysis"), join(runsDir, "r"), { recursive: true });
+    const fix: FixResult = { baselineRunId: "r", repo: "FrissA/demo-ecommerce", attempts: [{ attempt: 1, findingIds: ["F1"], status: "ready", ...attempt }] };
+    await writeFile(join(runsDir, "r", "fix.json"), JSON.stringify(fix));
+    return runsDir;
+  };
+  const request = (decision: "accept" | "reject", reason?: string) => ({ runId: "r", decision, reason, requestedAt: "2026-10-17T12:00:00Z" });
+
+  it("accept merges the PR and records the merge sha", async () => {
+    const asPipelineHook: ApplyDecision = applyDecision; // compile-time check of the seam
+    expect(asPipelineHook).toBe(applyDecision);
+    const runsDir = await fixDir({ prNumber: 41 });
+    const calls: string[][] = [];
+    const ghImpl = async (args: string[]) => (calls.push(args), args[1] === "view" ? "mergesha1" : "");
+    const a = await applyDecision({ runsDir, runId: "r", request: request("accept"), log: () => {}, ghImpl });
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr merge 41", "pr view 41"]);
+    expect(a).toMatchObject({ status: "merged", decision: { decision: "accept", mergeSha: "mergesha1", decidedAt: expect.any(String) } });
+    const saved = await readJson<FixResult>(join(runsDir, "r", "fix.json"));
+    expect(saved.attempts[0]).toEqual(a);
+  });
+
+  it("reject closes the PR with the reason", async () => {
+    const runsDir = await fixDir({ prNumber: 41, status: "not-proven" });
+    const calls: string[][] = [];
+    const ghImpl = async (args: string[]) => (calls.push(args), "");
+    const a = await applyDecision({ runsDir, runId: "r", request: request("reject", "too risky"), log: () => {}, ghImpl });
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr comment 41", "pr close 41"]);
+    expect(a).toMatchObject({ status: "rejected", decision: { decision: "reject", reason: "too risky" } });
+  });
+
+  it("refuses when the last attempt has no PR", async () => {
+    const runsDir = await fixDir({});
+    await expect(applyDecision({ runsDir, runId: "r", request: request("accept"), log: () => {} })).rejects.toThrow("No PR to decide on");
   });
 });

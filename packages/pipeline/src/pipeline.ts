@@ -25,13 +25,13 @@ import {
   type StartRunRequest,
 } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
-import { fakeFixLoop } from "./fakeFix";
-import { realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { fakeApplyDecision, fakeFixLoop } from "./fakeFix";
+import { realApplyDecision, realFixLoop, type Analyzer, type ApplyDecision, type Compare, type FixLoop } from "./fixLoop";
 import { defaultDataDir, offlineSwarmRunner } from "./offline";
 import { allocateSeeds, newRunId, readJson, reserveRun, runsDir as defaultRunsDir, writeJson } from "./runs";
 import { tenkiSwarmRunner, type SwarmRunner } from "./swarm";
 
-export type { Analyzer, Compare, FixLoop, SwarmRunner };
+export type { Analyzer, ApplyDecision, Compare, FixLoop, SwarmRunner };
 
 /** The three personas of the re-test: Rosa and Kai stand in for the hurt
  * segments, Typical for the control. */
@@ -47,6 +47,8 @@ export type PipelineDeps = {
   compare: Compare;
   runSwarm: SwarmRunner;
   fixLoop: FixLoop;
+  /** Merges or closes the fix's PR once the Product Owner decides. */
+  applyDecision: ApplyDecision;
   /** How long collecting waits for PostHog ingestion. Default 5 min. */
   collectTimeoutMs?: number;
   onStatus?: (s: RunStatus) => void;
@@ -62,6 +64,8 @@ export type RunOptions = {
   autoFix: boolean;
   /** Fresh seeds per persona for the re-test swarm. */
   retestSeeds: Record<PersonaId, number[]>;
+  /** The findings the Product Owner chose to fix (default: the fix loop picks). */
+  findingIds?: string[];
 };
 
 export type StartOptions = Partial<PipelineDeps> & { maxRunsPerDay?: number };
@@ -191,7 +195,7 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
     if (!opts.autoFix) return await set("done", `Report ready: ${findings.length} findings`).then(() => status);
     if (!findings.length) return await set("done", "No findings to fix").then(() => status);
 
-    await set("fixing", "Coding agent is fixing the top findings");
+    await set("fixing", opts.findingIds ? `Coding agent is fixing ${opts.findingIds.join(", ")}` : "Coding agent is fixing the top findings");
     const watcher = setInterval(async () => {
       const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
       const a = fix?.attempts.at(-1);
@@ -206,6 +210,7 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
           runsDir: deps.runsDir,
           log,
           retestSeeds: opts.retestSeeds,
+          findingIds: opts.findingIds,
           compare: deps.compare,
           runSwarm: async (c) => {
             const n = Object.values(c.seeds).flat().length;
@@ -351,6 +356,7 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
     signal: c.signal,
     log: c.log,
     fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(),
+    applyDecision: c.fixLoop === "fake" ? fakeApplyDecision : realApplyDecision(),
   };
 }
 

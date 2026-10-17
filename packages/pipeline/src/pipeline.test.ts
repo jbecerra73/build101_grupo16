@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,10 +17,10 @@ import type {
 } from "@frictionswarm/shared";
 import { buyTshirt } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
-import { fakeFixLoop, pickTargets } from "./fakeFix";
-import { realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { fakeApplyDecision, fakeFixLoop, pickTargets } from "./fakeFix";
+import { realApplyDecision, realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { defaultWindow, startPipeline, validateRequest, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, runPipeline, seedsFor, startPipeline, validateRequest, type PipelineDeps, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -203,6 +203,57 @@ describe("startPipeline", () => {
   });
 });
 
+describe("chosen findings and the decision (rehearsal)", () => {
+  /** The analysis also reports the low-severity T5 finding, which the rehearsal would never pick. */
+  const withLow = (runsDir: string): Analyzer => async (runId) => {
+    const r = await fakeAnalyzer(runsDir, [])(runId);
+    if (!r.findings.length) return r;
+    const findings = [...r.findings, F_T5];
+    await writeFile(join(runsDir, runId, "findings.json"), JSON.stringify(findings));
+    return { ...r, findings };
+  };
+  const run = async (findingIds: string[]) => {
+    const { runsDir, opts } = await setup();
+    await mkdir(join(runsDir, "r1"));
+    await writeFile(join(runsDir, "r1", "config.json"), JSON.stringify(await analysisConfig("r1", req, new Date(), buyTshirt)));
+    const final = await runPipeline("r1", { autoFix: true, retestSeeds: seedsFor([1]), findingIds }, { ...opts, analyze: withLow(runsDir) } as PipelineDeps);
+    return { runsDir, final };
+  };
+
+  it("fixes exactly the chosen findings and writes a fixture PR diff", async () => {
+    const { runsDir, final } = await run(["F5"]);
+    expect(final.phase).toBe("awaiting-decision");
+    const fix = await json<FixResult>(join(runsDir, "r1", "fix.json"));
+    expect(fix.attempts[0].findingIds).toEqual(["F5"]);
+    const diff = await readFile(join(runsDir, "r1", "fix", "pr.diff"), "utf8");
+    expect(diff).toContain("src/app/checkout/page.tsx");
+    expect(diff).toContain("F5");
+  });
+
+  it("an unknown chosen finding fails the run", async () => {
+    const { final } = await run(["nope"]);
+    expect(final).toMatchObject({ phase: "failed", error: 'Unknown finding "nope"' });
+  });
+
+  const decided = async (decision: "accept" | "reject", reason?: string) => {
+    const runsDir = await mkdtemp(join(tmpdir(), "fs-decision-"));
+    await mkdir(join(runsDir, "r1"));
+    const fix: FixResult = { baselineRunId: "r1", repo: "r (rehearsal)", attempts: [{ attempt: 1, findingIds: ["F1"], prNumber: 0, status: "ready" }] };
+    await writeFile(join(runsDir, "r1", "fix.json"), JSON.stringify(fix));
+    const attempt = await fakeApplyDecision({ runsDir, runId: "r1", request: { runId: "r1", decision, reason, requestedAt: "" }, log: () => {} });
+    expect((await json<FixResult>(join(runsDir, "r1", "fix.json"))).attempts[0]).toEqual(attempt);
+    return attempt;
+  };
+
+  it("accept marks the attempt merged, as a rehearsal", async () => {
+    expect(await decided("accept")).toMatchObject({ status: "merged", decision: { decision: "accept", rehearsal: true, decidedAt: expect.any(String) } });
+  });
+
+  it("reject marks the attempt rejected and keeps the reason", async () => {
+    expect(await decided("reject", "too risky")).toMatchObject({ status: "rejected", decision: { decision: "reject", reason: "too risky", rehearsal: true } });
+  });
+});
+
 describe("traps", () => {
   it("maps findings to the trap they describe", () => {
     expect([F_T1, F_T2, F_T3, F_T4, F_T5].map(trapOf)).toEqual(["T1", "T2", "T3", "T4", "T5"]);
@@ -303,5 +354,6 @@ describe("realFixLoop", () => {
   it("fails clearly when P1's fix loop is not there", async () => {
     const loop: FixLoop = realFixLoop("/nonexistent/orchestrator/fix-loop.ts");
     await expect(loop({} as Parameters<FixLoop>[0])).rejects.toThrow(/P1 fix loop not available/);
+    await expect(realApplyDecision("/nonexistent/orchestrator/fix-loop.ts")({} as never)).rejects.toThrow(/P1 fix loop not available/);
   });
 });

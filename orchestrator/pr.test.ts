@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Finding, Metrics, PersonaMetrics, SegmentMetrics } from "../shared";
-import { finalizePr, renderNotProvenComment, renderReadyBody, type PrContext } from "./pr";
+import { closePr, finalizePr, mergePr, prDiff, renderNotProvenComment, renderReadyBody, type PrContext } from "./pr";
 import { compareRuns } from "./verdict";
 
 const group = (n: number, completed: number) => ({
@@ -64,10 +64,42 @@ describe("PR verdict", () => {
     expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["pr edit", "pr ready"]);
   });
 
-  it("not improved → comment, label not-proven, close", async () => {
+  it("not improved → comment, label not-proven, leave open for the decision", async () => {
     const { calls, gh } = recordGh();
     expect(await finalizePr(regressed, "", gh)).toBe("not-proven");
-    expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["pr comment", "label create", "pr edit", "pr close"]);
-    expect(calls[2]).toContain("not-proven");
+    expect(calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["pr comment", "label create", "pr edit"]);
+    expect(calls[2]).toEqual(["pr", "edit", "42", "--repo", "FrissA/demo-ecommerce", "--add-label", "not-proven"]);
+  });
+});
+
+describe("PR decision", () => {
+  it("mergePr squash-merges, deletes the branch and returns the merge commit", async () => {
+    const calls: string[][] = [];
+    const gh = async (args: string[]) => (calls.push(args), args[1] === "view" ? "abc123def" : "");
+    expect(await mergePr("FrissA/demo-ecommerce", 12, gh)).toBe("abc123def");
+    expect(calls).toEqual([
+      ["pr", "merge", "12", "--repo", "FrissA/demo-ecommerce", "--squash", "--delete-branch"],
+      ["pr", "view", "12", "--repo", "FrissA/demo-ecommerce", "--json", "mergeCommit", "-q", ".mergeCommit.oid"],
+    ]);
+  });
+
+  it("closePr comments the reason, then closes", async () => {
+    const { calls, gh } = recordGh();
+    await closePr("FrissA/demo-ecommerce", 12, "too risky", gh);
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual(["pr comment 12", "pr close 12"]);
+    expect(calls[0].at(-1)).toContain("too risky");
+  });
+
+  it("closePr without a reason only closes", async () => {
+    const { calls, gh } = recordGh();
+    await closePr("FrissA/demo-ecommerce", 12, undefined, gh);
+    expect(calls).toEqual([["pr", "close", "12", "--repo", "FrissA/demo-ecommerce"]]);
+  });
+
+  it("prDiff returns gh pr diff", async () => {
+    const calls: string[][] = [];
+    const gh = async (args: string[]) => (calls.push(args), "diff --git a/x b/x");
+    expect(await prDiff("FrissA/demo-ecommerce", 12, gh)).toBe("diff --git a/x b/x");
+    expect(calls).toEqual([["pr", "diff", "12", "--repo", "FrissA/demo-ecommerce"]]);
   });
 });

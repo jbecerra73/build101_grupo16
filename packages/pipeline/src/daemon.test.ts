@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { buyTshirt, type Finding, type Flow, type FixResult, type Metrics, type RunConfig, type RunStatus, type StartRunRequest } from "@frictionswarm/shared";
 import { FsStore, MemoryStore, putFlow, type OrchestratorHeartbeat, type QueuedRun, type Settings, type SwarmTopology } from "@frictionswarm/store";
 import { Orchestrator, RESTARTED, type DepsFactory } from "./daemon";
-import { fakeFixLoop } from "./fakeFix";
+import { fakeApplyDecision, fakeFixLoop } from "./fakeFix";
 import { retestConfig } from "./fixLoop";
 import type { Analyzer, Compare } from "./fixLoop";
 import { RunMirror } from "./mirror";
@@ -73,6 +73,7 @@ function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?
         analyze: fakeAnalyzer(workDir),
         compare,
         fixLoop: fakeFixLoop({ stageDelayMs: 5 }),
+        applyDecision: fakeApplyDecision,
         fixWatchMs: 5,
       };
     };

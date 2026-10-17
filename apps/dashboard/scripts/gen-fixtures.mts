@@ -19,6 +19,7 @@ import { compareSegmentsToPersonas, createAnalyzer } from "@frictionswarm/analyz
 import { createPostHogSource } from "@frictionswarm/posthog";
 import {
   analysisConfig,
+  fakeApplyDecision,
   fakeFixLoop,
   offlineSwarmRunner,
   ingested,
@@ -58,6 +59,7 @@ async function pipelineFixture(runId: string, traps: TrapId[], createdAt: Date) 
     compare: (a, r, t, flow) => compareSegmentsToPersonas(a, r, t, { flow }),
     runSwarm: offlineSwarmRunner({ runsDir: RUNS, dataDir: DATA, shotsDir: SHOTS, durationMs: 400, ingestLagMs: 50, bootMs: 0, tickMs: 10 }),
     fixLoop: fakeFixLoop({ stageDelayMs: 0, traps }),
+    applyDecision: fakeApplyDecision,
     fixWatchMs: 5,
     onStatus: (s) => console.log(`  ${s.phase}: ${s.message ?? ""}`),
   };
