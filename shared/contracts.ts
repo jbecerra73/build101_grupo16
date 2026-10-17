@@ -137,6 +137,8 @@ export type PersonaMetrics = {
   gaveUp: number;
   /** Agents that hit the success condition but failed validity checks. */
   invalidCompletions: number;
+  /** Over valid completions only (0 when none), so a fix that lets more
+   * agents finish doesn't look like a regression in effort. */
   medianSteps: number;
   medianTimeMs: number;
   funnel: FunnelStep[];
@@ -198,6 +200,8 @@ export type FixAttempt = {
   prNumber?: number;
   prUrl?: string;
   previewUrl?: string;
+  /** The coding agent's own summary of its change. */
+  summary?: string;
   retestRunId?: string;
   verdict?: Verdict;
   status: FixStatus;
