@@ -6,7 +6,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fix": "tsx orchestrator/cli.ts",
-    "pipeline": "tsx packages/pipeline/src/cli.ts"
+    "pipeline": "tsx packages/pipeline/src/cli.ts",
+    "analyze": "tsx packages/analyzer/src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
