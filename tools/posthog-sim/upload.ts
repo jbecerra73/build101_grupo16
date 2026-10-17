@@ -4,7 +4,8 @@
 //   POSTHOG_PROJECT_KEY=phc_... npm run posthog:upload -- data/posthog/events.jsonl [--dry-run]
 //
 // POSTHOG_HOST defaults to https://us.i.posthog.com. Uploading the same file
-// twice is safe: PostHog dedupes on uuid.
+// twice stores duplicates until ClickHouse merges them (PostHog dedupes on uuid
+// only eventually); the api source drops duplicate rows when it reads.
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
