@@ -71,14 +71,16 @@ export type Flow = {
   required: { steps: string[]; fields: RequiredField[] };
 };
 
-export type RequiredField =
-  | "email"
-  | "fullName"
-  | "address"
-  | "city"
-  | "postalCode"
-  | "country"
-  | "cardNumber";
+export const REQUIRED_FIELDS = [
+  "email",
+  "fullName",
+  "address",
+  "city",
+  "postalCode",
+  "country",
+  "cardNumber",
+] as const;
+export type RequiredField = (typeof REQUIRED_FIELDS)[number];
 
 /** @deprecated Agent event log, retired by the PostHog pivot: agents leave
  * PostHog tracks instead (see SwarmEvent in analytics.ts). Kept so open PRs
