@@ -121,7 +121,7 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
     const lag = opts.ingestLagMs ?? 4_000;
     const tickMs = opts.tickMs ?? 250;
     const flow = FLOWS[config.flowId];
-    const out = join(runsDir, config.runId);
+    const out = join(/*turbopackIgnore: true*/ runsDir, config.runId);
     const file = swarmFile(dataDir, config.runId);
 
     const fixed = await (opts.fixedTraps ?? ((c) => fixedTrapsFromFix(runsDir, c)))(config);

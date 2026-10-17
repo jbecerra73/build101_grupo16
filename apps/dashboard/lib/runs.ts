@@ -162,14 +162,22 @@ async function queuedRun(runId: string): Promise<RunDetail | undefined> {
   };
 }
 
+/** Last 28 days up to and including the day of `iso`, as the pipeline's default. */
+const defaultWindowFor = (iso: string) => {
+  const to = Date.parse(iso.slice(0, 10)) + 86_400_000;
+  const d = (t: number) => new Date(t).toISOString().slice(0, 10);
+  return { from: d(to - 28 * 86_400_000), to: d(to) };
+};
+
 /** config.json for a run that has none yet (queued, or cancelled before it started). */
 export function placeholderConfig(runId: string, req: StartRunRequest, createdAt: string): RunConfig {
   return {
     runId,
     kind: "analysis",
     flowId: req.flowId,
-    ...(req.window ? { window: req.window } : {}),
-    posthog: { source: req.source ?? "file", buildSha: "" },
+    // The orchestrator fills in the default window (last 28 days) and the current release.
+    window: req.window ?? defaultWindowFor(createdAt),
+    posthog: { source: req.source ?? "file", buildSha: req.window ? "" : "current" },
     personaIds: [],
     seeds: {},
     targetUrl: PRODUCTION_URL,

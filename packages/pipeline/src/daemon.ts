@@ -290,7 +290,7 @@ function gitVersion(): string {
 
 /** Orchestrator configured from env (RUN_STORE, RUNS_DIR, ORCHESTRATOR_WORK_DIR, ...). */
 export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestrator {
-  const runsDir = resolve(env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
+  const runsDir = resolve(/*turbopackIgnore: true*/ env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
   const store = createStore(runsDir, env);
   // With a Blobs store the pipeline still needs a local folder; under /home/tenki in the sandbox.
   const workDir = resolve(env.ORCHESTRATOR_WORK_DIR ?? (store.kind === "fs" ? runsDir : join(REPO_ROOT, ".orchestrator-work")));
