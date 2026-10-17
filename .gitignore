@@ -19,3 +19,9 @@ runs/*.tmp
 
 # Orchestrator scratch (Blobs mode)
 .orchestrator-work/
+
+# Netlify CLI local builds
+.netlify/
+
+# tenki orchestrator sandbox record (npm run orchestrator:tenki)
+.tenki-orchestrator.json

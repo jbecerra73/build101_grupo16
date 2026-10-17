@@ -12,7 +12,7 @@ export const SNAPSHOT_FILE = "posthog.jsonl";
  * snapshot is never cut short. Returns the number of events written. */
 export async function snapshot(events: Iterable<PostHogEvent> | AsyncIterable<PostHogEvent>, runDir: string): Promise<number> {
   await mkdir(runDir, { recursive: true });
-  const path = join(runDir, SNAPSHOT_FILE);
+  const path = join(/*turbopackIgnore: true*/ runDir, SNAPSHOT_FILE);
   const tmp = `${path}.${process.pid}.tmp`;
   const out = createWriteStream(tmp, { encoding: "utf8" });
   let n = 0;
@@ -31,7 +31,7 @@ export async function snapshot(events: Iterable<PostHogEvent> | AsyncIterable<Po
 /** Replays a past run's posthog.jsonl as a source: same filters as the file source,
  * over just the events that run analyzed. Every host is kept (the snapshot was already filtered). */
 export function snapshotSource(runDir: string, opts: { pollMs?: number } = {}): DescribedSource {
-  const path = join(runDir, SNAPSHOT_FILE);
+  const path = join(/*turbopackIgnore: true*/ runDir, SNAPSHOT_FILE);
   return {
     kind: "snapshot",
     description: `snapshot ${path}`,

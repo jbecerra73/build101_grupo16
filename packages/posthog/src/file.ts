@@ -27,14 +27,14 @@ export type FileSourceOptions = {
 };
 
 export const defaultDataDir = (env: Record<string, string | undefined> = process.env) =>
-  env.POSTHOG_DATA_DIR || join(import.meta.dirname, "..", "..", "..", "data", "posthog");
+  env.POSTHOG_DATA_DIR || join(/*turbopackIgnore: true*/ import.meta.dirname, "..", "..", "..", "data", "posthog");
 
 /** Stream a JSONL file line by line (never loads it whole). Blank and unparseable lines are
  * skipped (a file being appended may end with a half-written line). `keep` sees the raw line
  * first, so callers can skip lines without paying for JSON.parse. */
 export async function* readJsonl(path: string, keep?: (line: string) => boolean): AsyncGenerator<PostHogEvent> {
-  if (!existsSync(path)) return;
-  const rl = createInterface({ input: createReadStream(path, { encoding: "utf8", highWaterMark: 1 << 20 }), crlfDelay: Infinity });
+  if (!existsSync(/*turbopackIgnore: true*/ path)) return;
+  const rl = createInterface({ input: createReadStream(/*turbopackIgnore: true*/ path, { encoding: "utf8", highWaterMark: 1 << 20 }), crlfDelay: Infinity });
   for await (const line of rl) {
     if (!line || (keep && !keep(line))) continue;
     try {
@@ -100,17 +100,17 @@ export async function pollSwarm(q: WaitForSwarmQuery, pollMs: number, check: () 
 /** Offline backend: data/posthog/events.jsonl (history) and swarm-<runId>.jsonl (swarm tracks). */
 export function fileSource(opts: FileSourceOptions = {}): DescribedSource {
   const dir = opts.dataDir ?? defaultDataDir();
-  const history = opts.historyFile?.startsWith("/") ? opts.historyFile : join(dir, opts.historyFile ?? "events.jsonl");
+  const history = opts.historyFile?.startsWith("/") ? opts.historyFile : join(/*turbopackIgnore: true*/ dir, opts.historyFile ?? "events.jsonl");
   const host = opts.host === undefined ? PRODUCTION_HOST : opts.host;
   const swarmPath = (runId: string) => {
     if (!/^[\w.-]+$/.test(runId)) throw new Error(`invalid run id ${runId}`);
-    return join(dir, `swarm-${runId}.jsonl`);
+    return join(/*turbopackIgnore: true*/ dir, `swarm-${runId}.jsonl`);
   };
   return {
     kind: "file",
     description: `file ${history}`,
     async *realUserEvents(q) {
-      if (!existsSync(history)) throw new Error(`no PostHog history at ${history} (run npm run posthog:generate)`);
+      if (!existsSync(/*turbopackIgnore: true*/ history)) throw new Error(`no PostHog history at ${history} (run npm run posthog:generate)`);
       const f = realUserFilter(q, host);
       for await (const e of readJsonl(history, f.line)) if (f.event(e)) yield e;
     },
