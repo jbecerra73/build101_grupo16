@@ -126,7 +126,9 @@ function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Find
               </a>
             </Button>
           )}
-          {a.prUrl && (
+          {/* The offline rehearsal fix loop (FIX_LOOP=fake) opens no PR: prNumber 0. */}
+          {a.prUrl && !a.prNumber && <Badge variant="outline">Rehearsal · no PR opened</Badge>}
+          {a.prUrl && !!a.prNumber && (
             <Button asChild>
               <a href={a.prUrl} target="_blank" rel="noreferrer">
                 PR #{a.prNumber ?? ""}

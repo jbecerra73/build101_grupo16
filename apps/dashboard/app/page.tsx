@@ -71,18 +71,18 @@ export default async function RunsPage() {
               <TableBody>
                 {runs.map((r) => (
                   <TableRow key={r.runId}>
-                    <TableCell className="pl-4">
+                    <TableCell className="max-w-96 pl-4 whitespace-normal">
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <Link href={`/runs/${r.runId}`} className="font-medium hover:underline">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Link href={`/runs/${r.runId}`} className="font-mono text-sm font-medium break-all hover:underline">
                             {r.runId}
                           </Link>
                           <Badge variant={r.config.kind === "retest" ? "secondary" : "outline"}>{r.config.kind}</Badge>
                         </div>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDateTime(r.config.createdAt)}
-                          {r.config.baselineRunId ? ` · retest of ${r.config.baselineRunId}` : ""}
-                        </span>
+                        <span className="text-sm text-muted-foreground">{formatDateTime(r.config.createdAt)}</span>
+                        {r.config.baselineRunId && (
+                          <span className="text-sm break-all text-muted-foreground">retest of {r.config.baselineRunId}</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="max-w-56 whitespace-normal">
