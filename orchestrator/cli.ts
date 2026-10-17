@@ -1,10 +1,10 @@
 // P1 commands that work before the swarm and analyzer are wired in:
 //
-//   tsx orchestrator/cli.ts open-pr <baselineRunId> [--local] [--findings 2]
+//   tsx orchestrator/cli.ts open-pr <analysisRunId> [--local] [--findings 2]
 //       coding agent → draft PR; writes runs/<id>/fix.json
 //   tsx orchestrator/cli.ts wait-preview <prNumber> <sha>
-//   tsx orchestrator/cli.ts verdict <baselineRunId> <retestRunId> --pr <n> [--dry-run]
-//       compare metrics.json files and mark the PR ready or close it not-proven
+//   tsx orchestrator/cli.ts verdict <analysisRunId> <retestRunId> --pr <n> [--dry-run]
+//       compare segments (analysis) to personas (retest) and mark the PR ready or close it not-proven
 //   tsx orchestrator/cli.ts check-prod
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,7 +68,7 @@ async function verdict(baselineRunId: string, retestRunId: string) {
   const v = compareRuns(before, after, targeted);
   const ctx = {
     repo: STOREFRONT_REPO, prNumber, baselineRunId, retestRunId,
-    baselineSha: baseConfig.buildSha, retestSha: retestConfig.buildSha,
+    baselineSha: before.buildSha, retestSha: after.buildSha,
     verdict: v, findings, screenshotUrls: {} as Record<string, string>,
   };
   if (values["dry-run"]) {

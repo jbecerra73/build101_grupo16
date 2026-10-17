@@ -14,6 +14,9 @@ const PROTECTED_PATHS = [
   "package-lock.json",
   ".github/",
   "src/lib/payment.ts",
+  // Tracking: a fix that changes what PostHog sees can't be measured.
+  "src/lib/analytics.ts",
+  "src/components/Analytics.tsx",
 ];
 const PROTECTED_SNIPPETS = [
   { file: "src/app/layout.tsx", text: '"build-sha"' },
@@ -42,16 +45,16 @@ export type CodingAgentResult = {
 
 export class GuardrailError extends Error {}
 
-const draftBody = (input: CodingAgentInput, summary: string) => `Automated fix by FrictionSwarm for baseline run \`${input.runId}\` (attempt ${input.attempt}).
+const draftBody = (input: CodingAgentInput, summary: string) => `Automated fix by FrictionSwarm for analysis run \`${input.runId}\` (attempt ${input.attempt}).
 
 ## Findings addressed
-${input.findings.map((f) => `- **${f.title}** (${f.severity}; ${f.personas.join(", ")}; step ${f.step})`).join("\n")}
+${input.findings.map((f) => `- **${f.title}** (${f.severity}; ${f.segments.join(", ")}; step ${f.step})`).join("\n")}
 
 ## Agent summary
 ${summary}
 
 ---
-⏳ Draft until the same personas re-run against this PR's deploy preview with fresh seeds. It is marked ready for review only if completion improves ≥20 pts for a targeted persona and no persona gets worse.`;
+⏳ Draft until a persona swarm shops this PR's deploy preview with fresh seeds. It is marked ready for review only if a targeted persona completes ≥20 pts more often than its segment's real users and no persona falls below its segment.`;
 
 /** Check the agent's diff against the locked constraints before anything is pushed. */
 async function checkGuardrails(shell: Shell, cwd: string) {

@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Finding, PersonaMetrics, Verdict } from "../shared";
-import { PERSONAS } from "../shared";
+import type { Finding, PersonaMetrics, SegmentMetrics, Verdict } from "../shared";
+import { PERSONAS, SEGMENTS } from "../shared";
 
 /** Runs the gh CLI and returns stdout. Injected so tests can record calls. */
 export type Gh = (args: string[]) => Promise<string>;
@@ -33,34 +33,37 @@ export type PrContext = {
   reportUrl?: string;
 };
 
-const pct = (m: PersonaMetrics) => `${Math.round(m.completionRate * 100)}%`;
+const pct = (m: SegmentMetrics | PersonaMetrics) => `${Math.round(m.completionRate * 100)}%`;
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 const short = (sha: string) => sha.slice(0, 7);
 const personaName = (id: string) => PERSONAS[id]?.name ?? id;
+const segmentName = (id: string) => SEGMENTS.find((s) => s.id === id)?.name ?? id;
 
 export function renderComparisonTable(verdict: Verdict): string {
-  const rows = verdict.comparisons.map(({ personaId, before: b, after: a, completionDeltaPts, regressions }) => {
+  const rows = verdict.comparisons.map(({ personaId, segmentId, before: b, after: a, completionDeltaPts, regressions }) => {
     const role = PERSONAS[personaId]?.control ? " (control)" : verdict.targetedPersonas.includes(personaId) ? " (targeted)" : "";
     const status = regressions.length ? `⚠️ ${regressions.join("; ")}` : "✓";
-    return `| ${personaName(personaId)}${role} | ${pct(b)} (${b.completed}/${b.n}) | ${pct(a)} (${a.completed}/${a.n}) | ${signed(completionDeltaPts)} pts | ${b.gaveUp}/${b.n} → ${a.gaveUp}/${a.n} | ${b.medianSteps || "–"} → ${a.medianSteps || "–"} | ${status} |`;
+    return `| ${segmentName(segmentId)} ↔ ${personaName(personaId)}${role} | ${pct(b)} (${b.completed}/${b.n}) | ${pct(a)} (${a.completed}/${a.n}) | ${signed(completionDeltaPts)} pts | ${status} |`;
   });
   return [
-    "| Persona | Completion before | Completion after | Δ | Gave up | Median steps (completers) | Regressions |",
-    "|---|---|---|---|---|---|---|",
+    "| Segment ↔ persona | Before: real users | After: persona swarm | Δ | Regressions |",
+    "|---|---|---|---|---|",
     ...rows,
   ].join("\n");
 }
 
 const runsLine = (ctx: PrContext) =>
-  `Baseline \`${ctx.baselineRunId}\` on production \`${short(ctx.baselineSha)}\` vs re-test \`${ctx.retestRunId}\` on this PR's preview \`${short(ctx.retestSha)}\`, same personas with fresh seeds. N is shown for every number; small samples, no significance claims.`;
+  `Before: each segment's real users in PostHog on production \`${short(ctx.baselineSha)}\` (analysis \`${ctx.baselineRunId}\`). After: the persona swarm on this PR's preview \`${short(ctx.retestSha)}\` (re-test \`${ctx.retestRunId}\`, fresh seeds). These are different populations, people vs. constrained agents, so read this as a directional pre-merge check. N is shown for every number; no significance claims.`;
 
 const reportLine = (ctx: PrContext) => (ctx.reportUrl ? `\n\n[Full report](${ctx.reportUrl})` : "");
 
 function renderFinding(f: Finding, urls: Record<string, string>): string {
-  const shots = f.evidence.screenshots.filter((s) => urls[s]).slice(0, 2);
+  const shots = (f.evidence.screenshots ?? []).filter((s) => urls[s]).slice(0, 2);
+  const since = f.evidence.sinceRelease;
   return [
     `### ${f.title}`,
-    `${f.severity} · ${f.personas.map(personaName).join(", ")} · step **${f.step}** (\`${f.page}\`) · ${f.evidence.agentCount} agent(s)`,
+    `${f.severity} · ${f.segments.map(segmentName).join(", ")} · step **${f.step}** (\`${f.page}\`) · ${f.evidence.sessions} sessions, ${f.evidence.users} users` +
+      (since ? ` · since release "${since.name}" (${since.date}, \`${short(since.sha)}\`)` : ""),
     ...f.evidence.quotes.slice(0, 2).map((q) => `> ${q}`),
     shots.length ? `Before:\n\n${shots.map((s) => `<img src="${urls[s]}" width="360">`).join(" ")}` : "",
   ]
@@ -86,7 +89,7 @@ ${agentSummary ? `\n## What changed\n\n${agentSummary}\n` : ""}`;
 export function renderNotProvenComment(ctx: PrContext): string {
   return `## ❌ FrictionSwarm: fix attempted, not proven
 
-The re-test did not meet the bar (completion +≥20 pts for a targeted persona and no persona worse), so this PR is closed and labelled \`${NOT_PROVEN_LABEL}\`.
+The re-test did not meet the bar (a targeted persona ≥20 pts above its segment's real users, and no persona below its segment), so this PR is closed and labelled \`${NOT_PROVEN_LABEL}\`.
 
 ${ctx.verdict.reasons.map((r) => `- ${r}`).join("\n")}
 
@@ -95,7 +98,7 @@ ${renderComparisonTable(ctx.verdict)}
 ${runsLine(ctx)}${reportLine(ctx)}`;
 }
 
-/** Publish the findings' before-screenshots on an evidence branch of the
+/** Publish the findings' screenshots (if any) on an evidence branch of the
  * storefront repo so the PR body can show them. Returns path → raw URL. */
 export async function uploadEvidence(
   repo: string,
@@ -105,7 +108,7 @@ export async function uploadEvidence(
   ghImpl: Gh = gh,
 ): Promise<Record<string, string>> {
   const urls: Record<string, string> = {};
-  const shots = [...new Set(findings.flatMap((f) => f.evidence.screenshots.slice(0, 2)))];
+  const shots = [...new Set(findings.flatMap((f) => (f.evidence.screenshots ?? []).slice(0, 2)))];
   if (shots.length === 0) return urls;
 
   const exists = await ghImpl(["api", `repos/${repo}/branches/${EVIDENCE_BRANCH}`, "--jq", ".name"]).catch(() => "");
