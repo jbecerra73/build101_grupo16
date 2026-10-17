@@ -1,10 +1,10 @@
 // Build the tenki snapshot every swarm sandbox boots from:
 //
-//   npm run swarm:snapshot -- [--ref main] [--disk-gb 20]
+//   npm run swarm:snapshot -- [--ref main | --local] [--disk-gb 20]
 //   → prints the snapshot id; put it in .env as TENKI_SNAPSHOT_ID
 //
 // What goes in (all under /home/tenki; /tmp is wiped on pause):
-//   - this repo at --ref in /home/tenki/frictionswarm, with `npm ci` (the worker runs from it)
+//   - this repo at --ref (or, with --local, this checkout's HEAD uploaded as a tarball) in /home/tenki/frictionswarm, with `npm ci` (the worker runs from it)
 //   - Playwright's Chromium in the same VM: `npx playwright install chromium` as the tenki user,
 //     plus its system libraries (`playwright install-deps`, as root)
 //   - Claude Code (`claude`), which the base image is expected to ship; installed if missing
@@ -14,6 +14,7 @@
 // The snapshot freezes the worker code: rebuild it after changing worker/ or shared/.
 // Needs TENKI_API_KEY. Unverified without a tenki account (written against SDK v1.4 types/README).
 import { isDiskExhausted, TenkiSandbox, type Session } from "@tenkicloud/sandbox";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { REPO_DIR } from "./tenki";
@@ -24,6 +25,8 @@ const { values: args } = parseArgs({
   options: {
     repo: { type: "string", default: "https://github.com/jbecerra73/build101_grupo16" },
     ref: { type: "string", default: "main" },
+    /** Upload this checkout's HEAD (committed files only) instead of cloning --ref. */
+    local: { type: "boolean", default: false },
     "disk-gb": { type: "string", default: "20" },
     name: { type: "string" },
   },
@@ -66,7 +69,11 @@ process.on("SIGINT", () => void close().then(() => process.exit(130)));
 try {
   const node = await sh(session, "node --version");
   if (Number(node.replace(/^v/, "").split(".")[0]) < 22) throw new Error(`Node ${node} in the base image; the worker needs Node >= 22`);
-  await sh(session, `rm -rf ${REPO_DIR} && git clone --depth 1 --branch ${args.ref} ${args.repo} ${REPO_DIR}`);
+  if (args.local) {
+    const tar = execFileSync("git", ["archive", "--format=tar.gz", "HEAD"], { maxBuffer: 256 * 1024 * 1024 });
+    await session.writeFile("/home/tenki/frictionswarm.tar.gz", tar);
+    await sh(session, `rm -rf ${REPO_DIR} && mkdir -p ${REPO_DIR} && tar -xzf /home/tenki/frictionswarm.tar.gz -C ${REPO_DIR} && rm /home/tenki/frictionswarm.tar.gz`);
+  } else await sh(session, `rm -rf ${REPO_DIR} && git clone --depth 1 --branch ${args.ref} ${args.repo} ${REPO_DIR}`);
   await sh(session, `cd ${REPO_DIR} && npm ci --no-audit --no-fund`);
   await sh(session, `cd ${REPO_DIR} && npx playwright install-deps chromium`, { privileged: true });
   await sh(session, `cd ${REPO_DIR} && npx playwright install chromium`);
@@ -77,7 +84,7 @@ try {
     `cd ${REPO_DIR} && node --input-type=module -e "import { chromium } from 'playwright'; const b = await chromium.launch({ chromiumSandbox: true }); const p = await b.newPage(); await p.goto('about:blank'); await b.close(); console.log('chromium (sandboxed) ok')"`,
   );
   await sh(session, "npm cache clean --force && df -h / /home/tenki");
-  const sha = (await sh(session, `git -C ${REPO_DIR} rev-parse --short HEAD`)).slice(0, 12);
+  const sha = args.local ? execFileSync("git", ["rev-parse", "--short", "HEAD"]).toString().trim() : (await sh(session, `git -C ${REPO_DIR} rev-parse --short HEAD`)).slice(0, 12);
 
   const snapshot = await client.createSnapshotAndWait(session.id, { name: args.name ?? `frictionswarm-swarm-${sha}`, timeoutMs: 30 * 60_000 });
   if (snapshot.state !== "READY") throw new Error(`Snapshot ${snapshot.id} is ${snapshot.state}: ${snapshot.failureReason ?? ""}`);
