@@ -1,0 +1,65 @@
+[
+  {
+    "id": "F1",
+    "severity": "high",
+    "segments": [
+      "low_vision",
+      "mobile"
+    ],
+    "personas": [
+      "rosa",
+      "kai"
+    ],
+    "step": "Product",
+    "page": "/shop/product/*",
+    "selector": "div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")",
+    "title": "Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
+    "evidence": {
+      "sessions": 3,
+      "users": 3,
+      "dropOffRate": 0.5,
+      "rageClicks": 3,
+      "exampleSessions": [
+        "01a14baa-2243-7a48-b9a7-07f4c1a2b08a",
+        "01a14baa-2510-77a9-a078-44ed6c0b18d4",
+        "01a14baa-3932-79a5-acc6-606f614566b5"
+      ],
+      "quotes": [
+        "There's a 'Size' label but no sizes I can choose.",
+        "It keeps saying select a size but I don't see any sizes.",
+        "I tapped the size box but nothing opens. I can't pick a size."
+      ]
+    },
+    "suggestedFix": "Show every size as a visible button that works on tap and without hover, and say which size is missing when Add to Cart is pressed."
+  },
+  {
+    "id": "F2",
+    "severity": "medium",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
+    "evidence": {
+      "sessions": 5,
+      "users": 5,
+      "exampleSessions": [
+        "01a14baa-2812-7de5-8452-1fd6ddf70212",
+        "01a14baa-33ab-7ff2-96f4-a8f51e571ddf",
+        "01a14baa-3840-7aa2-821a-46c552d1edc8"
+      ],
+      "quotes": [
+        "Now the shipping form. Filling in my address."
+      ]
+    },
+    "suggestedFix": "Keep the shipping form's values when a promo code is applied (don't reset or re-mount the form), and keep the code applied."
+  }
+]

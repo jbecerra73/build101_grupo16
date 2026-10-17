@@ -10,7 +10,8 @@
     "orchestrator": "tsx packages/pipeline/src/daemon.ts",
     "posthog:generate": "tsx tools/posthog-sim/generate.ts",
     "posthog:upload": "tsx tools/posthog-sim/upload.ts",
-    "agent": "tsx worker/cli.ts"
+    "agent": "tsx worker/cli.ts",
+    "analyze": "tsx packages/analyzer/src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
