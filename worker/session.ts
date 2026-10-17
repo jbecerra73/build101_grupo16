@@ -223,7 +223,8 @@ export class AgentSession {
     const { urlPattern, visibleText } = flow.success;
     if (urlPattern && !matchesRoute(urlPattern, page.url())) return false;
     const body = await page.locator("body").innerText().catch(() => "");
-    if (visibleText && !body.includes(visibleText)) return false;
+    // innerText applies CSS text-transform, so compare case-insensitively.
+    if (visibleText && !body.toLowerCase().includes(visibleText.toLowerCase())) return false;
     this.log.emit({ type: "success", url: page.url(), confirmation: readConfirmation(body) });
     this.outcome = "success";
     return true;

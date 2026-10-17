@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buyTshirt, typical, type Event, type Flow } from "../shared";
+import { buyTshirt, MAX_ACTIONS_PER_AGENT, typical, type Event, type Flow } from "../shared";
 import { runAgent, type Brain } from "./agent";
 import type { Observation } from "./observe";
 import type { ToolCall } from "./session";
@@ -19,7 +19,7 @@ const PAGES: Record<string, string> = {
   "/checkout?step=payment": `<h1>Payment</h1>
     <label for="cardNumber">Card number</label><input id="cardNumber">
     <button onclick="location.href='/checkout/success'">Pay $120</button>`,
-  "/checkout/success": `<h1>Payment confirmed</h1><p>A confirmation was sent to ana@example.com.</p>
+  "/checkout/success": `<h1 style="text-transform:uppercase">Payment confirmed</h1><p>A confirmation was sent to ana@example.com.</p>
     <dl><dt>Paid with</dt><dd>Visa ending in 4242</dd><dt>Shipping to</dt><dd>Ana Pérez, 123 Main St, Springfield 12345, United States</dd></dl>`,
 };
 const ORIGIN = "http://store.test";
@@ -104,14 +104,14 @@ describe("runAgent", () => {
     expect(res.events.at(-1)).toMatchObject({ type: "give_up", step: "Home", note: "Too confusing." });
   }, 30_000);
 
-  it("enforces the 25-action hard cap even if the persona allows more", async () => {
+  it("enforces the hard action cap even if the persona allows more", async () => {
     const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
-    const generous = { ...typical, actions: { ...typical.actions, maxActions: 100 } };
+    const generous = { ...typical, actions: { ...typical.actions, maxActions: MAX_ACTIONS_PER_AGENT + 10 } };
     const brain = new ScriptedBrain([() => [{ name: "scroll", input: { direction: "down" } }]]);
     const res = await runAgent({ page: await newPage(), brain, persona: generous, flow, runId: "r3", runDir, seed: 3, settleMs: 50, navWaitMs: 50 });
     expect(res.outcome).toBe("give_up");
-    expect(res.events.filter((e) => e.type === "action")).toHaveLength(25);
-    expect(res.events.at(-1)?.note).toMatch(/Ran out of actions \(25\)/);
+    expect(res.events.filter((e) => e.type === "action")).toHaveLength(MAX_ACTIONS_PER_AGENT);
+    expect(res.events.at(-1)?.note).toBe(`Ran out of actions (${MAX_ACTIONS_PER_AGENT}).`);
   }, 30_000);
 
   it("lets only one browser action through per turn", async () => {

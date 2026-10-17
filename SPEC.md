@@ -99,7 +99,7 @@ type Persona = {
 - tenki TS SDK (`@tenkicloud/sandbox`). Plan: **$150 credit, 5 concurrent sandboxes**. One worker process per sandbox, up to **6 Playwright browser contexts** each → 30 agents per swarm.
 - Sandbox image: base Ubuntu image + Chromium via `npx playwright install --with-deps chromium`, snapshotted; request ≥ 20 GB disk. Playwright runs in the same VM as the browser (no remote CDP). Don't use `--no-sandbox`.
 - Agent loop: custom Playwright tool loop driven by **Haiku 5.5** (`claude-haiku-5-5`). Tools: `click`, `type`, `scroll`, `back`, `think_aloud(note)`, `give_up(reason)`, `done()`. Observation = persona-filtered screenshot (+ trimmed a11y tree if the persona allows).
-- Hard cap **25 actions per agent** regardless of persona.
+- Hard cap **40 actions per agent** regardless of persona (each form field is one `type` action; a full checkout behind the T2 sign-up wall takes ~30).
 - Each agent writes `events/<agentId>.jsonl` and its latest screenshot to the sandbox; orchestrator **polls via `readFile`** (no inbound tunnel).
 - Gotchas to respect: files must live under `/home/tenki`; `/tmp` is wiped on pause; re-expose nothing (we expose no ports); close sessions explicitly (failed sessions still bill).
 
@@ -150,7 +150,7 @@ type Finding = {
 ### Orchestrator & dashboard
 - Run state on disk, no DB: `runs/<id>/{config.json, events/*.jsonl, screenshots/, metrics.json, findings.json, fix.json}`. Doubles as the replayable backup demo.
 - Orchestrator: create sandboxes → distribute agents → poll events/screenshots → analyze → invoke coding agent → wait for preview → re-swarm → compare → finalize PR.
-- Caps: max actions per agent (25), max runs per day.
+- Caps: max actions per agent (40), max runs per day.
 - Dashboard pages: define flow / pick personas; live run grid; report (funnel, hotspots, reasons, quotes); before/after + PR status; replay a past run.
 
 ### Work split (lock the three contracts — Persona, Event, Finding — in hour one; everyone builds against mock data)

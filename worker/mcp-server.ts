@@ -76,7 +76,7 @@ tool("look", "See the screen as it is now. Free.");
 tool("click", "Click (or tap) an element by its id from the latest element list, e.g. \"e7\".", {
   id: z.string().describe("Element id, e.g. e7"),
 });
-tool("type", "Replace the text in an input field. Set submit=true to press Enter afterwards.", {
+tool("type", "Replace the text in an input field (no need to click it first). Set submit=true to press Enter afterwards.", {
   id: z.string().describe("Element id of the input, e.g. e3"),
   text: z.string(),
   submit: z.boolean().optional(),
