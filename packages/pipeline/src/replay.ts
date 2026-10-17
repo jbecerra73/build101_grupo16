@@ -1,6 +1,6 @@
 import { appendFile, copyFile, mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { Event, RunConfig } from "@frictionswarm/shared";
+import { actionBudget, PERSONAS, type Event, type RunConfig } from "@frictionswarm/shared";
 import type { SwarmRunner } from "../../../orchestrator/fix-loop";
 import { readJson, REPO_ROOT, runsDir as defaultRunsDir } from "./runs";
 
@@ -35,11 +35,35 @@ async function loadRecording(dir: string) {
   return { runId: cfg?.runId ?? basename(dir), byPersona };
 }
 
+const actionsOf = (evs: Event[]) => evs.filter((e) => e.type === "action").length;
+
+/** The recording replayed for the i-th requested agent of a persona: round-robin,
+ * skipping recordings with more actions than the agent's seeded budget (the real
+ * worker stops at its budget). When none fits, the round-robin one is cut at the
+ * budget and ends in a give_up, as the worker would. */
+export function pickRecording(pool: Event[][], i: number, budget: number): Event[] {
+  for (let k = 0; k < pool.length; k++) {
+    const evs = pool[(i + k) % pool.length];
+    if (actionsOf(evs) <= budget) return evs;
+  }
+  const evs = pool[i % pool.length];
+  const cut: Event[] = [];
+  let n = 0;
+  for (const e of evs) {
+    if (e.type === "action" && ++n > budget) break;
+    cut.push(e);
+  }
+  const last = cut.at(-1) ?? evs[0];
+  const { runId, agentId, personaId, seed, url, step } = last;
+  return [...cut, { runId, agentId, personaId, seed, url, step, ts: last.ts + 1000, type: "give_up", note: `Out of actions (budget ${budget}).` }];
+}
+
 /** A SwarmRunner that replays a recorded run folder as if it were a live
  * swarm: events are appended to runs/<runId>/events/<agentId>.jsonl as they
  * "happen" (recorded pacing ÷ speed), with runId, agentId, seed and the
  * ?swarm= tag rewritten, and screenshots copied as events reference them.
- * Requested agents reuse recorded agents of the same persona round-robin.
+ * Requested agents reuse recorded agents of the same persona round-robin,
+ * within each agent's seeded action budget (see pickRecording).
  * This is the offline demo path and the reference behaviour for P2's runner. */
 export function replaySwarmRunner(opts: ReplayOptions = {}): SwarmRunner {
   return async (config) => {
@@ -57,7 +81,8 @@ export function replaySwarmRunner(opts: ReplayOptions = {}): SwarmRunner {
       const pool = rec.byPersona.get(personaId);
       if (!pool?.length) throw new Error(`Replay recording ${dir} has no agents for persona "${personaId}"`);
       (config.seeds[personaId] ?? []).forEach((seed, i) => {
-        const evs = pool[i % pool.length];
+        const persona = PERSONAS[personaId];
+        const evs = persona ? pickRecording(pool, i, actionBudget(persona, seed)) : pool[i % pool.length];
         agents.push({ agentId: `${personaId}-${seed}`, personaId, seed, srcId: evs[0].agentId, evs, t0: evs[0].ts, sent: 0 });
       });
     }

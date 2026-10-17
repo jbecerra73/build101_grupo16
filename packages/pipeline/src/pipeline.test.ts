@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Event, Finding, FixResult, Metrics, RunConfig, RunPhase, RunStatus, StartRunRequest } from "@frictionswarm/shared";
 import { startPipeline, type Analyzer, type FixLoop, type StartOptions } from "./pipeline";
-import { replaySwarmRunner } from "./replay";
+import { pickRecording, replaySwarmRunner } from "./replay";
 import { fakeFixLoop } from "./fakeFix";
 import { REPO_ROOT, RunCapError } from "./runs";
 
@@ -161,6 +161,21 @@ describe("replaySwarmRunner", () => {
       expect(evs.every((e) => e.agentId === id && e.runId === "r-retest1")).toBe(true);
     }
     await expect(run({ ...config, personaIds: ["nobody"], seeds: { nobody: [1] } })).rejects.toThrow(/no agents/);
+  });
+
+  it("keeps each replayed agent within its seeded action budget", () => {
+    const rec = (n: number, id: string): Event[] => [
+      { runId: "r", agentId: id, personaId: "kai", seed: 1, ts: 0, type: "page_view", step: "Cart" },
+      ...Array.from({ length: n }, (_, i): Event => ({ runId: "r", agentId: id, personaId: "kai", seed: 1, ts: i + 1, type: "action", step: "Cart", action: { kind: "click" } })),
+      { runId: "r", agentId: id, personaId: "kai", seed: 1, ts: n + 1, type: "success", step: "Confirmation" },
+    ];
+    const long = rec(10, "long"), short = rec(8, "short");
+    expect(pickRecording([long, short], 0, 12)).toBe(long);
+    expect(pickRecording([long, short], 0, 9)).toBe(short);
+    const cut = pickRecording([long], 0, 8);
+    expect(cut.filter((e) => e.type === "action")).toHaveLength(8);
+    expect(cut.at(-1)).toMatchObject({ type: "give_up", note: "Out of actions (budget 8)." });
+    expect(cut.some((e) => e.type === "success")).toBe(false);
   });
 
   it("writes events incrementally, paced by the recording", async () => {
