@@ -28,8 +28,8 @@ export type RunSwarmOptions = {
   seeds?: Record<PersonaId, number[]>;
   seedsPerPersona?: number;
   provider: SandboxProvider;
-  /** PostHogSource (or a stand-in, see wait.ts). */
-  waiter: SwarmWaiter;
+  /** PostHogSource (or a stand-in, see wait.ts). Omitted when the caller waits itself (the pipeline does). */
+  waiter?: SwarmWaiter;
   runsDir: string;
   /** Seed ledger file (see ledger.ts). */
   ledgerFile: string;
@@ -46,9 +46,22 @@ export type RunSwarmOptions = {
   /** Environment for the workers (Claude credentials). */
   env?: Record<string, string>;
   baselineRunId?: string;
+  /** Write runs/<runId>/config.json (default). The pipeline's fix loop writes its own first. */
+  writeConfig?: boolean;
+  /** Called whenever a sandbox changes state, with all of them (for the dashboard's swarm.json). */
+  onSandboxes?: (sandboxes: SandboxState[]) => void;
   signal?: AbortSignal;
   log?: (line: string) => void;
   now?: () => Date;
+};
+
+export type SandboxState = {
+  /** tenki's session id, once created. */
+  id?: string;
+  status: "booting" | "running" | "done" | "failed" | "closed";
+  agentIds: string[];
+  startedAt: string;
+  endedAt?: string;
 };
 
 export type SwarmRunResult = { config: RunConfig; plan: SwarmPlan; results: SwarmAgentResult[] };
@@ -116,7 +129,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     ...(o.baselineRunId ? { baselineRunId: o.baselineRunId } : {}),
     createdAt: (o.now?.() ?? new Date()).toISOString(),
   };
-  writeFileSync(join(runDir, "config.json"), JSON.stringify(config, null, 2) + "\n");
+  if (o.writeConfig !== false) writeFileSync(join(runDir, "config.json"), JSON.stringify(config, null, 2) + "\n");
   log(`swarm ${o.runId}: ${plan.agents.length} agents in ${plan.sandboxes.length} ${o.provider.name} sandbox(es) · ${o.previewUrl}`);
 
   const remoteRun = sandboxPath("runs", o.runId);
@@ -127,6 +140,21 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   const copiedResults = new Set<string>();
   /** Set on the first failure or abort, so sandboxes that come up afterwards start nothing. */
   let stopping = false;
+  const now = () => (o.now?.() ?? new Date()).toISOString();
+  const states: SandboxState[] = plan.sandboxes.map((agents) => ({ status: "booting", agentIds: agents.map((a) => a.agentId), startedAt: now() }));
+  const report = () => {
+    try {
+      o.onSandboxes?.(states.map((st) => ({ ...st })));
+    } catch {
+      // Reporting is best effort; it never stops the swarm.
+    }
+  };
+  const setState = (i: number, change: Partial<SandboxState>) => {
+    const ended = change.status === "done" || change.status === "failed" || change.status === "closed";
+    states[i] = { ...states[i], ...change, ...(ended && !states[i].endedAt ? { endedAt: now() } : {}) };
+    report();
+  };
+  report();
 
   /** Copies each agent's latest screenshot (and its result, once there) into the local run folder. */
   const pull = async () => {
@@ -163,6 +191,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
         closed.add(sb);
         try {
           await sb.close();
+          if (states[i].status === "booting" || states[i].status === "running") setState(i, { status: "closed" });
           log(`  sandbox ${i + 1} (${sb.id}) closed`);
         } catch (err) {
           log(`  sandbox ${i + 1} (${sb.id}) FAILED TO CLOSE, close it by hand: ${err instanceof Error ? err.message : err}`);
@@ -174,7 +203,11 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   const runWorker = async (i: number) => {
     const created = o.provider.create({ name: `swarm-${o.runId}-${i + 1}`, env: { ...o.env, ...(o.model ? { AGENT_MODEL: o.model } : {}) } });
     creating.push(created);
-    const sb = (sandboxes[i] = await created);
+    const sb = (sandboxes[i] = await created.catch((err) => {
+      setState(i, { status: "failed" });
+      throw err;
+    }));
+    setState(i, { id: sb.id });
     log(`  sandbox ${i + 1} (${sb.id}) up: ${plan.sandboxes[i].map((a) => a.agentId).join(", ")}`);
     if (stopping || o.signal?.aborted) throw new SwarmAbortedError();
     const input: SwarmWorkerInput = {
@@ -197,7 +230,9 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
       { cwd: repo },
     );
     procs.push(proc);
+    setState(i, { status: "running" });
     const { exitCode, output } = await proc.done;
+    setState(i, { status: exitCode === 0 ? "done" : stopping || o.signal?.aborted ? "closed" : "failed" });
     if (exitCode !== 0) throw new Error(`Worker in sandbox ${i + 1} (${sb.id}) exited ${exitCode}: ${output.trim().slice(-500)}`);
   };
 
@@ -230,8 +265,10 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
 
   // 4. Agents are done; wait for PostHog to ingest their last events (sandboxes already closed).
   const agentIds = plan.agents.map((a) => a.agentId);
-  log(`waiting for PostHog to ingest ${agentIds.length} agents' tracks…`);
-  await Promise.race([o.waiter.waitForSwarm({ runId: o.runId, agentIds, timeoutMs: o.waitTimeoutMs ?? 10 * 60_000 }), abortion(o.signal)]);
+  if (o.waiter) {
+    log(`waiting for PostHog to ingest ${agentIds.length} agents' tracks…`);
+    await Promise.race([o.waiter.waitForSwarm({ runId: o.runId, agentIds, timeoutMs: o.waitTimeoutMs ?? 10 * 60_000 }), abortion(o.signal)]);
+  }
 
   const results = agentIds.flatMap((a) => {
     const file = join(runDir, "agents", `${a}.json`);

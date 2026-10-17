@@ -4,11 +4,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { PostHogSourceKind } from "@frictionswarm/shared";
+import { registerP2SwarmRunner } from "./daemon";
 import { startPipeline } from "./pipeline";
 import { REPO_ROOT } from "./runs";
 
 const envFile = join(REPO_ROOT, ".env.local");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
+// SWARM_RUNNER=tenki re-tests on real tenki sandboxes.
+await registerP2SwarmRunner();
 
 const { values } = parseArgs({
   options: {
