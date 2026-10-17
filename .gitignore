@@ -6,6 +6,9 @@ node_modules/
 *.tsbuildinfo
 next-env.d.ts
 data/posthog/
+screenshots/
+# Dashboard fixtures keep their re-test screenshots
+!runs/*/screenshots/
 
 # Live pipeline runs (fixtures stay tracked)
 runs/.usage.json

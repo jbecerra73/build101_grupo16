@@ -12,13 +12,16 @@
       "node"
     ],
     "lib": [
-      "ES2024"
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
     ]
   },
   "include": [
     "shared",
     "orchestrator",
     "packages",
-    "tools"
+    "tools",
+    "worker"
   ]
 }

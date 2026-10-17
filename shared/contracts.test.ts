@@ -41,7 +41,7 @@ describe("actionBudget", () => {
     expect(actionBudget(PERSONAS.kai, 7)).toBe(actionBudget(PERSONAS.kai, 7));
   });
   it("uses maxActions when there is no range", () => {
-    expect(actionBudget(PERSONAS.rosa, 3)).toBe(25);
+    expect(actionBudget(PERSONAS.rosa, 3)).toBe(PERSONAS.rosa.actions.maxActions);
   });
 });
 

@@ -109,7 +109,7 @@ Unchanged in shape and constraints; they now run **only on the re-test**. A pers
 - Sandbox image: base Ubuntu + Chromium via `npx playwright install --with-deps chromium`, snapshotted; ≥ 20 GB disk. Playwright runs in the same VM as the browser. Don't use `--no-sandbox`.
 - Agent loop: custom Playwright tool loop driven by **Haiku 5.5** (`claude-haiku-5-5`). Tools: `click`, `type`, `scroll`, `back`, `think_aloud(note)`, `give_up(reason)`, `done()`. Observation = persona-filtered screenshot (+ trimmed a11y tree if the persona allows).
 - **No event log.** The agent opens `<previewUrl>/?swarm=<runId>&agent=<agentId>&persona=<personaId>`; its clicks, page views and form submits are captured by the storefront's own PostHog snippet. `think_aloud`, `give_up` and `done` are sent as `swarm_*` events with `page.evaluate(() => window.posthog.capture(...))`, so they land in the same session.
-- Hard cap **25 actions per agent** regardless of persona.
+- Hard cap **40 actions per agent** regardless of persona (each form field is one `type` action; a full checkout behind the T2 sign-up wall takes ~30).
 - The worker still writes each agent's **latest screenshot** to the sandbox for the dashboard's live grid (orchestrator polls via `readFile`). Screenshots are display-only; nothing is analyzed from them.
 - Gotchas: files under `/home/tenki`; `/tmp` is wiped on pause; we expose no ports; close sessions explicitly (failed sessions still bill).
 
@@ -194,7 +194,7 @@ type Finding = {
 - Run state on disk, no DB: analysis run `runs/<id>/{config.json, status.json, posthog.jsonl, metrics.json, findings.json, fix.json}`; re-test run `runs/<id>/{config.json, status.json, screenshots/, posthog.jsonl, metrics.json, findings.json}`.
 - Phases: `analyzing` → (autoFix: `fixing` → `waiting-preview` → `retesting` → `collecting` (waiting for PostHog ingestion) → `comparing`) → `done` | `failed`.
 - Orchestrator: read PostHog → analyze → invoke coding agent → wait for preview → swarm on preview → wait for tracks → analyze tracks → compare → finalize PR.
-- Caps: max actions per agent (25), max runs per day.
+- Caps: max actions per agent (40), max runs per day.
 - Dashboard pages: define flow / pick window; report (segment funnels + trend with releases, hotspots, evidence); live re-test grid; before/after + PR status; replay a past run.
 
 ### Work split (contracts to lock first: tracking plan, PostHogSource, Finding, Metrics)
