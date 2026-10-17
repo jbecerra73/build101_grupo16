@@ -126,7 +126,7 @@ interface PostHogSource {
 }
 ```
 - **`file`** (default, offline demo): streams `data/posthog/events.jsonl` (history) and `data/posthog/swarm-<runId>.jsonl` (swarm tracks). Files are in PostHog's export shape, one event per line.
-- **`api`**: HogQL via `POST /api/projects/<id>/query` with a personal API key (`POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID`, `POSTHOG_HOST`). Ingestion lags ~30–90 s, which is what `waitForSwarm` covers.
+- **`api`**: HogQL via `POST /api/projects/<id>/query` with a personal API key (`POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID`) against the **app host** `POSTHOG_APP_HOST` (`https://us.posthog.com`). Sending events uses the **ingestion host** `POSTHOG_HOST` (`https://us.i.posthog.com`); the two are different. Ingestion lags ~30–90 s, which is what `waitForSwarm` covers.
 - Every run snapshots the events it analyzed into `runs/<id>/posthog.jsonl`, so any run replays offline.
 
 ### Fake PostHog dataset (`tools/posthog-sim`)
