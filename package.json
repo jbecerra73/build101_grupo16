@@ -4,13 +4,18 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fix": "tsx orchestrator/cli.ts",
+    "pipeline": "tsx packages/pipeline/src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@tenkicloud/sandbox": "^1.4.1"
   },
   "workspaces": [
     "shared",
