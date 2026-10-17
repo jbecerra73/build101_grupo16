@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import { actionBudget, matchesRoute, type Flow, type Persona, type SwarmAgentResult } from "../shared";
 import { AgentTrace, type TraceEntry } from "./trace";
-import { ID_ATTR, observe, type Observation } from "./observe";
+import { ID_ATTR, observe, type Observation, type PageElement } from "./observe";
 
 export type ToolName = "look" | "click" | "type" | "scroll" | "back" | "think_aloud" | "give_up" | "done";
 export type ToolCall = { name: ToolName; input: Record<string, unknown> };
@@ -172,6 +172,8 @@ export class AgentSession {
     if (this.actions >= this.maxActions) return this.end("give_up", `Ran out of actions (${this.maxActions}).`);
     const { page, persona } = this.o;
     const url = page.url();
+    const before = this.obs;
+    let target: PageElement | undefined;
     let text: string;
     let isError = false;
 
@@ -186,7 +188,7 @@ export class AgentSession {
       text = "Went back.";
     } else {
       const id = String(c.input.id ?? "");
-      const el = this.obs?.elements.find((e) => e.id === id);
+      const el = (target = this.obs?.elements.find((e) => e.id === id));
       if (!el) return this.result(`No element ${id} on screen.`, true);
       const locator = page.locator(`[${ID_ATTR}="${id}"]`);
       const typed = c.name === "type" ? String(c.input.text ?? "") : undefined;
@@ -215,12 +217,10 @@ export class AgentSession {
             : { kind: "type", selector: el.selector, text: typed, field: el.field, ...(isError ? { missed: true } : {}) },
       });
       if (isError) {
-        const tries = (this.misses.get(el.selector) ?? 0) + 1;
-        this.misses.set(el.selector, tries);
-        const max = persona.actions.maxRetriesSameTarget;
-        if (max && tries >= max) {
+        const gaveUp = this.miss(el);
+        if (gaveUp) {
           this.actions++;
-          return this.end("give_up", `Tried ${persona.perception.mode === "screenshot" ? "the same thing" : `"${el.name}"`} ${tries} times and it never worked.`);
+          return gaveUp;
         }
       }
     }
@@ -230,8 +230,24 @@ export class AgentSession {
     if (c.name !== "scroll") await page.waitForURL((u) => u.toString() !== url, { timeout: this.o.navWaitMs ?? 1500 }).catch(() => {});
     await this.settle();
     if (await this.look()) return { text: `${text} Order confirmed. The session is over.`, ended: "success", observation: this.obs };
+    // A click that changes nothing the persona can perceive (same URL, same filtered screen) is a failed attempt too.
+    if (c.name === "click" && target && !isError && before && this.obs!.url === before.url && this.obs!.screenshot.equals(before.screenshot)) {
+      text += " Nothing seemed to change.";
+      const gaveUp = this.miss(target);
+      if (gaveUp) return gaveUp;
+    }
     if (this.actions >= this.maxActions) return this.end("give_up", `Ran out of actions (${this.maxActions}).`);
     return this.result(`${text} (${this.maxActions - this.actions} actions left)`, isError);
+  }
+
+  /** Counts a failed attempt on a target; ends the session at persona.actions.maxRetriesSameTarget. */
+  private miss(el: PageElement): StepResult | undefined {
+    const { persona } = this.o;
+    const tries = (this.misses.get(el.selector) ?? 0) + 1;
+    this.misses.set(el.selector, tries);
+    const max = persona.actions.maxRetriesSameTarget;
+    if (!max || tries < max) return undefined;
+    return this.end("give_up", `Tried ${persona.perception.mode === "screenshot" ? "the same thing" : `"${el.name}"`} ${tries} times and it never worked.`);
   }
 
   private async settle() {
