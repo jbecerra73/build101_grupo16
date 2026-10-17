@@ -1,0 +1,4 @@
+{"runId":"fixture-baseline","agentId":"kai-2","personaId":"kai","seed":2,"ts":1792267203200,"type":"page_view","url":"https://swarm-ecommerce.netlify.app/cart?swarm=fixture-baseline","step":"Cart","screenshot":"screenshots/kai-2-000.png"}
+{"runId":"fixture-baseline","agentId":"kai-2","personaId":"kai","seed":2,"ts":1792267204000,"type":"think_aloud","url":"https://swarm-ecommerce.netlify.app/cart?swarm=fixture-baseline","step":"Cart","note":"maybe I can just skip to the end"}
+{"runId":"fixture-baseline","agentId":"kai-2","personaId":"kai","seed":2,"ts":1792267205200,"type":"page_view","url":"https://swarm-ecommerce.netlify.app/checkout/success?swarm=fixture-baseline","step":"Confirmation","screenshot":"screenshots/kai-2-001.png"}
+{"runId":"fixture-baseline","agentId":"kai-2","personaId":"kai","seed":2,"ts":1792267205500,"type":"success","url":"https://swarm-ecommerce.netlify.app/checkout/success?swarm=fixture-baseline","step":"Confirmation","confirmation":{}}
