@@ -49,7 +49,11 @@ Rules:
 - "personas" are persona ids. "agentCount" is the number of distinct agents affected.
 - "suggestedFix" is one concrete, minimal UI change that keeps every required step and field.
 - Merge signals about the same problem. Skip noise with no user impact.
-Answer with JSON only: {"findings": [...]}.`;
+Answer with JSON only, no prose, exactly this shape (all keys required):
+{"findings": [{"severity": "high" | "medium" | "low", "personas": ["<persona id>"], "step": "<step name>",
+  "page": "<route>", "selector": "<css selector>" | null, "title": "<short problem statement>",
+  "evidence": {"screenshots": ["<path>"], "quotes": ["<verbatim note>"], "agentCount": <number>},
+  "suggestedFix": "<one concrete change>"}]}`;
 
 export function buildPrompt(run: RunData, metrics: Metrics, signals: FrictionSignal[], opts: FindingsOptions) {
   const personas = opts.personas ?? PERSONAS;
@@ -76,12 +80,23 @@ export function buildPrompt(run: RunData, metrics: Metrics, signals: FrictionSig
   };
 }
 
-const extractJson = (x: unknown): unknown => {
+/** Parse a JSON answer, tolerating code fences and prose around the first balanced object. */
+export function extractJson(x: unknown): unknown {
   if (typeof x !== "string") return x;
-  const t = x.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  const start = t.indexOf("{");
-  return JSON.parse(start > 0 ? t.slice(start, t.lastIndexOf("}") + 1) : t);
-};
+  try {
+    return JSON.parse(x);
+  } catch {}
+  const start = x.indexOf("{");
+  let depth = 0, inStr = false, esc = false;
+  for (let i = Math.max(0, start); i < x.length; i++) {
+    const c = x[i];
+    if (inStr) [esc, inStr] = [c === "\\" && !esc, esc || c !== '"'];
+    else if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return JSON.parse(x.slice(start, i + 1));
+  }
+  throw new Error(`no JSON object in model answer: ${x.slice(0, 120)}`);
+}
 
 /** Validate model output and drop evidence that isn't in the input; renumber F1..Fn. */
 export function sanitizeFindings(raw: unknown, run: RunData): Finding[] {
@@ -174,14 +189,26 @@ export async function generateFindings(run: RunData, metrics: Metrics, opts: Fin
     ? { path: "custom" as const, model: opts.model }
     : modelFromEnv(opts.env ?? process.env, timeoutMs);
   if (!chosen) return { findings: heuristic(), path: "heuristic" };
-  try {
-    const raw = await withTimeout(chosen.model(buildPrompt(run, metrics, signals, opts)), timeoutMs);
-    const findings = sanitizeFindings(raw, run);
-    if (!findings.length) throw new Error("model returned no usable findings");
-    return { findings, path: chosen.path };
-  } catch (err) {
-    const error = `${chosen.path} failed: ${err instanceof Error ? err.message : String(err)}`;
-    opts.log?.(`${error}; using heuristic findings`);
-    return { findings: heuristic(), path: "heuristic", error };
+  const prompt = buildPrompt(run, metrics, signals, opts);
+  let error = "";
+  // One retry for malformed answers; timeouts and API errors go straight to the heuristic.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let raw: unknown;
+    try {
+      raw = await withTimeout(chosen.model(prompt), timeoutMs);
+    } catch (err) {
+      error = `${chosen.path} failed: ${err instanceof Error ? err.message : String(err)}`;
+      break;
+    }
+    try {
+      const findings = sanitizeFindings(raw, run);
+      if (!findings.length) throw new Error("model returned no usable findings");
+      return { findings, path: chosen.path };
+    } catch (err) {
+      error = `${chosen.path} failed: invalid answer (${err instanceof Error ? err.message.slice(0, 300) : String(err)})`;
+      opts.log?.(`${error}${attempt === 1 ? "; retrying" : ""}`);
+    }
   }
+  opts.log?.(`${error}; using heuristic findings`);
+  return { findings: heuristic(), path: "heuristic", error };
 }

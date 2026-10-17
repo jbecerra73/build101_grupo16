@@ -6,6 +6,7 @@ import { buyTshirt, type Event, type Metrics, type RunConfig } from "@frictionsw
 import {
   computeMetrics,
   createAnalyzer,
+  extractJson,
   frictionSignals,
   generateFindings,
   heuristicFindings,
@@ -153,7 +154,9 @@ describe("findings", () => {
   });
 
   it("falls back to the heuristic on malformed output or errors", async () => {
-    const bad = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => ({ findings: [{ severity: "urgent" }] }) });
+    let calls = 0;
+    const bad = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => (calls++, { findings: [{ severity: "urgent" }] }) });
+    expect(calls).toBe(2);
     expect(bad.path).toBe("heuristic");
     expect(bad.error).toMatch(/custom failed/);
     expect(bad.findings.length).toBeGreaterThan(0);
@@ -162,6 +165,10 @@ describe("findings", () => {
     const slow = await generateFindings(run, metrics, { flow: buyTshirt, timeoutMs: 10, model: () => new Promise(() => {}) });
     expect(slow.error).toMatch(/timed out/);
   }, 10_000);
+
+  it("extracts the JSON object from a chatty answer", () => {
+    expect(extractJson('Here you go:\n```json\n{"a": "x } y", "b": [{"c": "\\"}"}]}\n```\nDone {not json}')).toEqual({ a: "x } y", b: [{ c: '"}' }] });
+  });
 
   it("uses the heuristic without credentials, and picks auth in order", async () => {
     expect((await generateFindings(run, metrics, { flow: buyTshirt, ...noLlm })).path).toBe("heuristic");
