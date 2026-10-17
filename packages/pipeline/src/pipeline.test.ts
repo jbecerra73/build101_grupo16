@@ -95,14 +95,16 @@ async function setup(over: StartOptions = {}) {
 }
 
 describe("startPipeline", () => {
-  it("happy path: analysis, fix, preview, retest, collecting, comparing, done", async () => {
+  it("happy path: analysis, fix, preview, retest, collecting, comparing, awaiting-decision", async () => {
     const { runsDir, phases, analyzed, waited, swarms, opts } = await setup();
     const { runId, done } = await startPipeline(req, opts);
     expect(runId).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-[0-9a-f]{4}$/);
     const final = await done;
 
-    expect(final).toMatchObject({ phase: "done", retestRunId: `${runId}-retest1`, message: expect.stringMatching(/rehearsal/) });
-    expect(phases).toEqual(["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "done"]);
+    expect(final).toMatchObject({
+      phase: "awaiting-decision", retestRunId: `${runId}-retest1`, message: "Improved: (rehearsal) ready, awaiting your decision",
+    });
+    expect(phases).toEqual(["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "awaiting-decision"]);
     expect(analyzed).toEqual([runId, `${runId}-retest1`]);
     expect(waited).toEqual([`${runId}-retest1`]);
 
@@ -129,10 +131,29 @@ describe("startPipeline", () => {
     expect(phases).toEqual(["analyzing", "done"]);
   });
 
-  it("not proven still ends done, with the honest message", async () => {
+  it("not proven parks in awaiting-decision, with the honest message", async () => {
     const { opts } = await setup({ compare: (a, r, t) => ({ ...compare(a, r, t), improved: false }) });
     const final = await (await startPipeline(req, opts)).done;
-    expect(final).toMatchObject({ phase: "done", message: expect.stringMatching(/not proven/) });
+    expect(final).toMatchObject({ phase: "awaiting-decision", message: expect.stringContaining("not-proven") });
+  });
+
+  it("records phase history, ending in awaiting-decision", async () => {
+    const { runsDir, opts } = await setup();
+    const { runId, done } = await startPipeline(req, opts);
+    const final = await done;
+    const seen = final.history!.map((h) => h.phase);
+    expect(seen).toEqual(expect.arrayContaining(["analyzing", "fixing", "retesting", "collecting", "comparing", "awaiting-decision"]));
+    const order = ["analyzing", "fixing", "retesting", "collecting", "comparing", "awaiting-decision"].map((p) => seen.indexOf(p as RunPhase));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(final.history!.at(-1)).toMatchObject({ phase: "awaiting-decision", message: final.message });
+    expect((await json<RunStatus>(join(runsDir, runId, "status.json"))).history).toEqual(final.history);
+  });
+
+  it("autoFix false ends done with history analyzing, done", async () => {
+    const { opts } = await setup();
+    const final = await (await startPipeline({ ...req, autoFix: false }, opts)).done;
+    expect(final.phase).toBe("done");
+    expect(final.history!.map((h) => h.phase)).toEqual(["analyzing", "done"]);
   });
 
   it("analysis failure ends failed with the error", async () => {

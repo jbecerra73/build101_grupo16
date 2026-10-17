@@ -5,6 +5,7 @@
 //   retesting        persona swarm on the preview, fresh seeds
 //   collecting       waiting for PostHog to ingest the swarm's events
 //   comparing        analyzer on the swarm's tracks, persona vs segment verdict
+//   awaiting-decision  fix retested; parked until the Product Owner accepts or rejects the PR
 //   done | failed
 // There is no baseline swarm: "before" is real users, "after" is the swarm.
 import { existsSync } from "node:fs";
@@ -65,7 +66,9 @@ export type RunOptions = {
 
 export type StartOptions = Partial<PipelineDeps> & { maxRunsPerDay?: number };
 
-const ORDER: RunPhase[] = ["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "done"];
+const ORDER: RunPhase[] = ["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "awaiting-decision", "done"];
+/** Phases where a run is parked, not progressing: it waits for a person. */
+export const PARKED = new Set<RunPhase>(["awaiting-decision"]);
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export const CANCELLED = "cancelled";
 const DAY = 86_400_000;
@@ -172,7 +175,8 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
     // Phases only move forward (the fix.json watcher may lag behind).
     if (phase !== "failed" && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
     if (phase === status.phase && message === status.message && !Object.keys(extra).length) return writes;
-    status = { ...status, ...extra, phase, message, updatedAt: new Date().toISOString() };
+    const at = new Date().toISOString();
+    status = { ...status, ...extra, phase, message, updatedAt: at, history: [...(status.history ?? []), { phase, at, message }] };
     const snap = status;
     deps.onStatus?.(snap);
     return (writes = writes.catch(() => {}).then(() => writeJson(join(dir, "status.json"), snap)));
@@ -225,10 +229,11 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
     }
     const last = result.attempts.at(-1);
     const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
-    const msg =
-      last?.status === "ready" ? `Improved: ${pr ? `${pr} marked ready for review` : "fix proven (rehearsal, no PR opened)"}`
-      : last?.status === "not-proven" ? `Fix attempted, not proven: ${pr ? `${pr} closed` : "rehearsal, no PR opened"}`
-      : `Fix loop ended (${last?.status ?? "no attempt"})`;
+    const where = pr ?? "(rehearsal)";
+    if (last?.status === "ready") return await set("awaiting-decision", `Improved: ${where} ready, awaiting your decision`).then(() => status);
+    if (last?.status === "not-proven")
+      return await set("awaiting-decision", `Not proven: ${where} labelled not-proven, awaiting your decision`).then(() => status);
+    const msg = `Fix loop ended (${last?.status ?? "no attempt"})`;
     return await set("done", msg).then(() => status);
   } catch (e) {
     const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;

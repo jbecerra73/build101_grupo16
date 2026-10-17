@@ -96,9 +96,9 @@ describe("orchestrator daemon", () => {
     await orch.start();
     const final = await until(async () => {
       const s = await status(store, "r1");
-      return s && (s.phase === "done" || s.phase === "failed") && s;
+      return s && (s.phase === "awaiting-decision" || s.phase === "failed") && s;
     });
-    expect(final).toMatchObject({ phase: "done" });
+    expect(final).toMatchObject({ phase: "awaiting-decision" });
     await until(async () => !orch.active.size);
 
     expect(await store.list("queue/")).toEqual([]);
@@ -145,7 +145,7 @@ describe("orchestrator daemon", () => {
 
     await store.putJson("settings.json", { swarmSpeed: 7, maxRunsPerDay: 5 });
     await enqueue(store, "ok");
-    await until(async () => (await status(store, "ok"))?.phase === "done");
+    await until(async () => (await status(store, "ok"))?.phase === "awaiting-decision");
     expect(seen[0]).toMatchObject({ swarmSpeed: 7, maxRunsPerDay: 5 });
   });
 
@@ -239,8 +239,8 @@ describe("orchestrator daemon", () => {
     expect(orch.mirror).toBeUndefined();
     await enqueue(store, "local1");
     await orch.start();
-    await until(async () => (await status(store, "local1"))?.phase === "done");
-    expect(JSON.parse(await readFile(join(workDir, "local1", "status.json"), "utf8")).phase).toBe("done");
+    await until(async () => (await status(store, "local1"))?.phase === "awaiting-decision");
+    expect(JSON.parse(await readFile(join(workDir, "local1", "status.json"), "utf8")).phase).toBe("awaiting-decision");
   });
 });
 
