@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  actionBudget,
   buyTshirt,
   PERSONAS,
   resolveStep,
@@ -33,6 +34,18 @@ describe("resolveStep", () => {
     ["/checkout/success?swarm=r1", "Confirmation"],
     ["/about", undefined],
   ])("%s → %s", (url, step) => expect(resolveStep(buyTshirt, url)).toBe(step));
+});
+
+describe("actionBudget", () => {
+  it("draws Kai's budget from 8–12 deterministically by seed", () => {
+    const budgets = Array.from({ length: 50 }, (_, i) => actionBudget(PERSONAS.kai, i + 1));
+    expect(Math.min(...budgets)).toBe(8);
+    expect(Math.max(...budgets)).toBe(12);
+    expect(actionBudget(PERSONAS.kai, 7)).toBe(actionBudget(PERSONAS.kai, 7));
+  });
+  it("uses maxActions when there is no range", () => {
+    expect(actionBudget(PERSONAS.rosa, 3)).toBe(PERSONAS.rosa.actions.maxActions);
+  });
 });
 
 describe("demo flow", () => {

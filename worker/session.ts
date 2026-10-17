@@ -1,5 +1,5 @@
 import type { Page } from "playwright";
-import { MAX_ACTIONS_PER_AGENT, matchesRoute, type Event, type Flow, type Persona } from "../shared";
+import { actionBudget, matchesRoute, type Event, type Flow, type Persona } from "../shared";
 import { EventLog } from "./events";
 import { ID_ATTR, observe, type Observation } from "./observe";
 
@@ -20,7 +20,6 @@ const IDENTITIES = [
 ];
 const CARD = { number: "4242 4242 4242 4242", expiry: "12/30", cvc: "123" };
 
-export const maxActionsFor = (persona: Persona) => Math.min(persona.actions.maxActions, MAX_ACTIONS_PER_AGENT);
 
 export function systemPrompt(persona: Persona, flow: Flow, seed: number) {
   const me = IDENTITIES[seed % IDENTITIES.length];
@@ -32,7 +31,7 @@ You are using a real web shop through tools. Start by calling look. Every action
 
 - Behave like the person described above, not like a test robot. Use think_aloud to voice reactions as you go (confusion, annoyance, relief), in first person, briefly.
 - If you would realistically abandon the purchase, call give_up and say why.
-- You have at most ${maxActionsFor(persona)} actions (click/type/scroll/back). look and think_aloud are free.
+- You have at most ${actionBudget(persona, seed)} actions (click/type/scroll/back). look and think_aloud are free.
 - When the order is placed and confirmed, call done.
 - Once the session is over, stop and reply with one short sentence.
 
@@ -78,7 +77,7 @@ export class AgentSession {
 
   constructor(private readonly o: SessionOptions) {
     this.agentId = `${o.persona.id}-${o.seed}`;
-    this.maxActions = maxActionsFor(o.persona);
+    this.maxActions = actionBudget(o.persona, o.seed);
     this.maxCalls = this.maxActions * 4;
     this.log = new EventLog(o.runDir, { runId: o.runId, agentId: this.agentId, personaId: o.persona.id, seed: o.seed }, o.flow);
   }

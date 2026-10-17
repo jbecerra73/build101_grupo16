@@ -8,8 +8,20 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "lib": ["ES2024", "DOM", "DOM.Iterable"]
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ]
   },
-  "include": ["shared", "orchestrator", "worker"]
+  "include": [
+    "shared",
+    "orchestrator",
+    "packages",
+    "tools",
+    "worker"
+  ]
 }

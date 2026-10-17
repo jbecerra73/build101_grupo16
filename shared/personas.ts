@@ -32,7 +32,7 @@ export const kai: Persona = {
     "and hate forms, sign-ups and pop-ups. If it takes too long you leave.",
   viewport: { width: 375, height: 812, mobile: true },
   perception: { mode: "screenshot+a11y", hideHoverOnly: true },
-  actions: { maxActions: 8, minTapTargetPx: 44, maxRetriesSameTarget: 2 },
+  actions: { maxActions: 12, maxActionsRange: [8, 12], minTapTargetPx: 44, maxRetriesSameTarget: 2 },
   patience: { start: 6, costs: { pageLoad: 1, modal: 2, error: 2 } },
 };
 
@@ -53,3 +53,13 @@ export const PERSONAS: Record<string, Persona> = { rosa, kai, typical };
 
 /** Hard cap regardless of persona (SPEC: 40 actions per agent; a full checkout with the T2 sign-up wall takes ~30). */
 export const MAX_ACTIONS_PER_AGENT = 40;
+
+/** An agent's action budget: drawn from maxActionsRange by seed (deterministic,
+ * so a seed always gets the same budget), capped at MAX_ACTIONS_PER_AGENT. */
+export function actionBudget(persona: Persona, seed: number): number {
+  const range = persona.actions.maxActionsRange;
+  if (!range) return Math.min(persona.actions.maxActions, MAX_ACTIONS_PER_AGENT);
+  const [min, max] = range;
+  const h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0;
+  return Math.min(min + (h % (max - min + 1)), MAX_ACTIONS_PER_AGENT);
+}

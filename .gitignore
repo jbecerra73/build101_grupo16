@@ -1,5 +1,9 @@
 node_modules/
 .next/
 .DS_Store
-.env
+.env*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+data/posthog/
 screenshots/
