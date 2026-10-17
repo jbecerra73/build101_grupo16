@@ -117,6 +117,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
         provisional: !run.metrics,
         findings: run.findings,
         giveUps: run.giveUps,
+        themes: run.themes,
         fix: run.fix,
         phase: run.status.phase as RunPhase,
       };
@@ -128,6 +129,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
       provisional: true,
       findings: undefined,
       giveUps: giveUpGroups(partial),
+      themes: undefined,
       fix: undefined,
       phase: "swarming" as RunPhase,
     };
@@ -139,13 +141,120 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
   const fixedIds = new Map((view.fix?.attempts ?? []).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
   const fixPhase = ["fixing", "waiting-preview", "retesting", "comparing"].includes(view.phase);
   const failedAt = status.phase === "failed" ? (run.metrics ? "fixing" : run.agents.some((a) => a.actions) ? "swarming" : "verifying") : undefined;
+  // A finished run with a fix leads with its outcome: before/after + PR, then the report, then the grid.
+  const fixFirst = !replay && status.phase === "done" && !!run.fix;
+  const showFix = !!view.fix || fixPhase;
+
+  const agentsSection = (
+    <Section
+      key="agents"
+      id="agents"
+      title="Agents"
+      aside={
+        view.phase === "swarming" && (
+          <Badge variant="outline">
+            <Spinner data-icon="inline-start" />
+            swarming
+          </Badge>
+        )
+      }
+    >
+      {view.agents.length ? (
+        <LiveGrid runId={config.runId} agents={view.agents} />
+      ) : (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyTitle>No agents yet</EmptyTitle>
+            <EmptyDescription>Agents appear once the build is verified and the swarm starts.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </Section>
+  );
+
+  const reportSection = (
+    <Section
+      key="report"
+      id="report"
+      title="Report"
+      aside={
+        view.provisional && view.metrics ? (
+          <Badge variant="outline">Provisional · computed from events so far</Badge>
+        ) : view.metrics ? (
+          <Badge variant="secondary">Analyzer metrics</Badge>
+        ) : null
+      }
+    >
+      {view.metrics ? (
+        <div className="flex flex-col gap-8">
+          <PersonaKpis metrics={view.metrics} />
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-semibold">Funnel by persona</h3>
+            <p className="-mt-2 text-sm text-muted-foreground">Bar = agents that reached the step, out of N. Lock = required step.</p>
+            <Card>
+              <CardContent>
+                <Funnels metrics={view.metrics} flow={flow} />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-semibold">Friction hotspots</h3>
+            {view.findings ? (
+              <Findings findings={view.findings} runId={config.runId} fixedIds={fixedIds} />
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">Ranked findings appear after the analyzer pass.</p>
+                <Skeleton className="h-28 w-full" />
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-lg font-semibold">Why agents gave up</h3>
+            {view.themes?.length ? (
+              <p className="-mt-2 text-sm text-muted-foreground">Give-up reasons grouped into themes by the analyzer, with the agents&apos; own words.</p>
+            ) : null}
+            <GiveUps groups={view.giveUps} themes={view.themes} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+          <Skeleton className="h-40" />
+        </div>
+      )}
+    </Section>
+  );
+
+  const fixSection = showFix && (
+    <Section key="fix" id="fix" title="Fix & before/after">
+      {view.fix ? (
+        <FixPanel fix={view.fix} findings={run.findings ?? []} />
+      ) : (
+        <Card>
+          <CardContent className="flex items-center gap-3">
+            <Spinner />
+            <span>The coding agent is preparing a fix for the top findings…</span>
+          </CardContent>
+        </Card>
+      )}
+    </Section>
+  );
+
+  const sections = fixFirst ? [fixSection, reportSection, agentsSection] : [agentsSection, reportSection, fixSection];
+  const navItems: [string, string][] = [
+    ["agents", "Agents"],
+    ["report", "Report"],
+    ...(showFix ? ([["fix", "Fix & retest"]] as [string, string][]) : []),
+  ];
+  if (fixFirst) navItems.reverse();
 
   return (
     <div className="flex flex-col gap-8">
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <nav className="text-sm text-muted-foreground">
               <Link href="/" className="hover:underline">
                 Runs
@@ -185,7 +294,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {replay ? (
               <Button variant="outline" asChild>
                 <Link href={`/runs/${config.runId}`}>
@@ -263,11 +372,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
           ))}
 
         <nav className="flex gap-1 text-sm" aria-label="Sections">
-          {[
-            ["agents", "Agents"],
-            ["report", "Report"],
-            ...(view.fix || fixPhase ? [["fix", "Fix & retest"]] : []),
-          ].map(([id, label]) => (
+          {navItems.map(([id, label]) => (
             <Button key={id} variant="ghost" size="sm" asChild>
               <a href={`#${id}`}>{label}</a>
             </Button>
@@ -275,95 +380,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
         </nav>
       </div>
 
-      {/* Live grid */}
-      <Section
-        id="agents"
-        title="Agents"
-        aside={
-          view.phase === "swarming" && (
-            <Badge variant="outline">
-              <Spinner data-icon="inline-start" />
-              swarming
-            </Badge>
-          )
-        }
-      >
-        {view.agents.length ? (
-          <LiveGrid runId={config.runId} agents={view.agents} />
-        ) : (
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyTitle>No agents yet</EmptyTitle>
-              <EmptyDescription>Agents appear once the build is verified and the swarm starts.</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-      </Section>
-
-      {/* Report */}
-      <Section
-        id="report"
-        title="Report"
-        aside={
-          view.provisional && view.metrics ? (
-            <Badge variant="outline">Provisional · computed from events so far</Badge>
-          ) : view.metrics ? (
-            <Badge variant="secondary">Analyzer metrics</Badge>
-          ) : null
-        }
-      >
-        {view.metrics ? (
-          <div className="flex flex-col gap-8">
-            <PersonaKpis metrics={view.metrics} />
-            <div className="flex flex-col gap-3">
-              <h3 className="text-lg font-semibold">Funnel by persona</h3>
-              <p className="-mt-2 text-sm text-muted-foreground">Bar = agents that reached the step, out of N. Lock = required step.</p>
-              <Card>
-                <CardContent>
-                  <Funnels metrics={view.metrics} flow={flow} />
-                </CardContent>
-              </Card>
-            </div>
-            <div className="flex flex-col gap-3">
-              <h3 className="text-lg font-semibold">Friction hotspots</h3>
-              {view.findings ? (
-                <Findings findings={view.findings} runId={config.runId} fixedIds={fixedIds} />
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <p className="text-sm text-muted-foreground">Ranked findings appear after the analyzer pass.</p>
-                  <Skeleton className="h-28 w-full" />
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col gap-3">
-              <h3 className="text-lg font-semibold">Why agents gave up</h3>
-              <GiveUps groups={view.giveUps} />
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Skeleton className="h-40" />
-            <Skeleton className="h-40" />
-            <Skeleton className="h-40" />
-          </div>
-        )}
-      </Section>
-
-      {/* Fix */}
-      {(view.fix || fixPhase) && (
-        <Section id="fix" title="Fix & before/after">
-          {view.fix ? (
-            <FixPanel fix={view.fix} findings={run.findings ?? []} />
-          ) : (
-            <Card>
-              <CardContent className="flex items-center gap-3">
-                <Spinner />
-                <span>The coding agent is preparing a fix for the top findings…</span>
-              </CardContent>
-            </Card>
-          )}
-        </Section>
-      )}
+      {sections}
     </div>
   );
 }

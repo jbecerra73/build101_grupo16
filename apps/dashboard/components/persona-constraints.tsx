@@ -39,7 +39,9 @@ export function constraintRows(p: Persona): Row[] {
   rows.push({
     icon: Gauge,
     label: "Action budget",
-    value: `${Math.min(p.actions.maxActions, MAX_ACTIONS_PER_AGENT)} actions (hard cap ${MAX_ACTIONS_PER_AGENT})`,
+    value: p.actions.maxActionsRange
+      ? `${p.actions.maxActionsRange[0]}–${Math.min(p.actions.maxActionsRange[1], MAX_ACTIONS_PER_AGENT)} actions, drawn per agent by seed`
+      : `${Math.min(p.actions.maxActions, MAX_ACTIONS_PER_AGENT)} actions (hard cap ${MAX_ACTIONS_PER_AGENT})`,
   });
   if (p.actions.maxRetriesSameTarget)
     rows.push({ icon: RotateCcw, label: "Retries", value: `Gives up after ${p.actions.maxRetriesSameTarget} failed tries on one target` });

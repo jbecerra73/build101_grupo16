@@ -15,11 +15,18 @@ Open **New run**, pick personas (rosa, kai, typical), seeds, keep **Auto-fix** o
 press **Start swarm**. The pipeline runs inside the Next server process:
 verify build, swarm (replayed from `runs/fixture-baseline`, ~30 s), analyze,
 fix (rehearsal, no PR), preview, retest (replayed from `runs/fixture-retest`),
-compare, done, in about 80 s. The run page polls `runs/<runId>/` and ends with a before/after.
+compare, done, in about 80 s. The run page polls `runs/<runId>/`; once the run is
+done it leads with the before/after and PR status, then the report, then the agent grid.
 Every run can be replayed afterwards (**Replay**).
 
-The server log shows each phase and which findings path the analyzer used
-(`analyzed <run>: N findings via agent-sdk | messages-api | heuristic`).
+The server log shows each phase and which path the analyzer used for the findings
+and the give-up themes (`analyzed <run>: N findings via agent-sdk, M themes via agent-sdk`;
+paths: `agent-sdk | messages-api | heuristic`). Themes are written to `runs/<id>/themes.json`
+(see `packages/analyzer/src/index.ts`) and shown under "Why agents gave up".
+
+Each agent's action budget comes from `actionBudget(persona, seed)` (Kai: 8 to 12).
+The analyzer counts an agent over its budget as an invalid completion, and the replay
+runner only reuses a recorded agent that fits the new seed's budget.
 
 Environment variables (swarm runner, replay folders and speed, fix loop, caps)
 are documented in [`apps/dashboard/.env.example`](apps/dashboard/.env.example).
@@ -32,7 +39,9 @@ Rehearsal screenshots: [`docs/dashboard/rehearsal/`](docs/dashboard/rehearsal/).
 
 ```bash
 npm run pipeline -- --personas rosa,kai,typical --seeds 2 --auto-fix   # same pipeline, in the terminal
-npm run analyze -- runs/<id>                                            # metrics.json + findings.json
+npm run analyze -- runs/<id>                                            # metrics.json + findings.json + themes.json
 npm run fix -- ...                                                      # P1 fix loop (orchestrator/cli.ts)
 npm run typecheck && npm test
+node apps/dashboard/scripts/capture-screenshots.mjs                     # re-capture the storefront screenshots (Playwright)
+npx tsx apps/dashboard/scripts/gen-fixtures.mjs                         # regenerate runs/fixture-* from them
 ```

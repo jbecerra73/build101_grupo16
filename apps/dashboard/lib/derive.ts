@@ -1,6 +1,7 @@
 // Pure derivations from the event log. Runs on the server (API) and in the
 // browser (Replay), so it must not import node modules.
 import {
+  actionBudget,
   MAX_ACTIONS_PER_AGENT,
   PERSONAS,
   type Event,
@@ -15,8 +16,11 @@ import type { AgentOutcome, AgentState } from "./types";
 export const agentIdsOf = (config: RunConfig) =>
   config.personaIds.flatMap((p) => (config.seeds[p] ?? []).map((seed) => ({ agentId: `${p}-${seed}`, personaId: p, seed })));
 
-export const budgetOf = (personaId: string) =>
-  Math.min(PERSONAS[personaId]?.actions.maxActions ?? MAX_ACTIONS_PER_AGENT, MAX_ACTIONS_PER_AGENT);
+/** The agent's action budget, drawn by seed for personas with a range (Kai: 8–12). */
+export const budgetOf = (personaId: string, seed: number) => {
+  const persona = PERSONAS[personaId];
+  return persona ? actionBudget(persona, seed) : MAX_ACTIONS_PER_AGENT;
+};
 
 export function groupByAgent(events: Event[]): Map<string, Event[]> {
   const map = new Map<string, Event[]>();
@@ -30,11 +34,15 @@ export function groupByAgent(events: Event[]): Map<string, Event[]> {
 }
 
 /** Dashboard-side completion validity (SPEC: success condition + every required
- * step in the log + confirmation echoes the required fields). The analyzer owns
- * the authoritative version; this mirrors it for live tiles and replay. */
+ * step in the log + confirmation echoes the required fields + no more actions
+ * than the seeded budget). The analyzer owns the authoritative version; this
+ * mirrors it for live tiles and replay. */
 export function invalidReason(evs: Event[], flow?: Flow): string | undefined {
   const success = evs.findLast((e) => e.type === "success");
   if (!success) return undefined;
+  const actions = evs.filter((e) => e.type === "action").length;
+  const budget = budgetOf(success.personaId, success.seed);
+  if (actions > budget) return `Exceeded action budget (${actions}/${budget})`;
   const steps = new Set(evs.map((e) => e.step).filter(Boolean));
   const missing = (flow?.required.steps ?? []).filter((s) => !steps.has(s));
   if (missing.length) return `Reached confirmation without ${missing.join(", ")}`;
@@ -78,7 +86,7 @@ export function deriveAgents(config: RunConfig, events: Event[], flow: Flow | un
       step: evs.findLast((e) => e.step)?.step,
       actions: actions.length,
       missedActions: actions.filter((e) => e.action?.missed).length,
-      budget: budgetOf(personaId),
+      budget: budgetOf(personaId, seed),
       latestScreenshot: evs.findLast((e) => e.screenshot)?.screenshot,
       lastNote: evs.findLast((e) => e.type === "think_aloud" && e.note)?.note,
       outcomeNote: note,

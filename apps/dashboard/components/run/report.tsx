@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GiveUpGroup } from "@/lib/derive";
+import type { Theme } from "@/lib/types";
 import { duration, pct, personaColor, personaShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ShotDialog } from "./screenshot";
@@ -135,7 +136,7 @@ export const rankFindings = (fs: Finding[]) =>
 
 function FindingCard({ f, rank, runId, fixedBy }: { f: Finding; rank: number; runId: string; fixedBy?: string }) {
   return (
-    <Card size="sm">
+    <Card size="sm" id={`finding-${f.id}`} className="scroll-mt-20">
       <CardContent className="grid gap-4 md:grid-cols-[200px_1fr]">
         <div className="flex flex-col gap-2">
           {f.evidence.screenshots.length > 0 ? (
@@ -232,7 +233,59 @@ export function Findings({ findings, runId, fixedIds }: { findings: Finding[]; r
 
 /* --------------------------------------------------------------- Give-ups */
 
-export function GiveUps({ groups }: { groups: GiveUpGroup[] }) {
+function QuoteLine({ personaId, agentId, text }: { personaId: string; agentId: string; text: string }) {
+  return (
+    <blockquote className="flex gap-2 border-l-4 pl-3" style={{ borderLeftColor: personaColor(personaId) }}>
+      <span className="flex flex-col">
+        <span className="italic">“{text}”</span>
+        <span className="text-xs text-muted-foreground">
+          {personaShort(personaId)} · {agentId}
+        </span>
+      </span>
+    </blockquote>
+  );
+}
+
+/** Analyzer themes (themes.json): why agents gave up, with verbatim quotes and the findings they map to. */
+function ThemeCards({ themes }: { themes: Theme[] }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {themes.map((t) => (
+        <Card key={t.id} size="sm">
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-base">
+              {t.title}
+              <span className="tabular font-normal text-muted-foreground">
+                {t.agentCount} agent{t.agentCount === 1 ? "" : "s"}
+              </span>
+            </CardTitle>
+            <CardDescription className="flex flex-wrap items-center gap-1.5">
+              {t.personas.map((p) => (
+                <PersonaBadge key={p} id={p} />
+              ))}
+              {t.findingIds?.map((id) => (
+                <Badge key={id} variant="secondary" asChild>
+                  <a href={`#finding-${id}`}>Finding {id}</a>
+                </Badge>
+              ))}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {t.quotes.length ? (
+              t.quotes.map((q) => <QuoteLine key={`${q.agentId}:${q.text}`} personaId={q.personaId} agentId={q.agentId} text={q.text} />)
+            ) : (
+              <p className="text-sm text-muted-foreground">No quote recorded.</p>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/** Give-up reasons: the analyzer's themes when themes.json exists, else grouped by the step agents left at. */
+export function GiveUps({ groups, themes }: { groups: GiveUpGroup[]; themes?: Theme[] }) {
+  if (themes?.length) return <ThemeCards themes={themes} />;
   if (!groups.length) return <p className="text-muted-foreground">No agent gave up.</p>;
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -255,14 +308,7 @@ export function GiveUps({ groups }: { groups: GiveUpGroup[] }) {
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
               {g.quotes.map((q) => (
-                <blockquote key={q.agentId} className={cn("flex gap-2 border-l-4 pl-3")} style={{ borderLeftColor: personaColor(q.personaId) }}>
-                  <span className="flex flex-col">
-                    <span className="italic">“{q.note}”</span>
-                    <span className="text-xs text-muted-foreground">
-                      {personaShort(q.personaId)} · {q.agentId}
-                    </span>
-                  </span>
-                </blockquote>
+                <QuoteLine key={q.agentId} personaId={q.personaId} agentId={q.agentId} text={q.note} />
               ))}
             </CardContent>
           </Card>

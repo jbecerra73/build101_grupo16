@@ -14,7 +14,7 @@ import {
   type RunPhase,
 } from "@frictionswarm/shared";
 import { deriveAgents, deriveMetrics, giveUpGroups, groupByAgent } from "./derive";
-import type { FixResultView, RunDetail, RunStatusView, RunSummary } from "./types";
+import type { FixResultView, RunDetail, RunStatusView, RunSummary, Theme } from "./types";
 
 /** `RUNS_DIR` env, else `<repo-root>/runs` (repo root = nearest ancestor with shared/contracts.ts). */
 export function runsDir(): string {
@@ -93,10 +93,11 @@ async function loadCore(runId: string) {
   if (!dir) return undefined;
   const config = await readJson<RunConfig>(join(dir, "config.json"));
   if (!config) return undefined;
-  const [statusFile, metrics, findings, fix, events] = await Promise.all([
+  const [statusFile, metrics, findings, themes, fix, events] = await Promise.all([
     readJson<RunStatusView>(join(dir, "status.json")),
     readJson<Metrics>(join(dir, "metrics.json")),
     readJson<Finding[]>(join(dir, "findings.json")),
+    readJson<Theme[]>(join(dir, "themes.json")),
     readJson<FixResultView>(join(dir, "fix.json")),
     readEvents(runId),
   ]);
@@ -108,7 +109,15 @@ async function loadCore(runId: string) {
   };
   // A retest's pipeline status lives on its baseline; once its own metrics exist it is done.
   if (statusFile && config.kind === "retest" && metrics && findings) status = { ...statusFile, phase: "done" };
-  return { config, status, metrics, findings: Array.isArray(findings) ? findings : undefined, fix, events };
+  return {
+    config,
+    status,
+    metrics,
+    findings: Array.isArray(findings) ? findings : undefined,
+    themes: Array.isArray(themes) ? themes : undefined,
+    fix,
+    events,
+  };
 }
 
 const isLive = (phase: RunPhase) => phase === "verifying" || phase === "swarming";
@@ -116,7 +125,7 @@ const isLive = (phase: RunPhase) => phase === "verifying" || phase === "swarming
 export async function getRun(runId: string, opts: { events?: boolean } = {}): Promise<RunDetail | undefined> {
   const core = await loadCore(runId);
   if (!core) return undefined;
-  const { config, status, metrics, findings, fix, events } = core;
+  const { config, status, metrics, findings, themes, fix, events } = core;
   const flow = FLOWS[config.flowId];
   return {
     runId,
@@ -129,6 +138,7 @@ export async function getRun(runId: string, opts: { events?: boolean } = {}): Pr
     findings,
     fix,
     giveUps: giveUpGroups(events),
+    themes,
     events: opts.events ? events : undefined,
   };
 }

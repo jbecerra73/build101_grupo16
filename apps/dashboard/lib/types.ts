@@ -10,7 +10,10 @@ import type {
   RunStatus,
 } from "@frictionswarm/shared";
 
+import type { Theme } from "@frictionswarm/analyzer";
 import type { GiveUpGroup } from "./derive";
+
+export type { Theme };
 
 /** View models shared by the API routes and the client components. */
 
@@ -76,8 +79,10 @@ export type RunDetail = {
   provisionalMetrics?: Metrics;
   findings?: Finding[];
   fix?: FixResultView;
-  /** Give-up reasons grouped by step, with persona quotes. */
+  /** Give-up reasons grouped by step, with persona quotes (fallback when themes.json is missing). */
   giveUps: GiveUpGroup[];
+  /** themes.json from the analyzer: give-up reasons grouped into themes. */
+  themes?: Theme[];
   /** Raw events, only when requested with ?events=1 (used by Replay). */
   events?: Event[];
 };
