@@ -39,11 +39,11 @@ function AgentTile({ runId, a }: { runId: string; a: AgentState }) {
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-sm font-medium">
+          <span className="flex shrink-0 items-center gap-1.5 text-sm font-medium whitespace-nowrap">
             <PersonaDot id={a.personaId} />
             {personaShort(a.personaId)} <span className="text-muted-foreground">#{a.seed}</span>
           </span>
-          <span className={cn("truncate text-sm", finished ? "text-muted-foreground" : "font-medium")}>{a.step ?? "Starting…"}</span>
+          <span className={cn("min-w-0 truncate text-right text-sm", finished ? "text-muted-foreground" : "font-medium")}>{a.step ?? "Starting…"}</span>
         </div>
         <BudgetBar used={a.actions} budget={a.budget} personaId={a.personaId} />
         {note ? (

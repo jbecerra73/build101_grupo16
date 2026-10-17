@@ -43,7 +43,7 @@ function PersonaKpi({ m }: { m: PersonaMetrics }) {
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           <MiniStat label="Gave up" value={<span className="tabular">{m.gaveUp}/{m.n}</span>} />
-          <MiniStat label="Invalid completions" value={<span className="tabular">{m.invalidCompletions}/{m.n}</span>} />
+          <MiniStat label="Invalid" value={<span className="tabular">{m.invalidCompletions}/{m.n}</span>} />
           <MiniStat label="Median steps" value={noValid ? "—" : m.medianSteps} sub="valid completions" />
           <MiniStat label="Median time" value={noValid ? "—" : duration(m.medianTimeMs)} sub="valid completions" />
         </div>
@@ -78,7 +78,7 @@ function FunnelChart({ m, required }: { m: PersonaMetrics; required: Set<string>
           return (
             <Tooltip key={s.step}>
               <TooltipTrigger asChild>
-                <li className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-2 rounded-sm py-0.5 hover:bg-muted/60" tabIndex={0}>
+                <li className="grid grid-cols-[7rem_1fr_2.75rem_4rem] items-center gap-2 rounded-sm py-0.5 hover:bg-muted/60" tabIndex={0}>
                   <span className="flex items-center gap-1 truncate text-sm">
                     {required.has(s.step) && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="required step" />}
                     {s.step}
@@ -90,18 +90,17 @@ function FunnelChart({ m, required }: { m: PersonaMetrics; required: Set<string>
                         style={{ width: `${frac * 100}%`, backgroundColor: personaColor(m.personaId) }}
                       />
                     )}
-                    {s.droppedHere > 0 && (
-                      <span
-                        className="absolute top-1/2 flex -translate-y-1/2 items-center gap-1 pl-2 text-xs font-medium whitespace-nowrap"
-                        style={{ left: `min(${frac * 100}%, calc(100% - 6rem))` }}
-                      >
-                        <CircleX className="size-3.5" style={{ color: "var(--status-critical)" }} aria-hidden />
-                        {s.droppedHere} left here
-                      </span>
-                    )}
                   </span>
                   <span className="tabular text-right text-sm text-muted-foreground">
                     {s.reached}/{m.n}
+                  </span>
+                  <span className="flex items-center gap-1 text-sm font-medium whitespace-nowrap">
+                    {s.droppedHere > 0 && (
+                      <>
+                        <CircleX className="size-3.5 shrink-0" style={{ color: "var(--status-critical)" }} aria-hidden />
+                        <span className="tabular">{s.droppedHere}</span> left
+                      </>
+                    )}
                   </span>
                 </li>
               </TooltipTrigger>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleX, Play, Radio, Square } from "lucide-react";
 import type { Event, RunPhase } from "@frictionswarm/shared";
-import { PersonaDot } from "@/components/bits";
+import { FixStatusBadge, PersonaDot } from "@/components/bits";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,23 +75,23 @@ function useReplay(events: Event[], enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || !playing) return;
-    let raf = 0;
-    const step = (now: number) => {
-      const dt = last.current == null ? 0 : now - last.current;
+    // A timer (not rAF) so playback also advances in background tabs and headless capture.
+    last.current = performance.now();
+    const t = setInterval(() => {
+      const now = performance.now();
+      const dt = now - (last.current ?? now);
       last.current = now;
-      setPos((p) => {
-        const next = Math.min(length, p + dt * speed);
-        if (next >= length) setPlaying(false);
-        return next;
-      });
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
+      setPos((p) => Math.min(length, p + dt * speed));
+    }, 50);
     return () => {
-      cancelAnimationFrame(raf);
+      clearInterval(t);
       last.current = null;
     };
   }, [enabled, playing, speed, length]);
+
+  useEffect(() => {
+    if (playing && pos >= length) setPlaying(false);
+  }, [playing, pos, length]);
 
   const shown = useMemo(() => {
     const cut = t0 + pos;
@@ -134,6 +134,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
   }, [replay, r.atEnd, r.shown, run, events]);
 
   const { config, status, flow } = run;
+  const latestFix = run.fix?.attempts.at(-1);
   const nTotal = run.agents.length;
   const fixedIds = new Map((view.fix?.attempts ?? []).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
   const fixPhase = ["fixing", "waiting-preview", "retesting", "comparing"].includes(view.phase);
@@ -206,7 +207,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
         <Card size="sm">
           <CardContent className="flex flex-col gap-3">
             <PhaseStepper phase={view.phase} kind={config.kind} hasFix={!!run.fix} failedAt={failedAt} />
-            {(status.message || live || error) && !replay && (
+            {(status.message || live || error || latestFix) && !replay && (
               <>
                 <Separator />
                 <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -217,6 +218,14 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
                     </span>
                   )}
                   {status.message && <span>{status.message}</span>}
+                  {latestFix && (
+                    <span className="ml-auto flex items-center gap-2">
+                      <FixStatusBadge status={latestFix.status} />
+                      <Button variant="link" size="sm" asChild>
+                        <a href="#fix">See before/after</a>
+                      </Button>
+                    </span>
+                  )}
                   {error && <span className="text-destructive">Lost connection to the dashboard server, retrying…</span>}
                   {status.inferred && <span className="text-muted-foreground">(phase inferred from files)</span>}
                 </div>
