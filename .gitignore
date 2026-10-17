@@ -10,3 +10,7 @@ runs/.usage.json
 runs/20*/
 runs/run-*/
 runs/*.tmp
+
+# Orchestrator scratch (Blobs mode) and the tenki bootstrap state
+.orchestrator-work/
+.tenki-orchestrator.json

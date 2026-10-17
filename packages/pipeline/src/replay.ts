@@ -2,7 +2,8 @@ import { appendFile, copyFile, mkdir, readdir, readFile, rm } from "node:fs/prom
 import { basename, join } from "node:path";
 import { actionBudget, PERSONAS, type Event, type RunConfig } from "@frictionswarm/shared";
 import type { SwarmRunner } from "../../../orchestrator/fix-loop";
-import { readJson, REPO_ROOT, runsDir as defaultRunsDir } from "./runs";
+import { readJson, REPO_ROOT, runsDir as defaultRunsDir, writeJson } from "./runs";
+import { sandboxCount, type SandboxInfo, type SwarmTopology } from "./swarm";
 
 export type ReplayOptions = {
   runsDir?: string;
@@ -14,7 +15,14 @@ export type ReplayOptions = {
   speed?: number;
   /** How often new events are flushed to disk. */
   tickMs?: number;
+  /** Stops the replay (the runner then rejects with "cancelled"). */
+  signal?: AbortSignal;
+  /** Simulated sandbox boot time in recorded ms (scaled by speed, staggered per sandbox). */
+  bootMs?: number;
 };
+
+/** Fake cost model for the swarm monitor: sandbox time + one Haiku call per action. */
+export const REPLAY_COST = { sandboxUsdPerSecond: 0.00012, usdPerAction: 0.0025 };
 
 type Agent = { agentId: string; personaId: string; seed: number; srcId: string; evs: Event[]; t0: number; sent: number };
 
@@ -93,6 +101,44 @@ export function replaySwarmRunner(opts: ReplayOptions = {}): SwarmRunner {
     const started = Date.now();
     const swarmTag = new RegExp(`swarm=${escape(rec.runId)}`, "g");
 
+    // swarm.json: agents spread over simulated sandboxes (<= 6 each), each
+    // booting for a moment before its agents start.
+    const nSbx = sandboxCount(agents.length);
+    const bootMs = opts.bootMs ?? 1200;
+    const sbx = Array.from({ length: nSbx }, (_, i) => ({
+      info: {
+        id: `replay-${config.runId}-${i + 1}`,
+        label: `sbx-${i + 1}`,
+        region: "replay",
+        status: "booting",
+        agentIds: [],
+        startedAt: new Date(started).toISOString(),
+        costUsd: 0,
+      } as SandboxInfo,
+      bootReal: (bootMs * (1 + 0.35 * i)) / speed,
+      agents: [] as Agent[],
+      actions: 0,
+    }));
+    agents.forEach((a, i) => {
+      sbx[i % nSbx].agents.push(a);
+      sbx[i % nSbx].info.agentIds.push(a.agentId);
+    });
+    const sbxOf = new Map(sbx.flatMap((s) => s.agents.map((a) => [a, s] as const)));
+    let lastTopo = "";
+    const writeTopology = async () => {
+      const now = Date.now();
+      for (const s of sbx) {
+        const end = s.info.endedAt ? Date.parse(s.info.endedAt) : now;
+        s.info.costUsd = +(((end - started) / 1000) * REPLAY_COST.sandboxUsdPerSecond + s.actions * REPLAY_COST.usdPerAction).toFixed(4);
+      }
+      const topo: SwarmTopology = { runId: config.runId, backend: "replay", sandboxes: sbx.map((s) => s.info), updatedAt: new Date(now).toISOString() };
+      const key = JSON.stringify(topo.sandboxes);
+      if (key === lastTopo) return;
+      lastTopo = key;
+      await writeJson(join(out, "swarm.json"), topo);
+    };
+    await writeTopology();
+
     const rewrite = async (a: Agent, e: Event): Promise<Event> => {
       const ev: Event = {
         ...e,
@@ -100,7 +146,7 @@ export function replaySwarmRunner(opts: ReplayOptions = {}): SwarmRunner {
         agentId: a.agentId,
         personaId: a.personaId,
         seed: a.seed,
-        ts: started + (e.ts - a.t0),
+        ts: Math.round(started + sbxOf.get(a)!.bootReal + (e.ts - a.t0)),
         ...(e.url && { url: e.url.replace(swarmTag, `swarm=${config.runId}`) }),
       };
       if (e.screenshot) {
@@ -113,16 +159,31 @@ export function replaySwarmRunner(opts: ReplayOptions = {}): SwarmRunner {
     };
 
     while (agents.some((a) => a.sent < a.evs.length)) {
-      const elapsed = (Date.now() - started) * speed;
-      for (const a of agents) {
-        const due: Event[] = [];
-        while (a.sent < a.evs.length && a.evs[a.sent].ts - a.t0 <= elapsed) due.push(a.evs[a.sent++]);
-        if (!due.length) continue;
-        const lines = await Promise.all(due.map((e) => rewrite(a, e)));
-        await appendFile(join(out, "events", `${a.agentId}.jsonl`), lines.map((l) => JSON.stringify(l) + "\n").join(""));
+      if (opts.signal?.aborted) {
+        for (const s of sbx) if (s.info.status !== "done") Object.assign(s.info, { status: "closed", endedAt: new Date().toISOString() });
+        await writeTopology();
+        throw new Error("cancelled");
       }
+      for (const s of sbx) {
+        const elapsed = (Date.now() - started - s.bootReal) * speed;
+        if (elapsed < 0) continue;
+        if (s.info.status === "booting") s.info.status = "running";
+        for (const a of s.agents) {
+          const due: Event[] = [];
+          while (a.sent < a.evs.length && a.evs[a.sent].ts - a.t0 <= elapsed) due.push(a.evs[a.sent++]);
+          if (!due.length) continue;
+          s.actions += due.filter((e) => e.type === "action").length;
+          const lines = await Promise.all(due.map((e) => rewrite(a, e)));
+          await appendFile(join(out, "events", `${a.agentId}.jsonl`), lines.map((l) => JSON.stringify(l) + "\n").join(""));
+        }
+        if (s.info.status === "running" && s.agents.every((a) => a.sent >= a.evs.length))
+          Object.assign(s.info, { status: "done", endedAt: new Date().toISOString() });
+      }
+      await writeTopology();
       if (agents.some((a) => a.sent < a.evs.length)) await sleep(tickMs);
     }
+    for (const s of sbx) if (s.info.status !== "done") Object.assign(s.info, { status: "done", endedAt: new Date().toISOString() });
+    await writeTopology();
   };
 }
 

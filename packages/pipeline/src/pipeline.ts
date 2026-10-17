@@ -16,6 +16,7 @@ import { readBuildSha } from "../../../orchestrator/preview";
 import { localShell, tenkiShell } from "../../../orchestrator/shell";
 import { fakeFixLoop } from "./fakeFix";
 import { recordedBuildSha, replaySwarmRunner } from "./replay";
+import { tenkiSwarmRunner } from "./swarm";
 import { allocateSeeds, newRunId, readJson, REPO_ROOT, reserveRun, runsDir as defaultRunsDir, writeJson } from "./runs";
 
 export type { Analyzer, SwarmRunner };
@@ -36,12 +37,27 @@ export type PipelineDeps = {
   log?: (line: string) => void;
   /** How often fix.json is checked for the draft → waiting-preview transition. */
   fixWatchMs?: number;
+  /** Cancels the run: checked between phases, and the current phase is abandoned.
+   * The run ends failed with error "cancelled". */
+  signal?: AbortSignal;
 };
 
 export type StartOptions = Partial<PipelineDeps> & { maxRunsPerDay?: number };
 
 const ORDER: RunPhase[] = ["verifying", "swarming", "analyzing", "fixing", "waiting-preview", "retesting", "comparing", "done"];
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+export const CANCELLED = "cancelled";
+
+/** Resolves/rejects with `p`, or rejects with "cancelled" as soon as `signal` aborts. */
+function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(new Error(CANCELLED));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error(CANCELLED));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
 
 export function validateRequest(req: StartRunRequest): void {
   if (!FLOWS[req.flowId]) throw new Error(`Unknown flow "${req.flowId}"`);
@@ -91,6 +107,7 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
   let status: RunStatus = { runId, phase: "verifying", updatedAt: new Date().toISOString() };
   let writes = Promise.resolve();
   const set = (phase: RunPhase, message: string, extra: Partial<RunStatus> = {}) => {
+    if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
     // Phases only move forward (the fix.json watcher may lag behind).
     if (phase !== "failed" && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
     if (phase === status.phase && message === status.message) return writes;
@@ -103,15 +120,15 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
   try {
     const config = (await readJson<RunConfig>(join(dir, "config.json")))!;
     await set("verifying", `Checking the build at ${config.targetUrl}`);
-    config.buildSha = await deps.verifyBuild(config.targetUrl);
+    config.buildSha = await abortable(deps.verifyBuild(config.targetUrl), deps.signal);
     await writeJson(join(dir, "config.json"), config);
 
     const n = Object.values(config.seeds).flat().length;
     await set("swarming", `Swarm running: ${n} agents (${config.personaIds.join(", ")}) on ${config.buildSha.slice(0, 7)}`);
-    await deps.runSwarm(config);
+    await abortable(deps.runSwarm(config), deps.signal);
 
     await set("analyzing", "Analyzing events");
-    const { findings } = await deps.analyze(runId);
+    const { findings } = await abortable(deps.analyze(runId), deps.signal);
 
     if (!autoFix) return await set("done", `Report ready: ${findings.length} findings`).then(() => status);
     if (!findings.length) return await set("done", "No findings to fix").then(() => status);
@@ -124,7 +141,7 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
     }, deps.fixWatchMs ?? 500);
     let result: FixResult;
     try {
-      result = await deps.fixLoop({
+      result = await abortable(deps.fixLoop({
         baselineRunId: runId,
         runsDir: deps.runsDir,
         log,
@@ -136,7 +153,7 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
           await set("comparing", "Analyzing the re-test and comparing before/after");
           return deps.analyze(id);
         },
-      });
+      }), deps.signal);
     } finally {
       clearInterval(watcher);
     }
@@ -148,7 +165,8 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
       : `Fix loop ended (${last?.status ?? "no attempt"})`;
     return await set("done", msg).then(() => status);
   } catch (e) {
-    await set("failed", `Failed during ${status.phase}`, { error: errMsg(e) }).catch(() => {});
+    const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;
+    await set("failed", cancelled ? `Cancelled during ${status.phase}` : `Failed during ${status.phase}`, { error: cancelled ? CANCELLED : errMsg(e) }).catch(() => {});
     return status;
   }
 }
@@ -170,48 +188,80 @@ export function moduleAnalyzer(runsDir: string, log?: (line: string) => void): A
   };
 }
 
-/** Wiring from env: SWARM_RUNNER=replay|p2, RUNS_DIR, REPLAY_DIR, REPLAY_RETEST_DIR,
- * REPLAY_SPEED, VERIFY_BUILD=0|1, FIX_LOOP=real|fake (fake = offline rehearsal, default
- * with replay), FIX_STAGE_DELAY_MS, FIX_SHELL=tenki|local. */
-export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
-  const runner = process.env.SWARM_RUNNER ?? "replay";
-  const replayDir = process.env.REPLAY_DIR ?? join(REPO_ROOT, "runs", "fixture-baseline");
-  let runSwarm: SwarmRunner;
-  if (runner === "replay")
-    runSwarm = replaySwarmRunner({
-      runsDir,
-      sourceDir: replayDir,
-      retestSourceDir: process.env.REPLAY_RETEST_DIR,
-      speed: Number(process.env.REPLAY_SPEED ?? 1),
-    });
-  else if (runner === "p2")
-    // TODO(P2): plug the tenki swarm runner in here: (config: RunConfig) => Promise<void>.
-    runSwarm = async () => {
-      throw new Error("SWARM_RUNNER=p2 is not wired yet (packages/pipeline/src/pipeline.ts defaultDeps)");
-    };
-  else throw new Error(`Unknown SWARM_RUNNER "${runner}" (replay|p2)`);
+export type DepsConfig = {
+  runsDir: string;
+  swarmRunner: "replay" | "tenki";
+  fixLoop: "fake" | "real";
+  replaySpeed: number;
+  verifyBuild: boolean;
+  replayDir?: string;
+  replayRetestDir?: string;
+  fixStageDelayMs?: number;
+  fixShell?: "tenki" | "local";
+  signal?: AbortSignal;
+  log?: (line: string) => void;
+};
 
-  const fixMode = process.env.FIX_LOOP ?? (runner === "replay" ? "fake" : "real");
-  if (fixMode !== "fake" && fixMode !== "real") throw new Error(`Unknown FIX_LOOP "${fixMode}" (real|fake)`);
-  const verify = process.env.VERIFY_BUILD ? process.env.VERIFY_BUILD !== "0" : runner !== "replay";
+/** Pipeline wiring from explicit settings (the daemon passes settings.json). */
+export function buildDeps(c: DepsConfig): PipelineDeps {
+  const replayDir = c.replayDir ?? join(REPO_ROOT, "runs", "fixture-baseline");
+  const log = c.log ?? (() => {});
+  const signal = c.signal ?? new AbortController().signal;
+  const runSwarm: SwarmRunner =
+    c.swarmRunner === "replay"
+      ? replaySwarmRunner({ runsDir: c.runsDir, sourceDir: replayDir, retestSourceDir: c.replayRetestDir, speed: c.replaySpeed, signal })
+      : tenkiSwarmRunner({
+          runsDir: c.runsDir,
+          signal,
+          log,
+          reportTopology: (t) => writeJson(join(c.runsDir, t.runId, "swarm.json"), t),
+        });
   return {
-    runsDir,
+    runsDir: c.runsDir,
     runSwarm,
-    analyze: moduleAnalyzer(runsDir, log),
+    analyze: moduleAnalyzer(c.runsDir, c.log),
+    signal: c.signal,
+    log: c.log,
     verifyBuild: async (url) => {
-      if (!verify) return recordedBuildSha(replayDir);
+      if (!c.verifyBuild) return recordedBuildSha(replayDir);
       if (new URL(url).origin === new URL(PRODUCTION_URL).origin) return verifyProductionBuild();
       const sha = await readBuildSha(url);
       if (!sha) throw new Error(`No <meta name="build-sha"> at ${url}`);
       return sha;
     },
-    fixLoop: fixMode === "fake" ? fakeFixLoop({ stageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500) }) : (o) =>
-      runFixLoop({
-        ...o,
-        shell: async () =>
-          process.env.FIX_SHELL === "local"
-            ? localShell(await mkdtemp(join(tmpdir(), "frictionswarm-fix-")))
-            : tenkiShell(`fix-${o.baselineRunId}`),
-      }),
+    fixLoop:
+      c.fixLoop === "fake"
+        ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 })
+        : (o) =>
+            runFixLoop({
+              ...o,
+              shell: async () =>
+                c.fixShell === "local"
+                  ? localShell(await mkdtemp(join(tmpdir(), "frictionswarm-fix-")))
+                  : tenkiShell(`fix-${o.baselineRunId}`),
+            }),
   };
+}
+
+/** Wiring from env: SWARM_RUNNER=replay|tenki (p2 is an alias), RUNS_DIR, REPLAY_DIR,
+ * REPLAY_RETEST_DIR, REPLAY_SPEED, VERIFY_BUILD=0|1, FIX_LOOP=real|fake (fake = offline
+ * rehearsal, default with replay), FIX_STAGE_DELAY_MS, FIX_SHELL=tenki|local. */
+export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
+  const env = process.env.SWARM_RUNNER ?? "replay";
+  if (env !== "replay" && env !== "tenki" && env !== "p2") throw new Error(`Unknown SWARM_RUNNER "${env}" (replay|tenki)`);
+  const swarmRunner = env === "replay" ? "replay" : "tenki";
+  const fixMode = process.env.FIX_LOOP ?? (swarmRunner === "replay" ? "fake" : "real");
+  if (fixMode !== "fake" && fixMode !== "real") throw new Error(`Unknown FIX_LOOP "${fixMode}" (real|fake)`);
+  return buildDeps({
+    runsDir,
+    log,
+    swarmRunner,
+    fixLoop: fixMode,
+    replaySpeed: Number(process.env.REPLAY_SPEED ?? 1),
+    verifyBuild: process.env.VERIFY_BUILD ? process.env.VERIFY_BUILD !== "0" : swarmRunner !== "replay",
+    replayDir: process.env.REPLAY_DIR,
+    replayRetestDir: process.env.REPLAY_RETEST_DIR,
+    fixStageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500),
+    fixShell: process.env.FIX_SHELL === "local" ? "local" : "tenki",
+  });
 }
