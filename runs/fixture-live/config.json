@@ -1,0 +1,30 @@
+{
+  "runId": "fixture-live",
+  "kind": "baseline",
+  "flowId": "buy-tshirt",
+  "personaIds": [
+    "rosa",
+    "kai",
+    "typical"
+  ],
+  "seeds": {
+    "rosa": [
+      1,
+      2,
+      3
+    ],
+    "kai": [
+      1,
+      2,
+      3
+    ],
+    "typical": [
+      1,
+      2,
+      3
+    ]
+  },
+  "targetUrl": "https://swarm-ecommerce.netlify.app",
+  "buildSha": "f00dfeedfixture",
+  "createdAt": "2026-10-17T21:29:56.000Z"
+}

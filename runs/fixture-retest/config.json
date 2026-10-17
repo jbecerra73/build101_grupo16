@@ -1,0 +1,26 @@
+{
+  "runId": "fixture-retest",
+  "kind": "retest",
+  "flowId": "buy-tshirt",
+  "personaIds": [
+    "rosa",
+    "kai",
+    "typical"
+  ],
+  "seeds": {
+    "rosa": [
+      11
+    ],
+    "kai": [
+      11,
+      12
+    ],
+    "typical": [
+      11
+    ]
+  },
+  "targetUrl": "https://deploy-preview-7--swarm-ecommerce.netlify.app",
+  "buildSha": "c0ffee1fixture",
+  "baselineRunId": "fixture-baseline",
+  "createdAt": "2026-10-17T20:30:00.000Z"
+}
