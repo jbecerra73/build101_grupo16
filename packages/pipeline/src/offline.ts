@@ -5,6 +5,7 @@
 // removed), and plays the result out in real time:
 //   - runs/<runId>/screenshots/<agentId>.png  follows each agent from page to
 //     page, using the real storefront captures in apps/dashboard/scripts/shots
+//     (screenshots/index.json says which step each one shows)
 //   - data/posthog/swarm-<runId>.jsonl        receives the agents' PostHog
 //     events, `ingestLagMs` after the agent "did" them, like PostHog ingestion,
 //     so the pipeline's collecting phase (source.waitForSwarm) has something to wait for
@@ -115,7 +116,7 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
   return async (config) => {
     const runsDir = opts.runsDir ?? defaultRunsDir();
     const dataDir = opts.dataDir ?? defaultDataDir();
-    const shotsDir = opts.shotsDir ?? join(REPO_ROOT, "apps", "dashboard", "scripts", "shots");
+    const shotsDir = opts.shotsDir ?? process.env.SWARM_SHOTS_DIR ?? join(REPO_ROOT, "apps", "dashboard", "scripts", "shots");
     const duration = opts.durationMs ?? 30_000;
     const lag = opts.ingestLagMs ?? 4_000;
     const tickMs = opts.tickMs ?? 250;
@@ -189,10 +190,17 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
     await writeTopology();
 
     const wallOf = (s: (typeof sbx)[number], e: PostHogEvent) => started + s.boot + (ts(e) - t0) * scale;
+    // screenshots/index.json: which step each screenshot shows, so the live grid
+    // is current before PostHog has the events (see ScreenshotIndex in the dashboard).
+    const index: Record<string, { step?: string; at: string; n: number }> = {};
+    let indexDirty = false;
     const shoot = async (a: Agent, e: PostHogEvent) => {
       const step = resolveStep(flow, String(e.properties.$current_url ?? "/"));
       const name = step && SHOT[step];
-      if (name) await copyFile(join(shotsDir, a.personaId, `${name}.png`), join(out, "screenshots", `${a.agentId}.png`)).catch(() => {});
+      if (!name) return;
+      await copyFile(join(shotsDir, a.personaId, `${name}.png`), join(out, "screenshots", `${a.agentId}.png`)).catch(() => {});
+      index[a.agentId] = { step, at: new Date().toISOString(), n: (index[a.agentId]?.n ?? 0) + 1 };
+      indexDirty = true;
     };
 
     // Agents on screen (screenshots), then events into the file `lag` later.
@@ -227,6 +235,10 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
           if (a.shown >= a.events.length) a.done = true;
         }
         if (s.info.status === "running" && s.agents.every((a) => a.done)) Object.assign(s.info, { status: "done", endedAt: new Date().toISOString() });
+      }
+      if (indexDirty) {
+        indexDirty = false;
+        await writeJson(join(out, "screenshots", "index.json"), index);
       }
       await flush(false);
       await writeTopology();

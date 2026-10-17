@@ -114,7 +114,9 @@ export function validateRequest(req: StartRunRequest): void {
   if (n !== undefined && (!Number.isInteger(n) || n < 1 || n > 10)) throw new Error("seedsPerPersona must be an integer from 1 to 10");
 }
 
-/** The analysis run's config for a request. */
+/** The analysis run's config for a request. The default window (no
+ * req.window) is the current production release over the last 28 days; an
+ * explicit window covers every release in it. */
 export async function analysisConfig(runId: string, req: StartRunRequest, now = new Date()): Promise<RunConfig> {
   const source = req.source ?? (process.env.POSTHOG_SOURCE === "api" ? "api" : "file");
   return {
@@ -122,7 +124,7 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
     kind: "analysis",
     flowId: req.flowId,
     window: req.window ?? defaultWindow(now),
-    posthog: { source, buildSha: await currentReleaseSha(source) },
+    posthog: { source, buildSha: req.window ? "" : await currentReleaseSha(source) },
     personaIds: [],
     seeds: {},
     targetUrl: PRODUCTION_URL,
@@ -292,7 +294,7 @@ export async function ensureSnapshot(runsDir: string, runId: string, source: Pos
     config.kind === "retest"
       ? source.swarmEvents({ runId, buildSha: config.posthog.buildSha })
       : source.realUserEvents({ ...defaultWindow(), ...config.window, ...(config.posthog.buildSha ? { buildSha: config.posthog.buildSha } : {}) });
-  await snapshot(events, file);
+  await snapshot(events, join(runsDir, runId));
 }
 
 /** The analyzer's compareSegmentsToPersonas, loaded with the analyzer. Sync

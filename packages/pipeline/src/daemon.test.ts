@@ -112,7 +112,7 @@ describe("orchestrator daemon", () => {
     const retestKeys = await store.list(`runs/${retestId}/`);
     expect(retestKeys).toEqual(expect.arrayContaining([`runs/${retestId}/config.json`, `runs/${retestId}/metrics.json`, `runs/${retestId}/swarm.json`]));
     // screenshots of the retest swarm are mirrored with the same bytes
-    const shots = retestKeys.filter((k) => k.includes("/screenshots/"));
+    const shots = retestKeys.filter((k) => k.endsWith(".png"));
     expect(shots.map((k) => k.split("/").at(-1)).sort()).toEqual(["kai-1.png", "kai-2.png", "rosa-1.png", "rosa-2.png", "typical-1.png", "typical-2.png"]);
     expect(await store.getBytes(shots[0])).toEqual(new Uint8Array(await readFile(join(workDir, retestId, "screenshots", shots[0].split("/").at(-1)!))));
 

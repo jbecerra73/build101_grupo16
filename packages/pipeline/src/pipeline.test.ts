@@ -106,7 +106,8 @@ describe("startPipeline", () => {
     expect(waited).toEqual([`${runId}-retest1`]);
 
     const config = await json<RunConfig>(join(runsDir, runId, "config.json"));
-    expect(config).toMatchObject({ kind: "analysis", window: req.window, posthog: { source: "file" }, personaIds: [], seeds: {} });
+    // An explicit window covers every release in it.
+    expect(config).toMatchObject({ kind: "analysis", window: req.window, posthog: { source: "file", buildSha: "" }, personaIds: [], seeds: {} });
     expect(swarms[0]).toMatchObject({
       kind: "retest", baselineRunId: runId, personaIds: ["rosa", "kai", "typical"],
       seeds: { rosa: [1, 2], kai: [1, 2], typical: [1, 2] }, posthog: { source: "file" },
@@ -228,8 +229,10 @@ describe("offlineSwarmRunner", () => {
     expect(midEvents).toBeLessThan(events.length);
     expect(afterRun).toBeLessThan(events.length); // still ingesting when the agents are done
     expect((await readdir(join(runsDir, "r-retest1", "screenshots"))).sort()).toEqual(
-      ["kai-1.png", "kai-2.png", "rosa-1.png", "rosa-2.png", "typical-1.png", "typical-2.png"],
+      ["index.json", "kai-1.png", "kai-2.png", "rosa-1.png", "rosa-2.png", "typical-1.png", "typical-2.png"],
     );
+    const index = await json<Record<string, { step: string }>>(join(runsDir, "r-retest1", "screenshots", "index.json"));
+    expect(Object.keys(index).sort()).toEqual(["kai-1", "kai-2", "rosa-1", "rosa-2", "typical-1", "typical-2"]);
     expect(new Set(events.map((e) => e.properties.swarm_agent))).toEqual(new Set(["rosa-1", "rosa-2", "kai-1", "kai-2", "typical-1", "typical-2"]));
     expect(events.every((e) => e.properties.swarm_run === "r-retest1" && e.properties.build_sha === "abc1234")).toBe(true);
     expect(events.every((e) => String(e.properties.$current_url).startsWith("https://deploy-preview-12--swarm-ecommerce.netlify.app/"))).toBe(true);
