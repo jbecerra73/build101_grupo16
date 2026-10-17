@@ -9,9 +9,9 @@ import { parseArgs } from "node:util";
 import { chromium } from "playwright";
 import { FLOWS, MAX_ACTIONS_PER_AGENT, PERSONAS, type RunConfig } from "../shared";
 import { runAgent, systemPrompt } from "./agent";
-import { ClaudeBrain, DEFAULT_AGENT_MODEL } from "./brain";
+import { createBrain, DEFAULT_AGENT_MODEL } from "./brain";
 
-// ANTHROPIC_API_KEY (and optionally AGENT_MODEL) may live in a gitignored .env.
+// API keys (OPENCODE_API_KEY or ANTHROPIC_API_KEY) and optionally AGENT_MODEL live in a gitignored .env.
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 const { values: args } = parseArgs({
@@ -22,7 +22,7 @@ const { values: args } = parseArgs({
     url: { type: "string" },
     run: { type: "string" },
     runs: { type: "string", default: "runs" },
-    model: { type: "string", default: DEFAULT_AGENT_MODEL },
+    model: { type: "string", default: DEFAULT_AGENT_MODEL() },
     headed: { type: "boolean", default: false },
   },
 });
@@ -70,7 +70,7 @@ try {
   });
   const page = await context.newPage();
   const maxActions = Math.min(persona.actions.maxActions, MAX_ACTIONS_PER_AGENT);
-  const brain = new ClaudeBrain(systemPrompt(persona, flow, seed, maxActions), args.model);
+  const brain = createBrain(systemPrompt(persona, flow, seed, maxActions), args.model);
   const startUrl = new URL(targetUrl);
   startUrl.searchParams.set("swarm", runId);
   const result = await runAgent({ page, brain, persona, flow, runId, runDir, seed, startUrl: startUrl.toString() });
