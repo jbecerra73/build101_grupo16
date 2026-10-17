@@ -65,6 +65,18 @@ describe("flow store", () => {
   });
 });
 
+describe("flow id guards", () => {
+  it("does not resolve Object.prototype members as flows", async () => {
+    expect(await getFlow(new MemoryStore(), "constructor")).toBeUndefined();
+    expect(await getFlow(new MemoryStore(), "toString")).toBeUndefined();
+  });
+  it("rejects non-slug ids", async () => {
+    const store = new MemoryStore();
+    expect(await getFlow(store, "../x")).toBeUndefined();
+    await expect(putFlow(store, { ...buyTshirt, id: "../x" })).rejects.toThrow('Invalid flow id "../x"');
+  });
+});
+
 describe("diffFlows", () => {
   it("describes added steps and changed success text", () => {
     const after: Flow = {

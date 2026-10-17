@@ -20,6 +20,8 @@ const isHttpUrl = (v: string) => {
   }
 };
 
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
 const TOP_LEVEL = ["id", "goal", "startUrl", "success", "steps", "required"] as const;
 
 export function validateFlow(input: unknown): FlowValidation {
@@ -28,7 +30,7 @@ export function validateFlow(input: unknown): FlowValidation {
   if (missing.length) return { ok: false, missing, errors: [] };
 
   const errors: string[] = [];
-  if (!isString(raw.id) || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(raw.id)) {
+  if (!isString(raw.id) || !SLUG.test(raw.id)) {
     errors.push("id must be a lowercase slug (a-z, 0-9, -)");
   }
   if (!isString(raw.goal)) errors.push("goal must be a string");
@@ -129,9 +131,11 @@ export async function listFlows(store: RunStore): Promise<Flow[]> {
 }
 
 export async function getFlow(store: RunStore, id: string): Promise<Flow | undefined> {
-  return (await store.getJson<Flow>(KEYS.flow(id))) ?? FLOWS[id];
+  if (!SLUG.test(id)) return undefined;
+  return (await store.getJson<Flow>(KEYS.flow(id))) ?? (Object.hasOwn(FLOWS, id) ? FLOWS[id] : undefined);
 }
 
 export async function putFlow(store: RunStore, flow: Flow): Promise<void> {
+  if (!SLUG.test(flow.id)) throw new Error(`Invalid flow id "${flow.id}"`);
   await store.putJson(KEYS.flow(flow.id), flow);
 }
