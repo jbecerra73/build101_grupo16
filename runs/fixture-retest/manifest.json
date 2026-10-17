@@ -1,0 +1,71 @@
+{
+  "kind": "swarm",
+  "runId": "fixture-retest",
+  "buildSha": "c0ffee0fixture",
+  "host": "deploy-preview-12--swarm-ecommerce.netlify.app",
+  "traps": [
+    "T3",
+    "T4",
+    "T5"
+  ],
+  "fixed": [
+    "T1",
+    "T2"
+  ],
+  "agents": [
+    {
+      "agent": "rosa-1001",
+      "persona": "rosa",
+      "completed": false,
+      "exitStep": "Product"
+    },
+    {
+      "agent": "rosa-1002",
+      "persona": "rosa",
+      "completed": true,
+      "exitStep": "Confirmation"
+    },
+    {
+      "agent": "rosa-1003",
+      "persona": "rosa",
+      "completed": false,
+      "exitStep": "Product"
+    },
+    {
+      "agent": "kai-1001",
+      "persona": "kai",
+      "completed": true,
+      "exitStep": "Confirmation"
+    },
+    {
+      "agent": "kai-1002",
+      "persona": "kai",
+      "completed": false,
+      "exitStep": "Product"
+    },
+    {
+      "agent": "kai-1003",
+      "persona": "kai",
+      "completed": true,
+      "exitStep": "Confirmation"
+    },
+    {
+      "agent": "typical-1001",
+      "persona": "typical",
+      "completed": true,
+      "exitStep": "Confirmation"
+    },
+    {
+      "agent": "typical-1002",
+      "persona": "typical",
+      "completed": true,
+      "exitStep": "Confirmation"
+    },
+    {
+      "agent": "typical-1003",
+      "persona": "typical",
+      "completed": true,
+      "exitStep": "Confirmation"
+    }
+  ]
+}

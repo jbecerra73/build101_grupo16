@@ -1,0 +1,163 @@
+{
+  "kind": "history",
+  "seed": 16,
+  "from": "2026-10-13",
+  "to": "2026-10-16",
+  "host": "swarm-ecommerce.netlify.app",
+  "file": "runs/fixture-analysis/posthog.jsonl",
+  "events": 6378,
+  "sessions": 576,
+  "orders": 53,
+  "releases": [
+    {
+      "sha": "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d",
+      "date": "2026-04-01",
+      "name": "Simulated checkout",
+      "traps": [
+        "T3"
+      ]
+    },
+    {
+      "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+      "date": "2026-05-20",
+      "name": "New product page",
+      "traps": [
+        "T3",
+        "T4"
+      ]
+    },
+    {
+      "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+      "date": "2026-06-24",
+      "name": "Checkout redesign",
+      "traps": [
+        "T1",
+        "T3",
+        "T4"
+      ]
+    },
+    {
+      "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+      "date": "2026-08-05",
+      "name": "Promo codes",
+      "traps": [
+        "T1",
+        "T3",
+        "T4",
+        "T5"
+      ]
+    },
+    {
+      "sha": "f00dfeedfixture",
+      "date": "2026-09-09",
+      "name": "Accounts",
+      "traps": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ]
+    }
+  ],
+  "byRelease": [
+    {
+      "sha": "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d",
+      "date": "2026-04-01",
+      "name": "Simulated checkout",
+      "traps": [
+        "T3"
+      ],
+      "segments": {}
+    },
+    {
+      "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+      "date": "2026-05-20",
+      "name": "New product page",
+      "traps": [
+        "T3",
+        "T4"
+      ],
+      "segments": {}
+    },
+    {
+      "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+      "date": "2026-06-24",
+      "name": "Checkout redesign",
+      "traps": [
+        "T1",
+        "T3",
+        "T4"
+      ],
+      "segments": {}
+    },
+    {
+      "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+      "date": "2026-08-05",
+      "name": "Promo codes",
+      "traps": [
+        "T1",
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "segments": {}
+    },
+    {
+      "sha": "f00dfeedfixture",
+      "date": "2026-09-09",
+      "name": "Accounts",
+      "traps": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ],
+      "segments": {
+        "mobile": {
+          "sessions": 310,
+          "completed": 16,
+          "completionRate": 0.052,
+          "exits": {
+            "Home": 38,
+            "Product": 164,
+            "Account": 38,
+            "Browse": 31,
+            "Cart": 19,
+            "Shipping": 2,
+            "Payment": 2
+          }
+        },
+        "desktop": {
+          "sessions": 239,
+          "completed": 36,
+          "completionRate": 0.151,
+          "exits": {
+            "Product": 96,
+            "Shipping": 5,
+            "Cart": 21,
+            "Payment failed": 2,
+            "Home": 25,
+            "Browse": 31,
+            "Account": 19,
+            "Payment": 4
+          }
+        },
+        "low_vision": {
+          "sessions": 27,
+          "completed": 1,
+          "completionRate": 0.037,
+          "exits": {
+            "Product": 14,
+            "Cart": 4,
+            "Home": 2,
+            "Browse": 3,
+            "Account": 2,
+            "Payment": 1
+          }
+        }
+      }
+    }
+  ]
+}

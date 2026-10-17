@@ -1,14 +1,20 @@
 // Shared contracts for FrictionSwarm. Every part (worker, analyzer, dashboard,
 // orchestrator, coding agent) builds against these shapes. See SPEC.md.
 //
+// PostHog pivot: the analyzer reads PostHog events (shared/analytics.ts), not
+// an agent event log. An "analysis" run measures real users per segment; a
+// "retest" run measures the persona swarm on a deploy preview.
+//
 // Run folder layout (no DB):
 //   runs/<runId>/config.json        RunConfig
-//   runs/<runId>/events/<agentId>.jsonl   one Event per line
-//   runs/<runId>/screenshots/<file>.png   referenced by Event.screenshot
+//   runs/<runId>/status.json        RunStatus (written by the orchestrator while it works)
+//   runs/<runId>/posthog.jsonl      the PostHogEvents this run analyzed (snapshot, so it replays offline)
 //   runs/<runId>/metrics.json       Metrics
 //   runs/<runId>/findings.json      Finding[]
-//   runs/<runId>/fix.json           FixResult (only on runs that triggered a fix)
-//   runs/<runId>/status.json        RunStatus (written by the orchestrator while it works)
+//   runs/<runId>/fix.json           FixResult (analysis runs that triggered a fix)
+//   runs/<runId>/screenshots/<agentId>.png   latest screenshot per agent (retest only, display only)
+
+import type { SegmentId } from "./analytics";
 
 export type PersonaId = string;
 
@@ -73,16 +79,15 @@ export type RequiredField =
   | "country"
   | "cardNumber";
 
-export type EventType =
-  | "page_view"
-  | "action"
-  | "think_aloud"
-  | "error"
-  | "give_up"
-  | "success";
+/** @deprecated Agent event log, retired by the PostHog pivot: agents leave
+ * PostHog tracks instead (see SwarmEvent in analytics.ts). Kept so open PRs
+ * still compile while they migrate; don't build new code on it. */
+export type EventType = "page_view" | "action" | "think_aloud" | "error" | "give_up" | "success";
 
+/** @deprecated See EventType. */
 export type ActionKind = "click" | "type" | "scroll" | "back";
 
+/** @deprecated See EventType. */
 export type Event = {
   runId: string;
   agentId: string;
@@ -91,88 +96,129 @@ export type Event = {
   ts: number;
   type: EventType;
   url?: string;
-  /** Resolved via the flow's route→step map (see resolveStep). */
   step?: string;
-  action?: {
-    kind: ActionKind | string;
-    selector?: string;
-    text?: string;
-    /** True when the action did not land (e.g. tap target too small). */
-    missed?: boolean;
-    /** Set on `type` actions that filled a known form field. */
-    field?: RequiredField | string;
-  };
+  action?: { kind: ActionKind | string; selector?: string; text?: string; missed?: boolean; field?: RequiredField | string };
   note?: string;
-  /** Path relative to the run folder, e.g. "screenshots/rosa-3-007.png". */
   screenshot?: string;
-  /** On `success` events: what the confirmation page echoed back. */
   confirmation?: { email?: string; address?: string; cardLast4?: string };
 };
 
 export type Severity = "high" | "medium" | "low";
 
+/** A release as seen in PostHog: the first time a production build_sha appears. */
+export type Release = { sha: string; date: string; name: string };
+
 export type Finding = {
   id: string;
   severity: Severity;
+  segments: SegmentId[];
+  /** Derived from segments (SEGMENTS[].personaId); the personas a fix targets. */
   personas: PersonaId[];
   step: string;
   page: string;
   selector?: string;
   title: string;
-  evidence: { screenshots: string[]; quotes: string[]; agentCount: number };
+  evidence: {
+    /** Affected sessions / users, out of N in the segment(s). */
+    sessions: number;
+    users: number;
+    dropOffRate?: number;
+    rageClicks?: number;
+    /** First release where this signal's rate jumped against the previous one. */
+    sinceRelease?: Release;
+    /** $session_id values; the dashboard links them to PostHog replays. */
+    exampleSessions: string[];
+    /** swarm_give_up / swarm_think_aloud notes; retest runs only. */
+    quotes: string[];
+    /** Optional retest screenshots, relative to the run folder. */
+    screenshots?: string[];
+  };
   suggestedFix: string;
 };
 
 export type FunnelStep = {
   step: string;
-  /** Agents whose log contains this step. */
+  /** Sessions whose $pageviews include this step. */
   reached: number;
-  /** Agents whose last step was this one and who did not complete. */
+  /** Sessions whose last step was this one and that did not complete. */
   droppedHere: number;
 };
 
-export type PersonaMetrics = {
-  personaId: PersonaId;
-  /** Number of agents (show N next to every number). */
+/** Metrics for one group of sessions: a segment's real users or a persona's agents. */
+type GroupMetrics = {
+  /** Sessions (one session = one funnel attempt or one agent). Show N next to every number. */
   n: number;
+  /** Distinct users (distinct_id). */
+  users: number;
   /** Valid completions only (see completion validity in SPEC.md). */
   completed: number;
   completionRate: number;
+  /** Sessions that ended with swarm_give_up (retest) or left before success (analysis). */
   gaveUp: number;
-  /** Agents that hit the success condition but failed validity checks. */
+  /** Reached the success step but failed validity checks. */
   invalidCompletions: number;
+  /** Over valid completions only (0 when none). Steps = funnel step transitions + actions. */
   medianSteps: number;
   medianTimeMs: number;
   funnel: FunnelStep[];
 };
 
+export type SegmentMetrics = GroupMetrics & { segmentId: SegmentId };
+export type PersonaMetrics = GroupMetrics & { personaId: PersonaId };
+
+/** One week of one segment's real-user completion, for the trend chart. */
+export type TrendPoint = {
+  segmentId: SegmentId;
+  /** Monday, YYYY-MM-DD. */
+  weekStart: string;
+  n: number;
+  completed: number;
+  completionRate: number;
+};
+
 export type Metrics = {
   runId: string;
   flowId: string;
+  /** Production build_sha for an analysis (the current release); preview sha for a retest. */
   buildSha: string;
+  /** Analysis runs: real users per segment. Empty on a retest. */
+  segments: SegmentMetrics[];
+  /** Retest runs: swarm agents per persona. Empty on an analysis. */
   personas: PersonaMetrics[];
+  /** Analysis runs: weekly series per segment, with release markers. */
+  trend?: { points: TrendPoint[]; releases: Release[] };
 };
 
-export type RunKind = "baseline" | "retest";
+export type RunKind = "analysis" | "retest";
+
+export type PostHogSourceKind = "file" | "api";
 
 export type RunConfig = {
   runId: string;
   kind: RunKind;
   flowId: string;
+  /** Analysis window over real users, [from, to), ISO dates. */
+  window?: { from: string; to: string };
+  posthog: {
+    source: PostHogSourceKind;
+    /** Analysis: production release analyzed (optional filter). Retest: the preview's build_sha. */
+    buildSha: string;
+  };
+  /** Retest only: personas and seeds; agentId = `${personaId}-${seed}`. */
   personaIds: PersonaId[];
-  /** Seeds per persona; agentId = `${personaId}-${seed}`. */
   seeds: Record<PersonaId, number[]>;
+  /** Analysis: production URL. Retest: the deploy preview URL. */
   targetUrl: string;
-  /** build-sha meta read from targetUrl before the swarm started. */
-  buildSha: string;
-  /** For a retest, the baseline it is compared against. */
+  /** For a retest, the analysis run it is compared against. */
   baselineRunId?: string;
   createdAt: string;
 };
 
+/** A segment's real users (before) against the persona swarm standing in for it (after). */
 export type PersonaComparison = {
   personaId: PersonaId;
-  before: PersonaMetrics;
+  segmentId: SegmentId;
+  before: SegmentMetrics;
   after: PersonaMetrics;
   completionDeltaPts: number;
   regressions: string[];
@@ -202,6 +248,8 @@ export type FixAttempt = {
   prNumber?: number;
   prUrl?: string;
   previewUrl?: string;
+  /** The coding agent's own summary of its change. */
+  summary?: string;
   retestRunId?: string;
   verdict?: Verdict;
   status: FixStatus;
@@ -209,19 +257,20 @@ export type FixAttempt = {
 };
 
 export type FixResult = {
+  /** The analysis run whose findings were fixed. */
   baselineRunId: string;
   repo: string;
   attempts: FixAttempt[];
 };
 
-/** Pipeline phase of a baseline run, including its fix and retest. */
+/** Pipeline phase of an analysis run, including its fix and retest. */
 export type RunPhase =
-  | "verifying"
-  | "swarming"
   | "analyzing"
   | "fixing"
   | "waiting-preview"
   | "retesting"
+  /** Waiting for the swarm's events to be ingested by PostHog (waitForSwarm). */
+  | "collecting"
   | "comparing"
   | "done"
   | "failed";
@@ -237,13 +286,15 @@ export type RunStatus = {
   error?: string;
 };
 
-/** What the dashboard sends to start a pipeline. */
+/** What the dashboard sends to start a pipeline ("Analyze"). */
 export type StartRunRequest = {
   flowId: string;
-  personaIds: PersonaId[];
-  seedsPerPersona: number;
-  /** Defaults to the flow's startUrl (production). */
-  targetUrl?: string;
-  /** Run the coding agent + retest after the baseline. */
+  /** Defaults to the current production release, last 28 days. */
+  window?: { from: string; to: string };
+  /** Defaults to POSTHOG_SOURCE (file). */
+  source?: PostHogSourceKind;
+  /** Run the coding agent + swarm retest after the analysis. */
   autoFix: boolean;
+  /** Retest swarm size; defaults to 10. */
+  seedsPerPersona?: number;
 };
