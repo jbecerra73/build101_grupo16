@@ -166,6 +166,16 @@ describe("findings", () => {
     expect(slow.error).toMatch(/timed out/);
   }, 10_000);
 
+  it("accepts an explicit empty answer, but not one whose findings were all dropped", async () => {
+    let calls = 0;
+    const empty = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => (calls++, { findings: [] }) });
+    expect(empty).toEqual({ findings: [], path: "custom" });
+    expect(calls).toBe(1);
+    const ghost = { severity: "low", personas: ["ghost"], step: "Cart", page: "/cart", selector: null, title: "x", evidence: { screenshots: [], quotes: [], agentCount: 1 }, suggestedFix: "y" };
+    const dropped = await generateFindings(run, metrics, { flow: buyTshirt, model: async () => ({ findings: [ghost] }) });
+    expect(dropped.path).toBe("heuristic");
+  });
+
   it("extracts the JSON object from a chatty answer", () => {
     expect(extractJson('Here you go:\n```json\n{"a": "x } y", "b": [{"c": "\\"}"}]}\n```\nDone {not json}')).toEqual({ a: "x } y", b: [{ c: '"}' }] });
   });

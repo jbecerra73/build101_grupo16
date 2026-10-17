@@ -202,7 +202,10 @@ export async function generateFindings(run: RunData, metrics: Metrics, opts: Fin
     }
     try {
       const findings = sanitizeFindings(raw, run);
-      if (!findings.length) throw new Error("model returned no usable findings");
+      // An explicit empty list is a valid answer (e.g. a clean retest where the
+      // only signals are noise); only fall back when findings were all dropped.
+      if (!findings.length && FindingsSchema.parse(extractJson(raw)).findings.length)
+        throw new Error("model returned no usable findings");
       return { findings, path: chosen.path };
     } catch (err) {
       error = `${chosen.path} failed: invalid answer (${err instanceof Error ? err.message.slice(0, 300) : String(err)})`;
