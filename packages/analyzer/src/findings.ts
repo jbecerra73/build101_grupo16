@@ -4,7 +4,7 @@
 // (ANTHROPIC_API_KEY) → Agent SDK (CLAUDE_CODE_OAUTH_TOKEN) → deterministic heuristic.
 import { z } from "zod";
 import { PERSONAS, SEGMENTS, type Finding, type Flow, type Metrics, type RunKind, type SegmentId, type Severity } from "@frictionswarm/shared";
-import { buildEvidence, clusterGroups, groupsOfSegments, heuristicFindings, segmentsFor, type FindingContext } from "./heuristic";
+import { buildEvidence, clusterGroups, groupsOfSegments, heuristicFindings, segmentsFor, shareFor, type FindingContext } from "./heuristic";
 import type { History } from "./history";
 import type { SessionSummary } from "./sessions";
 import type { Signal } from "./signals";
@@ -185,7 +185,7 @@ export function sanitizeAnswer(raw: unknown, input: FindingsInput): SanitizedAns
     if (!cited.length) return [];
     const step = steps.has(f.step) ? f.step : cited[0].step;
     let groupIds = groupsOfSegments(input.kind, f.segments);
-    if (!groupIds.length) groupIds = clusterGroups(cited, input.kind === "retest" ? 1 : 3);
+    if (!groupIds.length) groupIds = clusterGroups(cited, input.kind === "retest" ? 1 : 3, shareFor(input.kind));
     const { segments, personas } = segmentsFor(input.kind, groupIds);
     if (!segments.length) return [];
     const evidence = buildEvidence(ctx, cited, groupsOfSegments(input.kind, segments), step);

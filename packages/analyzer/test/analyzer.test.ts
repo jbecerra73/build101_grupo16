@@ -403,3 +403,15 @@ describe("analyzeRun / createAnalyzer", () => {
     expect(lines[0]).toMatch(/analyzed r1: 3 sessions, \d+ findings via heuristic/);
   });
 });
+
+describe("committed fixtures", () => {
+  const RUNS = join(import.meta.dirname, "..", "..", "..", "runs");
+  it.each(["fixture-analysis", "fixture-retest"])("%s: metrics, findings and themes are what the analyzer computes on replay", async (id) => {
+    const dir = join(RUNS, id);
+    const r = await analyzeRun(dir, { ...noLlm, write: false });
+    const read = (f: string) => JSON.parse(readFileSync(join(dir, f), "utf8"));
+    expect(r.metrics).toEqual(read("metrics.json"));
+    expect(r.findings).toEqual(read("findings.json"));
+    expect(r.themes).toEqual(read("themes.json"));
+  });
+});

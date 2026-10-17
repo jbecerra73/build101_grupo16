@@ -1,0 +1,122 @@
+[
+  {
+    "id": "T1",
+    "title": "Left at Product: Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 274,
+    "quotes": [],
+    "findingIds": [
+      "F1"
+    ]
+  },
+  {
+    "id": "T2",
+    "title": "Left at Home",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 65,
+    "quotes": []
+  },
+  {
+    "id": "T3",
+    "title": "Left at Browse",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 65,
+    "quotes": []
+  },
+  {
+    "id": "T4",
+    "title": "Left at Account: Mobile shoppers leave at Account, a step the flow doesn't require; 32 failed 'account_submitted' submits (password, phone, username)",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 59,
+    "quotes": [],
+    "findingIds": [
+      "F2"
+    ]
+  },
+  {
+    "id": "T5",
+    "title": "Left at Cart",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 44,
+    "quotes": []
+  },
+  {
+    "id": "T6",
+    "title": "Left at Shipping: Mobile shoppers can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
+    "segments": [
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "kai",
+      "typical"
+    ],
+    "sessions": 7,
+    "quotes": [],
+    "findingIds": [
+      "F3",
+      "F4"
+    ]
+  },
+  {
+    "id": "T7",
+    "title": "Left at Payment",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 7,
+    "quotes": []
+  }
+]

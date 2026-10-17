@@ -3,7 +3,7 @@
 // report the same numbers for the same signals.
 import { SEGMENTS, type Finding, type Flow, type RunKind, type SegmentId, type Severity } from "@frictionswarm/shared";
 import { chainContains, describeElement } from "./elements";
-import { affectedGroups, groupOf, type Signal, type SignalGroup } from "./signals";
+import { AFFECTED_SHARE, affectedGroups, groupOf, type Signal, type SignalGroup } from "./signals";
 import type { SessionSummary } from "./sessions";
 
 /** Order in which a cluster's signals explain it (first = primary). */
@@ -36,21 +36,21 @@ export const groupsOfSegments = (kind: RunKind, segments: SegmentId[]) =>
 
 /** Which groups a cluster hurts: those affected by its primary signal, narrowed to those where
  * its step's drop-off is also high when that drop-off is itself a strong signal. */
-export function clusterGroups(cluster: Signal[], minSessions: number): string[] {
+export function clusterGroups(cluster: Signal[], minSessions: number, share = AFFECTED_SHARE): string[] {
   const sorted = cluster.toSorted(byPriority);
   const drop = cluster.find((s) => s.kind === "drop_off");
   // A failed form or a give-up hurts whoever leaves over it: judge those by the drop-off.
   const primary = drop?.strong && (sorted[0].kind === "failed_submit" || sorted[0].kind === "give_up") ? drop : sorted[0];
-  const a = (primary.kind === "drop_off" ? dropOffGroups(primary, minSessions) : affectedGroups(primary, minSessions)).map((g) => g.id);
+  const a = (primary.kind === "drop_off" ? dropOffGroups(primary, minSessions, share) : affectedGroups(primary, minSessions, share)).map((g) => g.id);
   if (!drop || drop === primary || !drop.strong) return a.length ? a : worst(primary);
-  const b = new Set(dropOffGroups(drop, minSessions).map((g) => g.id));
+  const b = new Set(dropOffGroups(drop, minSessions, share).map((g) => g.id));
   const both = a.filter((g) => b.has(g));
   return both.length ? both : a.length ? a : worst(primary);
 }
 
 /** Groups a drop-off hurts. With an abnormal dwell (e.g. leaving seconds after a page loads),
  * every group that shows the same pattern; otherwise the groups with the highest drop-off. */
-export function dropOffGroups(drop: Signal, minSessions: number): SignalGroup[] {
+export function dropOffGroups(drop: Signal, minSessions: number, share = AFFECTED_SHARE): SignalGroup[] {
   const d = drop.dwell;
   if (d && d.class !== "normal") {
     const same = drop.groups.filter(
@@ -62,8 +62,12 @@ export function dropOffGroups(drop: Signal, minSessions: number): SignalGroup[] 
     );
     if (same.length) return same.sort((a, b) => b.rate - a.rate);
   }
-  return affectedGroups(drop, minSessions);
+  return affectedGroups(drop, minSessions, share);
 }
+
+/** Share of the worst group's rate that makes a group "affected". A swarm is small and
+ * goal-directed, so any persona that hit the problem counts. */
+export const shareFor = (kind: RunKind) => (kind === "retest" ? 0 : AFFECTED_SHARE);
 const worst = (s: Signal) => (s.groups.toSorted((x, y) => y.rate - x.rate)[0] ? [s.groups.toSorted((x, y) => y.rate - x.rate)[0].id] : []);
 
 const sum = (gs: SignalGroup[], f: (g: SignalGroup) => number) => gs.reduce((n, g) => n + f(g), 0);
@@ -119,7 +123,7 @@ export function heuristicFindings(ctx: FindingContext, signals: Signal[]): Findi
     const sorted = cluster.toSorted(byPriority);
     const primary = sorted[0];
     const step = primary.step;
-    const groupIds = clusterGroups(cluster, minSessions);
+    const groupIds = clusterGroups(cluster, minSessions, shareFor(ctx.kind));
     const { segments, personas } = segmentsFor(ctx.kind, groupIds);
     const evidence = buildEvidence(ctx, cluster, groupIds, step);
     const ids = evidenceIds(cluster);
