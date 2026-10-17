@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PERSONAS, type FixAttempt, type FixResult, type Finding, type Metrics, type RunConfig } from "@frictionswarm/shared";
@@ -31,7 +32,9 @@ export const fakeFixLoop =
       await save();
       log(`[rehearsal] coding agent fixing ${attempt.findingIds.join(", ")}`);
       await sleep(stageDelayMs);
-      const commitSha = `rehearsal${Date.now().toString(16)}`;
+      // Hex like a real sha: the UI shows its first 7 chars ("rehears" otherwise).
+      // The branch, summary and prNumber 0 mark the attempt as a rehearsal.
+      const commitSha = randomBytes(20).toString("hex");
       Object.assign(attempt, {
         branch: `frictionswarm/rehearsal-${baselineRunId}`,
         commitSha,

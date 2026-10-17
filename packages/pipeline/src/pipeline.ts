@@ -61,7 +61,7 @@ export async function startPipeline(
   opts: StartOptions = {},
 ): Promise<{ runId: string; done: Promise<RunStatus> }> {
   validateRequest(req);
-  const deps = { ...defaultDeps(opts.runsDir), ...opts };
+  const deps = { ...defaultDeps(opts.runsDir, opts.log), ...opts };
   await reserveRun(deps.runsDir, opts.maxRunsPerDay ?? Number(process.env.MAX_RUNS_PER_DAY ?? 10));
   const runId = newRunId();
   const seedList = await allocateSeeds(deps.runsDir, req.seedsPerPersona);
@@ -141,10 +141,10 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
       clearInterval(watcher);
     }
     const last = result.attempts.at(-1);
-    const pr = last?.prNumber ? `PR #${last.prNumber}` : "rehearsal, no PR";
+    const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
     const msg =
-      last?.status === "ready" ? `Improved: ${pr} marked ready for review`
-      : last?.status === "not-proven" ? `Fix attempted, not proven: ${pr} closed`
+      last?.status === "ready" ? `Improved: ${pr ? `${pr} marked ready for review` : "fix proven (rehearsal, no PR opened)"}`
+      : last?.status === "not-proven" ? `Fix attempted, not proven: ${pr ? `${pr} closed` : "rehearsal, no PR opened"}`
       : `Fix loop ended (${last?.status ?? "no attempt"})`;
     return await set("done", msg).then(() => status);
   } catch (e) {
@@ -153,21 +153,19 @@ export async function runPipeline(runId: string, autoFix: boolean, deps: Pipelin
   }
 }
 
-/** Analyzer from @frictionswarm/analyzer, loaded lazily (built in parallel). */
-export function moduleAnalyzer(runsDir: string): Analyzer {
+/** Analyzer from @frictionswarm/analyzer, loaded lazily so a run can start
+ * before the analyzer (and the Anthropic SDKs it pulls in) is loaded. The
+ * specifier is a literal so bundlers (Next/Turbopack) can resolve it; the
+ * analyzer logs which findings path it used (agent-sdk | messages-api | heuristic). */
+export function moduleAnalyzer(runsDir: string, log?: (line: string) => void): Analyzer {
   let loaded: Promise<Analyzer> | undefined;
   return async (runId) => {
-    loaded ??= (async () => {
-      const spec = "@frictionswarm/analyzer";
-      let mod: { createAnalyzer?: (o: { runsDir: string }) => Analyzer };
-      try {
-        mod = await import(/* @vite-ignore */ spec);
-      } catch (e) {
-        throw new Error(`Analyzer unavailable: could not import ${spec} (${errMsg(e)}). Pass opts.analyze.`);
-      }
-      if (typeof mod.createAnalyzer !== "function") throw new Error(`${spec} does not export createAnalyzer`);
-      return mod.createAnalyzer({ runsDir });
-    })();
+    loaded ??= import("@frictionswarm/analyzer").then(
+      ({ createAnalyzer }) => createAnalyzer({ runsDir, log }),
+      (e) => {
+        throw new Error(`Analyzer unavailable: could not import @frictionswarm/analyzer (${errMsg(e)}). Pass opts.analyze.`);
+      },
+    );
     return (await loaded)(runId);
   };
 }
@@ -175,7 +173,7 @@ export function moduleAnalyzer(runsDir: string): Analyzer {
 /** Wiring from env: SWARM_RUNNER=replay|p2, RUNS_DIR, REPLAY_DIR, REPLAY_RETEST_DIR,
  * REPLAY_SPEED, VERIFY_BUILD=0|1, FIX_LOOP=real|fake (fake = offline rehearsal, default
  * with replay), FIX_STAGE_DELAY_MS, FIX_SHELL=tenki|local. */
-export function defaultDeps(runsDir = defaultRunsDir()): PipelineDeps {
+export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
   const runner = process.env.SWARM_RUNNER ?? "replay";
   const replayDir = process.env.REPLAY_DIR ?? join(REPO_ROOT, "runs", "fixture-baseline");
   let runSwarm: SwarmRunner;
@@ -199,7 +197,7 @@ export function defaultDeps(runsDir = defaultRunsDir()): PipelineDeps {
   return {
     runsDir,
     runSwarm,
-    analyze: moduleAnalyzer(runsDir),
+    analyze: moduleAnalyzer(runsDir, log),
     verifyBuild: async (url) => {
       if (!verify) return recordedBuildSha(replayDir);
       if (new URL(url).origin === new URL(PRODUCTION_URL).origin) return verifyProductionBuild();
