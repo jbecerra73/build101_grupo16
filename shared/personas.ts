@@ -41,7 +41,8 @@ export const typical: Persona = {
   name: "Typical shopper",
   prompt:
     "You are an ordinary online shopper on a laptop. You read the page normally " +
-    "and complete the purchase if it is reasonably possible.",
+    "and complete the purchase if it is reasonably possible. You have the promo " +
+    "code WELCOME10 and always apply it at checkout.",
   control: true,
   viewport: { width: 1280, height: 800, mobile: false },
   perception: { mode: "screenshot+a11y" },
