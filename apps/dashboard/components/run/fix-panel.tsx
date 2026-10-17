@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ArrowRight, CircleCheck, CircleSlash, CircleX, ExternalLink, Bot, Target, TriangleAlert } from "lucide-react";
 import type { Finding, PersonaComparison } from "@frictionswarm/shared";
-import { FixStatusBadge, PersonaDot } from "@/components/bits";
+import { FixStatusBadge } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ function ComparisonTable({ comparisons, targeted }: { comparisons: PersonaCompar
           <TableRow key={c.personaId}>
             <TableCell>
               <span className="flex items-center gap-2 font-medium">
-                <PersonaDot id={c.personaId} />
+                <PersonaAvatar personaId={c.personaId} size={30} label="" animate={false} mood={c.completionDeltaPts > 0 ? "success" : "idle"} />
                 {personaShort(c.personaId)}
                 {targeted.includes(c.personaId) && (
                   <Badge variant="secondary">

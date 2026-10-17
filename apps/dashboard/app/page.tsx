@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { FlaskConical, Play, Plus } from "lucide-react";
 import { FLOWS } from "@frictionswarm/shared";
-import { FixStatusBadge, PersonaDot, PhaseBadge } from "@/components/bits";
+import { FixStatusBadge, PhaseBadge } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,7 +93,7 @@ export default async function RunsPage() {
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         {r.personas.map((p) => (
                           <span key={p.personaId} className="inline-flex items-center gap-1.5">
-                            <PersonaDot id={p.personaId} />
+                            <PersonaAvatar personaId={p.personaId} size={24} label="" animate={false} />
                             <span>{personaShort(p.personaId)}</span>
                             <span className="tabular font-medium">
                               {p.completed}/{p.n}

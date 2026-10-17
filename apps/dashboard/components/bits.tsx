@@ -11,6 +11,7 @@ import {
 import type { FixStatus, RunPhase, Severity } from "@frictionswarm/shared";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { PersonaAvatar } from "@/components/persona/avatar";
 import { personaColor, personaShort, phaseLabel } from "@/lib/format";
 import type { AgentOutcome } from "@/lib/types";
 
@@ -27,8 +28,8 @@ export function PersonaDot({ id, className }: { id: string; className?: string }
 /** Persona identity: colored dot + name in text ink (text never wears the series color). */
 export function PersonaBadge({ id, suffix, className }: { id: string; suffix?: React.ReactNode; className?: string }) {
   return (
-    <Badge variant="outline" className={cn("gap-1.5", className)}>
-      <PersonaDot id={id} />
+    <Badge variant="outline" className={cn("h-6 gap-1.5 pl-0.5", className)}>
+      <PersonaAvatar personaId={id} size={20} label="" animate={false} />
       {personaShort(id)}
       {suffix}
     </Badge>

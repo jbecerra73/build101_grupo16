@@ -1,10 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CircleX, Play, Radio, Square } from "lucide-react";
-import type { Event, RunPhase } from "@frictionswarm/shared";
-import { FixStatusBadge, PersonaDot } from "@/components/bits";
+import { useEffect, useMemo, useState } from "react";
+import { CircleX, Cpu, LayoutGrid, Map as MapIcon, Play, Presentation, Radio, Square } from "lucide-react";
+import type { RunPhase } from "@frictionswarm/shared";
+import { FixStatusBadge } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
+import { SwarmMap } from "@/components/swarm/swarm-map";
+import { SwarmMonitor } from "@/components/swarm/swarm-monitor";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useReplay } from "@/lib/hooks/use-replay";
+import { usePoll } from "@/lib/hooks/use-poll";
+import { getRun } from "@/lib/client/api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +29,7 @@ import { PhaseStepper } from "./phase-stepper";
 import { ReplayControls } from "./replay-controls";
 import { Findings, Funnels, GiveUps, PersonaKpis } from "./report";
 
-const POLL_MS = 1500;
+const POLL_MS = 1000;
 
 function Section({ id, title, aside, children }: { id: string; title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -63,44 +70,6 @@ function usePolledRun(initial: RunDetail, enabled: boolean) {
     };
   }, [live, initial.runId]);
   return { run, live, error };
-}
-
-function useReplay(events: Event[], enabled: boolean) {
-  const t0 = events[0]?.ts ?? 0;
-  const length = events.length ? events.at(-1)!.ts - t0 : 0;
-  const [pos, setPos] = useState(0);
-  const [playing, setPlaying] = useState(enabled && events.length > 0);
-  const [speed, setSpeed] = useState(4);
-  const last = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!enabled || !playing) return;
-    // A timer (not rAF) so playback also advances in background tabs and headless capture.
-    last.current = performance.now();
-    const t = setInterval(() => {
-      const now = performance.now();
-      const dt = now - (last.current ?? now);
-      last.current = now;
-      setPos((p) => Math.min(length, p + dt * speed));
-    }, 50);
-    return () => {
-      clearInterval(t);
-      last.current = null;
-    };
-  }, [enabled, playing, speed, length]);
-
-  useEffect(() => {
-    if (playing && pos >= length) setPlaying(false);
-  }, [playing, pos, length]);
-
-  const shown = useMemo(() => {
-    const cut = t0 + pos;
-    let i = 0;
-    while (i < events.length && events[i].ts <= cut) i++;
-    return i;
-  }, [events, pos, t0]);
-
-  return { pos, setPos, playing, setPlaying, speed, setSpeed, length, shown, atEnd: pos >= length };
 }
 
 export function RunView({ initial, replay }: { initial: RunDetail; replay: boolean }) {
@@ -145,22 +114,59 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
   const fixFirst = !replay && status.phase === "done" && !!run.fix;
   const showFix = !!view.fix || fixPhase;
 
+  // During the retest the map follows swarm #2 (the retest run on the preview).
+  const retestId = status.retestRunId ?? latestFix?.retestRunId;
+  const retestLive = !replay && ["retesting", "comparing"].includes(status.phase) && !!retestId;
+  const retest = usePoll(() => getRun(retestId!), POLL_MS, retestLive).data;
+  const swarm = retestLive && retest?.agents.length
+    ? { agents: retest.agents, metrics: retest.metrics ?? retest.provisionalMetrics, runId: retest.runId, second: true }
+    : { agents: view.agents, metrics: view.metrics, runId: config.runId, second: false };
+  const swarmLive = replay ? r.playing || !r.atEnd : retestLive || live;
+
   const agentsSection = (
     <Section
       key="agents"
       id="agents"
-      title="Agents"
+      title={swarm.second ? "Swarm #2 · retest on the preview" : "Swarm"}
       aside={
-        view.phase === "swarming" && (
+        (view.phase === "swarming" || swarm.second) && (
           <Badge variant="outline">
             <Spinner data-icon="inline-start" />
-            swarming
+            {swarm.second ? "retesting with fresh seeds" : "swarming"}
           </Badge>
         )
       }
     >
-      {view.agents.length ? (
-        <LiveGrid runId={config.runId} agents={view.agents} />
+      {swarm.agents.length ? (
+        <Tabs defaultValue="map" className="gap-4">
+          <TabsList className="h-10">
+            <TabsTrigger value="map" className="px-3 text-base">
+              <MapIcon data-icon="inline-start" />
+              Swarm map
+            </TabsTrigger>
+            <TabsTrigger value="sandboxes" className="px-3 text-base">
+              <Cpu data-icon="inline-start" />
+              Sandboxes
+            </TabsTrigger>
+            <TabsTrigger value="grid" className="px-3 text-base">
+              <LayoutGrid data-icon="inline-start" />
+              Agent screens
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="map">
+            <Card>
+              <CardContent>
+                <SwarmMap agents={swarm.agents} metrics={swarm.metrics} flow={flow} live={swarmLive} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="sandboxes">
+            <SwarmMonitor runId={swarm.runId} agents={swarm.agents} live={swarmLive} derived={replay} />
+          </TabsContent>
+          <TabsContent value="grid">
+            <LiveGrid runId={swarm.runId} agents={swarm.agents} />
+          </TabsContent>
+        </Tabs>
       ) : (
         <Empty className="border">
           <EmptyHeader>
@@ -243,7 +249,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
 
   const sections = fixFirst ? [fixSection, reportSection, agentsSection] : [agentsSection, reportSection, fixSection];
   const navItems: [string, string][] = [
-    ["agents", "Agents"],
+    ["agents", "Swarm"],
     ["report", "Report"],
     ...(showFix ? ([["fix", "Fix & retest"]] as [string, string][]) : []),
   ];
@@ -276,7 +282,7 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
               <span className="flex items-center gap-3">
                 {config.personaIds.map((p) => (
                   <span key={p} className="flex items-center gap-1.5">
-                    <PersonaDot id={p} />
+                    <PersonaAvatar personaId={p} size={26} label="" animate={false} />
                     {personaShort(p)} <span className="tabular text-foreground">×{config.seeds[p]?.length ?? 0}</span>
                   </span>
                 ))}
@@ -295,6 +301,12 @@ export function RunView({ initial, replay }: { initial: RunDetail; replay: boole
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href={`/pitch?run=${encodeURIComponent(config.kind === "retest" && config.baselineRunId ? config.baselineRunId : config.runId)}`}>
+                <Presentation data-icon="inline-start" />
+                Pitch mode
+              </Link>
+            </Button>
             {replay ? (
               <Button variant="outline" asChild>
                 <Link href={`/runs/${config.runId}`}>

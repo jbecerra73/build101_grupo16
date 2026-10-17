@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Lock, Rocket, ShieldCheck, TriangleAlert } from "lucide-react";
 import { FLOWS, PERSONAS, type StartRunRequest } from "@frictionswarm/shared";
-import { PersonaDot } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
 import { PersonaConstraints } from "@/components/persona-constraints";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -151,8 +151,8 @@ export function NewRunForm() {
                     style={{ borderTopColor: `var(--persona-${p.id}, var(--persona-other))` }}
                   >
                     <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <PersonaDot id={p.id} className="size-3" />
+                      <CardTitle className="flex items-center gap-3 text-base">
+                        <PersonaAvatar personaId={p.id} size={48} mood={on ? "running" : "idle"} label="" />
                         {p.name}
                       </CardTitle>
                       <CardDescription className="line-clamp-3">{p.prompt}</CardDescription>

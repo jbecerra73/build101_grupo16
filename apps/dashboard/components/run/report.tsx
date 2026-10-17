@@ -2,7 +2,8 @@
 
 import { CircleX, Lock, MousePointerClick, Quote, Users, Wrench } from "lucide-react";
 import type { Finding, Flow, Metrics, PersonaMetrics, Severity } from "@frictionswarm/shared";
-import { PersonaBadge, PersonaDot, SeverityBadge } from "@/components/bits";
+import { PersonaBadge, SeverityBadge } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,8 +31,8 @@ function PersonaKpi({ m }: { m: PersonaMetrics }) {
     <Card className="border-t-4" style={{ borderTopColor: personaColor(m.personaId) }}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <PersonaDot id={m.personaId} className="size-3" />
-          {personaShort(m.personaId)}
+          <PersonaAvatar personaId={m.personaId} size={40} label="" mood={m.completed === m.n && m.n ? "success" : m.gaveUp ? "gave-up" : "idle"} animate={false} />
+          <span className="text-lg">{personaShort(m.personaId)}</span>
           <span className="tabular font-normal text-muted-foreground">N={m.n}</span>
         </CardTitle>
       </CardHeader>
@@ -69,7 +70,7 @@ function FunnelChart({ m, required }: { m: PersonaMetrics; required: Set<string>
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 font-medium">
-        <PersonaDot id={m.personaId} className="size-3" />
+        <PersonaAvatar personaId={m.personaId} size={28} label="" animate={false} />
         {personaShort(m.personaId)}
         <span className="tabular text-sm font-normal text-muted-foreground">N={m.n}</span>
       </div>
@@ -235,7 +236,8 @@ export function Findings({ findings, runId, fixedIds }: { findings: Finding[]; r
 
 function QuoteLine({ personaId, agentId, text }: { personaId: string; agentId: string; text: string }) {
   return (
-    <blockquote className="flex gap-2 border-l-4 pl-3" style={{ borderLeftColor: personaColor(personaId) }}>
+    <blockquote className="flex items-start gap-2.5 border-l-4 pl-3" style={{ borderLeftColor: personaColor(personaId) }}>
+      <PersonaAvatar personaId={personaId} size={30} mood="gave-up" label="" animate={false} className="mt-0.5" />
       <span className="flex flex-col">
         <span className="italic">“{text}”</span>
         <span className="text-xs text-muted-foreground">

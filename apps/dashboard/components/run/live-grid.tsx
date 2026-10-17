@@ -2,7 +2,9 @@
 
 import { Quote } from "lucide-react";
 import { PERSONAS } from "@frictionswarm/shared";
-import { OUTCOME, OutcomeBadge, PersonaDot } from "@/components/bits";
+import { OUTCOME, OutcomeBadge } from "@/components/bits";
+import { PersonaAvatar } from "@/components/persona/avatar";
+import { moodOf } from "@/lib/client/mood";
 import { personaColor, personaShort } from "@/lib/format";
 import type { AgentOutcome, AgentState } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,7 +42,7 @@ function AgentTile({ runId, a }: { runId: string; a: AgentState }) {
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex shrink-0 items-center gap-1.5 text-sm font-medium whitespace-nowrap">
-            <PersonaDot id={a.personaId} />
+            <PersonaAvatar personaId={a.personaId} mood={moodOf(a)} size={28} seed={a.seed} label="" />
             {personaShort(a.personaId)} <span className="text-muted-foreground">#{a.seed}</span>
           </span>
           <span className={cn("min-w-0 truncate text-right text-sm", finished ? "text-muted-foreground" : "font-medium")}>{a.step ?? "Starting…"}</span>
@@ -72,7 +74,7 @@ export function LiveGrid({ runId, agents }: { runId: string; agents: AgentState[
           <section key={pid} className="flex flex-col gap-3" aria-label={`${personaShort(pid)} agents`}>
             <header className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <h3 className="flex items-center gap-2 text-lg font-semibold">
-                <PersonaDot id={pid} className="size-3" />
+                <PersonaAvatar personaId={pid} size={36} label="" animate={false} />
                 {PERSONAS[pid]?.name ?? pid}
               </h3>
               <span className="tabular text-muted-foreground">N={mine.length}</span>
