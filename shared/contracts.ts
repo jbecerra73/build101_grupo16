@@ -33,7 +33,10 @@ export type Persona = {
     hideHoverOnly?: boolean;
   };
   actions: {
+    /** Upper bound on actions; with maxActionsRange, the per-agent budget (see actionBudget). */
     maxActions: number;
+    /** Inclusive [min, max]: each agent's budget is drawn from it by seed. */
+    maxActionsRange?: [number, number];
     /** Tap targets smaller than this (either dimension) register as misses. */
     minTapTargetPx?: number;
     /** Give up after this many failed attempts at the same target. */
