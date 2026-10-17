@@ -158,3 +158,20 @@
     font-variant-numeric: tabular-nums;
   }
 }
+/* Persona avatar idle loops (components/persona/avatar.tsx). Transform only. */
+@keyframes fs-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes fs-wobble {
+  0%, 45%, 100% { transform: rotate(0deg); }
+  9% { transform: rotate(-10deg); }
+  18% { transform: rotate(9deg); }
+  27% { transform: rotate(-6deg); }
+  36% { transform: rotate(4deg); }
+}
+.fs-bob { animation: fs-bob 1.5s ease-in-out infinite; }
+.fs-wobble { animation: fs-wobble 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .fs-bob, .fs-wobble { animation: none; }
+}
