@@ -1,0 +1,48 @@
+[
+  {
+    "id": "T1",
+    "title": "Could not see how to continue to payment",
+    "personas": [
+      "rosa"
+    ],
+    "agentCount": 1,
+    "quotes": [
+      {
+        "personaId": "rosa",
+        "agentId": "rosa-1",
+        "text": "I can't find how to continue to payment. There is no button I can read."
+      },
+      {
+        "personaId": "rosa",
+        "agentId": "rosa-1",
+        "text": "I filled everything in but I can't find a button to go on."
+      }
+    ],
+    "findingIds": [
+      "F1"
+    ]
+  },
+  {
+    "id": "T2",
+    "title": "Refused a forced sign-up on mobile",
+    "personas": [
+      "kai"
+    ],
+    "agentCount": 1,
+    "quotes": [
+      {
+        "personaId": "kai",
+        "agentId": "kai-1",
+        "text": "Forced to create an account with 9 fields. Not doing that on my phone."
+      },
+      {
+        "personaId": "kai",
+        "agentId": "kai-1",
+        "text": "9 fields just to buy a shirt?? no way"
+      }
+    ],
+    "findingIds": [
+      "F2"
+    ]
+  }
+]

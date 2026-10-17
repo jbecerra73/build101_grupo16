@@ -1,20 +1,34 @@
-// Generates dashboard fixtures next to runs/fixture-baseline (which is not modified,
-// except for adding status.json and fix.json). Usage: node gen-fixtures.mjs <repoRoot>
+// Generates the dashboard fixtures next to runs/fixture-baseline. The baseline's
+// events, config and findings are not modified; it gets status.json, fix.json,
+// themes.json and real screenshots. Usage (tsx, because it imports the analyzer):
+//   npx tsx apps/dashboard/scripts/gen-fixtures.mjs
+// Screenshots come from scripts/shots/<persona>/<page>.png (real captures of the
+// production storefront, see capture-screenshots.mjs), picked by each event's
+// persona and URL. metrics.json is computed by the analyzer, and every agent stays
+// within its seeded action budget (actionBudget), so the analyzer counts the
+// fixtures exactly as written.
 import { copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { computeMetrics, readRun, sanitizeThemes, validateCompletion } from "@frictionswarm/analyzer";
+import { actionBudget, buyTshirt, PERSONAS } from "@frictionswarm/shared";
 
-const ROOT = process.argv[2];
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(process.argv[2] ?? join(HERE, "..", "..", ".."));
 const RUNS = join(ROOT, "runs");
 const BASE = join(RUNS, "fixture-baseline");
+const SHOTS = join(HERE, "shots");
 const SITE = "https://swarm-ecommerce.netlify.app";
-const FUNNEL = ["Home", "Browse", "Product", "Cart", "Account", "Shipping", "Payment", "Confirmation"];
-const REQUIRED = ["Cart", "Shipping", "Payment", "Confirmation"];
+const PRODUCT = "/shop/product/1/T-shirt-with-Tape-Details";
 const STEP_OF = {
-  "/": "Home", "/shop": "Browse", "/shop/product/1/T-shirt-with-Tape-Details": "Product",
+  "/": "Home", "/shop": "Browse", [PRODUCT]: "Product",
   "/cart": "Cart", "/checkout/account": "Account", "/checkout": "Shipping",
   "/checkout?step=payment": "Payment", "/checkout/success": "Confirmation",
 };
-const PRODUCT = "/shop/product/1/T-shirt-with-Tape-Details";
+const PAGE_OF = {
+  "/": "home", "/shop": "shop", [PRODUCT]: "product", "/cart": "cart", "/checkout/account": "account",
+  "/checkout": "checkout", "/checkout?step=payment": "payment", "/checkout/success": "success",
+};
 
 const json = (p, v) => writeFileSync(p, JSON.stringify(v, null, 2) + "\n");
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
@@ -31,8 +45,25 @@ function url(runId, path) {
   return `${SITE}${p}?${q ? q + "&" : ""}swarm=${runId}`;
 }
 
-/** Tiny script DSL → events + screenshots copied from the baseline. */
-function agent(runId, personaId, seed, t0, script, shotsFrom) {
+/** The captured screenshot for an event: persona look × page of its URL. */
+function shotFor(e) {
+  const u = new URL(e.url);
+  const step = u.searchParams.get("step");
+  const page = PAGE_OF[u.pathname + (step ? `?step=${step}` : "")];
+  if (!page) throw new Error(`No captured page for ${e.url}`);
+  return join(SHOTS, e.personaId, `${page}.png`);
+}
+
+/** Copy the captured screenshot of every event that references one into the run folder. */
+function copyShots(dir, agents) {
+  rmSync(join(dir, "screenshots"), { recursive: true, force: true });
+  mkdirSync(join(dir, "screenshots"), { recursive: true });
+  for (const evs of Object.values(agents))
+    for (const e of evs) if (e.screenshot) copyFileSync(shotFor(e), join(dir, e.screenshot));
+}
+
+/** Tiny script DSL → events (screenshots named <agentId>-NNN.png). */
+function agent(runId, personaId, seed, t0, script) {
   const agentId = `${personaId}-${seed}`;
   const out = [];
   let ts = t0, path = "/", shot = 0;
@@ -40,16 +71,10 @@ function agent(runId, personaId, seed, t0, script, shotsFrom) {
   for (const [kind, a, b] of script) {
     if (kind === "view") {
       path = a;
-      const file = `screenshots/${agentId}-${String(shot).padStart(3, "0")}.png`;
-      shotsFrom.push([b, file]);
-      shot++;
-      out.push({ ...base(), type: "page_view", screenshot: file });
+      out.push({ ...base(), type: "page_view", screenshot: `screenshots/${agentId}-${String(shot++).padStart(3, "0")}.png` });
       ts += 1500;
     } else if (kind === "click") {
       out.push({ ...base(), type: "action", action: { kind: "click", selector: a, text: b } });
-      ts += 1500;
-    } else if (kind === "miss") {
-      out.push({ ...base(), type: "action", action: { kind: "click", selector: a, text: b, missed: true } });
       ts += 1500;
     } else if (kind === "type") {
       out.push({ ...base(), type: "action", action: { kind: "type", selector: `#${a}`, text: b, field: a } });
@@ -57,14 +82,12 @@ function agent(runId, personaId, seed, t0, script, shotsFrom) {
     } else if (kind === "think") {
       out.push({ ...base(), type: "think_aloud", note: a });
       ts += 1200;
-    } else if (kind === "give_up") {
-      out.push({ ...base(), type: "give_up", note: a });
     } else if (kind === "success") {
       out.push({
         ...base(), type: "success",
         confirmation: { email: "ana@example.com", address: "123 Main St, Springfield 12345, United States", cardLast4: "4242" },
       });
-    } else if (kind === "wait") ts += a;
+    }
   }
   return out;
 }
@@ -74,101 +97,125 @@ const shippingFields = [
   ["type", "city", "Springfield"], ["type", "postalCode", "12345"], ["type", "country", "United States"],
 ];
 
-function metricsFor(runId, buildSha, personaIds, agents) {
-  const median = (xs) => {
-    if (!xs.length) return 0;
-    const s = [...xs].sort((a, b) => a - b), m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-  };
-  return {
-    runId, flowId: "buy-tshirt", buildSha,
-    personas: personaIds.map((pid) => {
-      const mine = Object.values(agents).filter((evs) => evs[0].personaId === pid);
-      const valid = (evs) => {
-        const s = evs.at(-1);
-        const steps = new Set(evs.map((e) => e.step));
-        return s.type === "success" && REQUIRED.every((r) => steps.has(r)) && s.confirmation?.cardLast4;
-      };
-      const ok = mine.filter(valid);
-      const invalid = mine.filter((e) => e.at(-1).type === "success" && !valid(e));
-      return {
-        personaId: pid, n: mine.length, completed: ok.length, completionRate: ok.length / mine.length,
-        gaveUp: mine.filter((e) => e.at(-1).type === "give_up").length,
-        invalidCompletions: invalid.length,
-        medianSteps: median(ok.map((e) => e.filter((x) => x.type === "action").length)),
-        medianTimeMs: median(ok.map((e) => e.at(-1).ts - e[0].ts)),
-        funnel: FUNNEL.map((step) => ({
-          step,
-          reached: mine.filter((e) => e.some((x) => x.step === step)).length,
-          droppedHere: mine.filter((e) => !valid(e) && e.findLast((x) => x.step)?.step === step).length,
-        })),
-      };
-    }),
-  };
-}
-
-function writeRun(dir, config, agents, shots, srcDir) {
+function writeRun(dir, config, agents) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, "events"), { recursive: true });
-  mkdirSync(join(dir, "screenshots"), { recursive: true });
   json(join(dir, "config.json"), config);
   for (const [id, evs] of Object.entries(agents))
     writeFileSync(join(dir, "events", `${id}.jsonl`), evs.map((e) => JSON.stringify(e)).join("\n") + "\n");
-  for (const [src, dst] of shots) copyFileSync(join(srcDir, src), join(dir, dst));
+  copyShots(dir, agents);
 }
 
-// ---------------------------------------------------------------- baseline additions
+/** metrics.json = what the analyzer computes; fail loudly if an agent breaks its budget. */
+function analyzerMetrics(dir) {
+  const run = readRun(dir);
+  for (const evs of run.byAgent.values()) {
+    const n = evs.filter((e) => e.type === "action").length;
+    const budget = actionBudget(PERSONAS[evs[0].personaId], evs[0].seed);
+    if (n > budget) throw new Error(`${dir}: ${evs[0].agentId} took ${n} actions, budget ${budget}`);
+  }
+  const metrics = computeMetrics(run.config, buyTshirt, run.events);
+  json(join(dir, "metrics.json"), metrics);
+  return { run, metrics };
+}
+
+/** Hand-written themes (like the hand-written findings), validated by the analyzer's own rules. */
+function writeThemes(dir, themes, findingIds) {
+  const run = readRun(dir);
+  const out = sanitizeThemes(themes, run.events, new Map(findingIds.map((id) => [id, id])));
+  const quotes = (ts) => ts.reduce((n, t) => n + t.quotes.length, 0);
+  if (out.length !== themes.length || quotes(out) !== quotes(themes)) throw new Error(`${dir}: a theme quote is not in the agent's notes`);
+  json(join(dir, "themes.json"), out);
+}
+
+const BASELINE_THEMES = [
+  {
+    title: "Could not see how to continue to payment",
+    agentIds: ["rosa-1"],
+    quotes: [
+      { agentId: "rosa-1", text: "I can't find how to continue to payment. There is no button I can read." },
+      { agentId: "rosa-1", text: "I filled everything in but I can't find a button to go on." },
+    ],
+    findingIds: ["F1"],
+  },
+  {
+    title: "Refused a forced sign-up on mobile",
+    agentIds: ["kai-1"],
+    quotes: [
+      { agentId: "kai-1", text: "Forced to create an account with 9 fields. Not doing that on my phone." },
+      { agentId: "kai-1", text: "9 fields just to buy a shirt?? no way" },
+    ],
+    findingIds: ["F2"],
+  },
+];
+
+// ---------------------------------------------------------------- fixture-baseline (screenshots, themes)
 const baseMetrics = readJson(join(BASE, "metrics.json"));
 const baseConfig = readJson(join(BASE, "config.json"));
+copyShots(BASE, readEvents(BASE));
+writeThemes(BASE, BASELINE_THEMES, ["F1", "F2", "F3"]);
 
 // ---------------------------------------------------------------- fixture-retest
 {
   const runId = "fixture-retest";
   const t0 = 1792269000000;
-  const shots = [];
   const rosaScript = [
-    ["view", "/", "screenshots/rosa-1-000.png"], ["click", "a[href='/shop']", "Shop Now"],
-    ["view", "/shop", "screenshots/rosa-1-001.png"], ["click", "a[href^='/shop/product/1']", "T-shirt with Tape Details"],
-    ["view", PRODUCT, "screenshots/rosa-1-002.png"], ["click", "button[data-size='Medium']", "Medium"],
+    ["view", "/"], ["click", "a[href='/shop']", "Shop Now"],
+    ["view", "/shop"], ["click", "a[href^='/shop/product/1']", "T-shirt with Tape Details"],
+    ["view", PRODUCT], ["click", "button[data-size='Medium']", "Medium"],
     ["click", "button:has-text('Add to Cart')", "Add to Cart"], ["click", "a[href='/cart']", "Cart"],
-    ["view", "/cart", "screenshots/rosa-1-003.png"], ["click", "a[href='/checkout']", "Go to Checkout"],
-    ["view", "/checkout", "screenshots/rosa-1-004.png"], ...shippingFields,
+    ["view", "/cart"], ["click", "a[href='/checkout']", "Go to Checkout"],
+    ["view", "/checkout"], ...shippingFields,
     ["think", "There is a big blue button that says Continue to payment. Good, I can read that."],
     ["click", "button:has-text('Continue to payment')", "Continue to payment"],
-    ["view", "/checkout?step=payment", "screenshots/typical-1-005.png"],
+    ["view", "/checkout?step=payment"],
     ["type", "cardNumber", "4242 4242 4242 4242"], ["click", "button[type=submit]", "Pay $120"],
-    ["view", "/checkout/success", "screenshots/typical-1-006.png"], ["success"],
+    ["view", "/checkout/success"], ["success"],
   ];
-  const kaiScript = (seed) => [
-    ["view", "/cart", "screenshots/kai-1-001.png"], ["click", "a[href='/checkout']", "Go to Checkout"],
-    ["view", "/checkout", "screenshots/typical-1-004.png"],
-    ["think", seed === 11 ? "oh nice, guest checkout. no account needed" : "no sign up wall this time, ok"],
-    // Every required field is typed: a "Use saved address" shortcut would make
-    // the completion invalid for the analyzer (SPEC validity) and fail the verdict.
+  // Kai's budget is drawn from 8–12 by seed. Seed 11 gets 10: room for the buttons.
+  // Every required field is typed: a "Use saved address" shortcut would make the
+  // completion invalid for the analyzer (SPEC validity) and fail the verdict.
+  const kaiButtons = [
+    ["view", "/cart"], ["click", "a[href='/checkout']", "Go to Checkout"],
+    ["view", "/checkout"], ["think", "oh nice, guest checkout. no account needed"],
     ...shippingFields,
     ["click", "button:has-text('Continue to payment')", "Continue to payment"],
-    ["view", "/checkout?step=payment", "screenshots/typical-1-005.png"],
+    ["view", "/checkout?step=payment"],
     ["type", "cardNumber", "4242 4242 4242 4242"], ["click", "button[type=submit]", "Pay $120"],
-    ["view", "/checkout/success", "screenshots/kai-2-001.png"], ["success"],
+    ["view", "/checkout/success"], ["success"],
+  ];
+  // Seed 12 also gets 10, but this agent submits each form with the phone keyboard's
+  // Go key: 8 actions, so the replay runner can reuse it for seeds with a budget of 8.
+  const kaiKeyboard = [
+    ["view", "/cart"], ["click", "a[href='/checkout']", "Go to Checkout"],
+    ["view", "/checkout"], ["think", "no sign up wall this time, ok"],
+    ...shippingFields,
+    ["view", "/checkout?step=payment"], ["think", "hit go on the keyboard, it moved on"],
+    ["type", "cardNumber", "4242 4242 4242 4242"],
+    ["view", "/checkout/success"], ["success"],
   ];
   const typicalScript = [
-    ["view", "/", "screenshots/typical-1-000.png"], ["click", "a[href='/shop']", "Shop Now"],
-    ["view", "/shop", "screenshots/typical-1-001.png"], ["click", "a[href^='/shop/product/1']", "T-shirt with Tape Details"],
-    ["view", PRODUCT, "screenshots/typical-1-002.png"], ["click", "button[data-size='Medium']", "Medium"],
+    ["view", "/"], ["click", "a[href='/shop']", "Shop Now"],
+    ["view", "/shop"], ["click", "a[href^='/shop/product/1']", "T-shirt with Tape Details"],
+    ["view", PRODUCT], ["click", "button[data-size='Medium']", "Medium"],
     ["click", "button:has-text('Add to Cart')", "Add to Cart"], ["click", "a[href='/cart']", "Cart"],
-    ["view", "/cart", "screenshots/typical-1-003.png"], ["click", "a[href='/checkout']", "Go to Checkout"],
-    ["view", "/checkout", "screenshots/typical-1-004.png"], ...shippingFields,
+    ["view", "/cart"], ["click", "a[href='/checkout']", "Go to Checkout"],
+    ["view", "/checkout"], ...shippingFields,
     ["click", "button:has-text('Continue to payment')", "Continue to payment"],
-    ["view", "/checkout?step=payment", "screenshots/typical-1-005.png"],
+    ["view", "/checkout?step=payment"],
     ["type", "cardNumber", "4242 4242 4242 4242"], ["click", "button[type=submit]", "Pay $120"],
-    ["view", "/checkout/success", "screenshots/typical-1-006.png"], ["success"],
+    ["view", "/checkout/success"], ["success"],
   ];
   const agents = {
-    "rosa-11": agent(runId, "rosa", 11, t0 + 200, rosaScript, shots),
-    "kai-11": agent(runId, "kai", 11, t0 + 400, kaiScript(11), shots),
-    "kai-12": agent(runId, "kai", 12, t0 + 900, kaiScript(12), shots),
-    "typical-11": agent(runId, "typical", 11, t0 + 300, typicalScript, shots),
+    "rosa-11": agent(runId, "rosa", 11, t0 + 200, rosaScript),
+    "kai-11": agent(runId, "kai", 11, t0 + 400, kaiButtons),
+    "kai-12": agent(runId, "kai", 12, t0 + 900, kaiKeyboard),
+    "typical-11": agent(runId, "typical", 11, t0 + 300, typicalScript),
   };
+  for (const [id, evs] of Object.entries(agents)) {
+    const v = validateCompletion(buyTshirt, evs);
+    if (!v.valid) throw new Error(`${runId}/${id} is not a valid completion: ${v.reasons.join("; ")}`);
+  }
   const config = {
     runId, kind: "retest", flowId: "buy-tshirt", personaIds: ["rosa", "kai", "typical"],
     seeds: { rosa: [11], kai: [11, 12], typical: [11] },
@@ -176,17 +223,18 @@ const baseConfig = readJson(join(BASE, "config.json"));
     buildSha: "c0ffee1fixture", baselineRunId: "fixture-baseline",
     createdAt: new Date(t0).toISOString(),
   };
-  writeRun(join(RUNS, runId), config, agents, shots, BASE);
-  const metrics = metricsFor(runId, config.buildSha, config.personaIds, agents);
-  json(join(RUNS, runId, "metrics.json"), metrics);
-  json(join(RUNS, runId, "findings.json"), [
+  const dir = join(RUNS, runId);
+  writeRun(dir, config, agents);
+  const { metrics } = analyzerMetrics(dir);
+  json(join(dir, "findings.json"), [
     {
-      id: "F1", severity: "low", personas: ["kai"], step: "Product", page: "/shop/product/*",
-      selector: "button[data-size='Medium']", title: "Size buttons are still small on mobile",
-      evidence: { screenshots: ["screenshots/kai-11-000.png"], quotes: [], agentCount: 1 },
-      suggestedFix: "Make size buttons at least 44x44px.",
+      id: "F1", severity: "low", personas: ["kai"], step: "Shipping", page: "/checkout",
+      selector: "button:has-text('Continue to payment')", title: "Continue button sits below the fold on mobile",
+      evidence: { screenshots: ["screenshots/kai-11-001.png"], quotes: [], agentCount: 1 },
+      suggestedFix: "Keep the Continue button visible (sticky footer) while the shipping form is open on small screens.",
     },
   ]);
+  json(join(dir, "themes.json"), []);
 
   // Verdict lives in the baseline's fix.json.
   const comparisons = config.personaIds.map((pid) => {
@@ -237,16 +285,10 @@ const baseConfig = readJson(join(BASE, "config.json"));
     ]),
   );
   const dir = join(RUNS, runId);
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(join(dir, "events"), { recursive: true });
-  mkdirSync(join(dir, "screenshots"), { recursive: true });
-  for (const f of readdirSync(join(BASE, "screenshots"))) copyFileSync(join(BASE, "screenshots", f), join(dir, "screenshots", f));
-  for (const [id, evs] of Object.entries(agents))
-    writeFileSync(join(dir, "events", `${id}.jsonl`), evs.map((e) => JSON.stringify(e)).join("\n") + "\n");
-  json(join(dir, "config.json"), { ...baseConfig, runId, createdAt: new Date(Object.values(agents)[0][0].ts - 2000).toISOString() });
-  const metrics = metricsFor(runId, baseConfig.buildSha, baseConfig.personaIds, agents);
-  json(join(dir, "metrics.json"), metrics);
+  writeRun(dir, { ...baseConfig, runId, createdAt: new Date(Object.values(agents)[0][0].ts - 2000).toISOString() }, agents);
+  const { metrics } = analyzerMetrics(dir);
   json(join(dir, "findings.json"), readJson(join(BASE, "findings.json")));
+  writeThemes(dir, BASELINE_THEMES, ["F1", "F2", "F3"]);
   const before = (pid) => metrics.personas.find((p) => p.personaId === pid);
   const after = (pid, patch) => ({ ...before(pid), ...patch });
   const cmp = (pid, patch, regressions = []) => {
@@ -308,7 +350,6 @@ const baseConfig = readJson(join(BASE, "config.json"));
 {
   const runId = "fixture-live";
   const src = readEvents(BASE);
-  const shots = [];
   const plan = [
     ["rosa", 1, "rosa-1", 22], ["rosa", 2, "rosa-1", 13], ["rosa", 3, "rosa-1", 6],
     ["kai", 1, "kai-1", 10], ["kai", 2, "kai-1", 6], ["kai", 3, "kai-1", 3],
@@ -322,11 +363,7 @@ const baseConfig = readJson(join(BASE, "config.json"));
     const offset = t0 + seed * 700 - tplEvents[0].ts;
     agents[agentId] = tplEvents.slice(0, len).map((e) => {
       const out = { ...e, runId, agentId, seed, ts: e.ts + offset, url: e.url?.replace("swarm=fixture-baseline", `swarm=${runId}`) };
-      if (e.screenshot) {
-        const dst = e.screenshot.replace(`${tpl}-`, `${agentId}-`);
-        shots.push([e.screenshot, dst]);
-        out.screenshot = dst;
-      }
+      if (e.screenshot) out.screenshot = e.screenshot.replace(`${tpl}-`, `${agentId}-`);
       return out;
     });
   }
@@ -335,11 +372,16 @@ const baseConfig = readJson(join(BASE, "config.json"));
     seeds: { rosa: [1, 2, 3], kai: [1, 2, 3], typical: [1, 2, 3] },
     targetUrl: SITE, buildSha: "f00dfeedfixture", createdAt: new Date(t0 - 4000).toISOString(),
   };
-  writeRun(join(RUNS, runId), config, agents, shots, BASE);
+  const dir = join(RUNS, runId);
+  writeRun(dir, config, agents);
+  for (const evs of Object.values(agents)) {
+    const n = evs.filter((e) => e.type === "action").length;
+    if (n > actionBudget(PERSONAS[evs[0].personaId], evs[0].seed)) throw new Error(`${runId}/${evs[0].agentId} is over budget`);
+  }
   // Simulate a partially written last line, as happens while the worker is writing.
-  writeFileSync(join(RUNS, runId, "events", "typical-3.jsonl"),
-    readFileSync(join(RUNS, runId, "events", "typical-3.jsonl"), "utf8") + '{"runId":"fixture-live","agentId":"typ');
-  json(join(RUNS, runId, "status.json"), {
+  writeFileSync(join(dir, "events", "typical-3.jsonl"),
+    readFileSync(join(dir, "events", "typical-3.jsonl"), "utf8") + '{"runId":"fixture-live","agentId":"typ');
+  json(join(dir, "status.json"), {
     runId, phase: "swarming", updatedAt: new Date(t0 + 30000).toISOString(),
     message: "Swarm #1: 9 agents on 2 tenki sandboxes",
   });

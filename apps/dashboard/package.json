@@ -9,6 +9,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@frictionswarm/analyzer": "*",
     "@frictionswarm/pipeline": "*",
     "@frictionswarm/shared": "*",
     "class-variance-authority": "^0.7.1",
@@ -27,6 +28,7 @@
     "@types/node": "^22.20.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "playwright": "^1.48.2",
     "tailwindcss": "^4",
     "typescript": "^5.9.3"
   }

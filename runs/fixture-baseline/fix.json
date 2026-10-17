@@ -107,11 +107,6 @@
                   "droppedHere": 0
                 },
                 {
-                  "step": "Account",
-                  "reached": 0,
-                  "droppedHere": 0
-                },
-                {
                   "step": "Shipping",
                   "reached": 1,
                   "droppedHere": 0
@@ -192,8 +187,8 @@
               "completionRate": 1,
               "gaveUp": 0,
               "invalidCompletions": 0,
-              "medianSteps": 10,
-              "medianTimeMs": 25700,
+              "medianSteps": 9,
+              "medianTimeMs": 24800,
               "funnel": [
                 {
                   "step": "Home",
@@ -213,11 +208,6 @@
                 {
                   "step": "Cart",
                   "reached": 2,
-                  "droppedHere": 0
-                },
-                {
-                  "step": "Account",
-                  "reached": 0,
                   "droppedHere": 0
                 },
                 {
@@ -322,11 +312,6 @@
                 {
                   "step": "Cart",
                   "reached": 1,
-                  "droppedHere": 0
-                },
-                {
-                  "step": "Account",
-                  "reached": 0,
                   "droppedHere": 0
                 },
                 {
