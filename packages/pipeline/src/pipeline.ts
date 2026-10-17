@@ -315,6 +315,8 @@ export type DepsConfig = {
   /** Offline swarm speed (>1 is faster); 1 = ~30 s on screen. */
   swarmSpeed: number;
   fixStageDelayMs?: number;
+  /** Real fix loop attempts (default 2: one retry when not proven). */
+  fixAttempts?: number;
   signal?: AbortSignal;
   log?: (line: string) => void;
 };
@@ -342,13 +344,13 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
     compare: moduleCompare(),
     signal: c.signal,
     log: c.log,
-    fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(),
+    fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(undefined, { maxAttempts: c.fixAttempts }),
   };
 }
 
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
  * SWARM_SPEED, FIX_LOOP=real|fake (fake = offline rehearsal, default with the
- * offline swarm), FIX_STAGE_DELAY_MS. */
+ * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 2). */
 export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
   const env = process.env.SWARM_RUNNER ?? "offline";
   if (!["offline", "replay", "tenki", "p2"].includes(env)) throw new Error(`Unknown SWARM_RUNNER "${env}" (offline|tenki)`);
@@ -362,6 +364,7 @@ export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => 
     fixLoop: fixMode,
     swarmSpeed: Number(process.env.SWARM_SPEED ?? process.env.REPLAY_SPEED ?? 1),
     fixStageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500),
+    fixAttempts: process.env.FIX_ATTEMPTS ? Number(process.env.FIX_ATTEMPTS) : undefined,
   });
 }
 

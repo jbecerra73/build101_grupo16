@@ -282,4 +282,13 @@ describe("realFixLoop", () => {
     const loop: FixLoop = realFixLoop("/nonexistent/orchestrator/fix-loop.ts");
     await expect(loop({} as Parameters<FixLoop>[0])).rejects.toThrow(/P1 fix loop not available/);
   });
+
+  it("passes maxAttempts to P1's fix loop (2 by default: one retry, #16)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fs-p1-"));
+    const mod = join(dir, "fix-loop.mjs");
+    await writeFile(mod, "export const runFixLoop = async (o) => ({ baselineRunId: o.baselineRunId, repo: String(o.maxAttempts), attempts: [] });");
+    const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
+    expect((await realFixLoop(mod)(opts)).repo).toBe("2");
+    expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
+  });
 });
