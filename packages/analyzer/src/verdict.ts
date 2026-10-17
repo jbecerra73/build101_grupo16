@@ -14,7 +14,8 @@ export function stepConversions(flow: Flow, g: { n: number; funnel: Funnel }): {
   let prev = g.n;
   return flow.required.steps.map((step) => {
     const r = reachedOf(g.funnel, step);
-    const rate = prev ? r / prev : undefined;
+    // Capped at 100%: a shortcut can reach a later step without the earlier one.
+    const rate = prev ? Math.min(1, r / prev) : undefined;
     prev = r;
     return { step, rate };
   });
