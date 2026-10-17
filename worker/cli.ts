@@ -11,6 +11,7 @@ import { createInterface } from "node:readline";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { FLOWS, PERSONAS, type Event, type RunConfig } from "../shared";
+import { ENDINGS } from "./events";
 import { systemPrompt, type ToolName } from "./session";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -126,10 +127,17 @@ const code: number | null = await new Promise((done) => child.on("close", done))
 clearTimeout(timer);
 process.off("SIGINT", stop);
 
-const events = readEvents();
+// The MCP server (Claude Code's child) records its own ending when its stdin closes, which can
+// land just after claude exits. Give it a moment so the log never gets two endings.
+const ended = (es: Event[]) => ENDINGS.has(es.at(-1)?.type ?? "page_view");
+let events = readEvents();
+for (let waited = 0; !ended(events) && waited < 10_000; waited += 250) {
+  await new Promise((r) => setTimeout(r, 250));
+  events = readEvents();
+}
 const last = events.at(-1);
-if (last && !["success", "give_up", "error"].includes(last.type)) {
-  // Claude Code stopped before the MCP server could record an ending.
+if (last && !ended(events)) {
+  // The MCP server died before it could record an ending.
   const end: Event = { ...last, ts: Date.now(), type: "give_up", note: "Stopped without finishing." };
   delete end.action;
   delete end.screenshot;

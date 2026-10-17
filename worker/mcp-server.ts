@@ -59,7 +59,7 @@ process.stdin.on("close", shutdown);
 const toContent = (r: StepResult) => ({
   isError: r.isError,
   content: [
-    { type: "text" as const, text: r.observation ? `${r.text}\n\n${describe(r.observation)}` : r.text },
+    { type: "text" as const, text: r.observation ? `${r.text}\n\n${describe(r.observation, persona.perception.mode)}` : r.text },
     ...(r.observation && !r.ended
       ? [{ type: "image" as const, mimeType: "image/png", data: r.observation.screenshot.toString("base64") }]
       : []),

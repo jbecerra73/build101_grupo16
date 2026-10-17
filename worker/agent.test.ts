@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buyTshirt, MAX_ACTIONS_PER_AGENT, typical, type Event, type Flow } from "../shared";
+import { buyTshirt, kai, MAX_ACTIONS_PER_AGENT, rosa, typical, type Event, type Flow, type Persona } from "../shared";
 import { runAgent, type Brain } from "./agent";
-import type { Observation } from "./observe";
-import type { ToolCall } from "./session";
+import { describe as describeObs, type Observation } from "./observe";
+import { AgentSession, type ToolCall } from "./session";
 
 // A tiny store at http://store.test that walks Home → Cart → Shipping → Payment → Confirmation.
 const PAGES: Record<string, string> = {
@@ -21,6 +21,16 @@ const PAGES: Record<string, string> = {
     <button onclick="location.href='/checkout/success'">Pay $120</button>`,
   "/checkout/success": `<h1 style="text-transform:uppercase">Payment confirmed</h1><p>A confirmation was sent to ana@example.com.</p>
     <dl><dt>Paid with</dt><dd>Visa ending in 4242</dd><dt>Shipping to</dt><dd>Ana Pérez, 123 Main St, Springfield 12345, United States</dd></dl>`,
+  // Persona fixtures: a faint 11px link (T1), a hover-only size picker (T4), a 30px tap target.
+  "/fixture": `<style>.card .sizes{display:none}.card:hover .sizes{display:block}</style>
+    <h1>Fixture</h1>
+    <a href="/cart" style="color:#ccc;font-size:11px">Continue to payment</a>
+    <a href="/cart" style="color:#111;font-size:16px">Big dark link</a>
+    <div class="card" style="width:300px;height:80px;background:#eee">T-shirt<div class="sizes"><button>Size M</button></div></div>
+    <button style="width:30px;height:30px;padding:0">+</button>
+    <button style="width:200px;height:48px">Add to cart</button>`,
+  // Confirmation that shows a spinner first.
+  "/slow-success": `<h1 id="h">Processing…</h1><script>setTimeout(() => { h.textContent = "Payment confirmed" }, 800)</script>`,
 };
 const ORIGIN = "http://store.test";
 const flow: Flow = { ...buyTshirt, startUrl: ORIGIN };
@@ -46,11 +56,11 @@ beforeAll(async () => {
 });
 afterAll(async () => browser?.close());
 
-async function newPage(): Promise<Page> {
-  const page = await browser.newPage({ viewport: typical.viewport });
+async function newPage(persona: Persona = typical): Promise<Page> {
+  const page = await browser.newPage({ viewport: persona.viewport, isMobile: persona.viewport.mobile, hasTouch: persona.viewport.mobile });
   await page.route(`${ORIGIN}/**`, (route) => {
     const u = new URL(route.request().url());
-    const key = u.searchParams.get("step") ? `${u.pathname}?step=${u.searchParams.get("step")}` : u.pathname;
+    const key = u.searchParams.get("step") ? `${u.pathname}?step=${u.searchParams.get("step")}` : u.searchParams.has("slow") ? "/slow-success" : u.pathname;
     const body = PAGES[key];
     return body
       ? route.fulfill({ contentType: "text/html", body: `<!doctype html><meta charset="utf-8"><title>${key}</title><body>${body}</body>` })
@@ -122,5 +132,76 @@ describe("runAgent", () => {
     ]);
     const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r4", runDir, seed: 4, settleMs: 50, navWaitMs: 50 });
     expect(res.actions).toBe(1);
+  }, 30_000);
+});
+
+const names = (o: Observation) => o.elements.map((e) => e.name);
+
+async function openSession(persona: Persona, path: string) {
+  const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
+  const session = new AgentSession({ page: await newPage(persona), persona, flow, runId: "rp", runDir, seed: 1, settleMs: 50, navWaitMs: 50, successWaitMs: 2000 });
+  await session.start(`${ORIGIN}${path}`);
+  return session;
+}
+
+describe("persona constraints", () => {
+  it("Rosa cannot perceive faint or tiny text, and gets no DOM text", async () => {
+    const s = await openSession(rosa, "/fixture");
+    const o = s.observation!;
+    expect(names(o)).not.toContain("Continue to payment");
+    expect(names(o)).toContain("Big dark link");
+    const text = describeObs(o, "screenshot");
+    expect(text).not.toContain("Big dark link");
+    expect(text).not.toContain("Fixture");
+    expect(text).toMatch(/Element ids on screen: e1/);
+    // Downscaled to 0.6 of the 1280px viewport.
+    expect(o.screenshot.readUInt32BE(16)).toBe(Math.round(1280 * 0.6));
+    expect(o.cleanScreenshot.readUInt32BE(16)).toBe(1280);
+  }, 30_000);
+
+  it("Typical sees everything at full size", async () => {
+    const s = await openSession(typical, "/fixture");
+    expect(names(s.observation!)).toContain("Continue to payment");
+    expect(s.observation!.screenshot.readUInt32BE(16)).toBe(1280);
+  }, 30_000);
+
+  it("hides hover-only elements for Kai even after the pointer was over them", async () => {
+    const s = await openSession(kai, "/fixture");
+    expect(names(s.observation!)).not.toContain("Size M");
+    const t = await openSession(typical, "/fixture");
+    await (t as unknown as { o: { page: Page } }).o.page.hover(".card");
+    await t.call({ name: "look", input: {} });
+    expect(names(t.observation!)).toContain("Size M");
+  }, 30_000);
+
+  it("Kai misses a 30px tap target and gives up after 2 tries", async () => {
+    const s = await openSession(kai, "/fixture");
+    const plus = s.observation!.elements.find((e) => e.name === "+")!.id;
+    const first = await s.call({ name: "click", input: { id: plus } });
+    expect(first.isError).toBe(true);
+    expect(s.outcome).toBeUndefined();
+    await s.call({ name: "click", input: { id: s.observation!.elements.find((e) => e.name === "+")!.id } });
+    expect(s.outcome).toBe("give_up");
+    const actions = s.events.filter((e) => e.type === "action");
+    expect(actions.every((e) => e.action?.missed)).toBe(true);
+    expect(s.events.at(-1)?.note).toMatch(/2 times/);
+  }, 30_000);
+});
+
+describe("session endings", () => {
+  it("waits for a confirmation that renders late", async () => {
+    const s = await openSession(typical, "/checkout/success?slow=1");
+    expect(s.outcome).toBe("success");
+  }, 30_000);
+
+  it("writes exactly one ending when abandoned mid-call", async () => {
+    const s = await openSession(typical, "/fixture");
+    const pending = s.call({ name: "scroll", input: { direction: "down" } });
+    s.abandon("Stopped without finishing.");
+    await pending;
+    await s.call({ name: "look", input: {} });
+    const endings = s.events.filter((e) => ["success", "give_up", "error"].includes(e.type));
+    expect(endings).toHaveLength(1);
+    expect(s.events.at(-1)?.type).toBe("give_up");
   }, 30_000);
 });
