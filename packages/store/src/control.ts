@@ -3,6 +3,8 @@
 // are re-exported here so the orchestrator and the dashboard share one source.
 import type {
   CancelRequest,
+  DecisionRequest,
+  FixRequest,
   OrchestratorHeartbeat,
   QueuedRun,
   SandboxInfo,
@@ -15,6 +17,8 @@ import type { RunStore } from "./types";
 
 export type {
   CancelRequest,
+  DecisionRequest,
+  FixRequest,
   OrchestratorHeartbeat,
   QueuedRun,
   SandboxInfo,
@@ -34,6 +38,11 @@ export const KEYS = {
   runFile: (runId: string, rel: string) => `runs/${runId}/${rel}`,
   cancel: (runId: string) => `runs/${runId}/cancel.json`,
   swarm: (runId: string) => `runs/${runId}/swarm.json`,
+  flows: "flows/",
+  flow: (id: string) => `flows/${id}.json`,
+  fixRequest: (runId: string) => `runs/${runId}/fix-request.json`,
+  decision: (runId: string) => `runs/${runId}/decision.json`,
+  prDiff: (runId: string) => `runs/${runId}/fix/pr.diff`,
 } as const;
 
 /** A heartbeat older than this means the orchestrator is offline. */

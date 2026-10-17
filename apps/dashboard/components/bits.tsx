@@ -102,6 +102,8 @@ export const FIX_STATUS: Record<FixStatus, { label: string; icon: LucideIcon; to
   ready: { label: "Proven: ready for review", icon: CircleCheck, tone: "good" },
   "not-proven": { label: "Fix attempted, not proven", icon: CircleSlash, tone: "warn" },
   failed: { label: "Fix failed", icon: CircleX, tone: "bad" },
+  merged: { label: "Merged", icon: CircleCheck, tone: "good" },
+  rejected: { label: "Rejected", icon: CircleX, tone: "muted" },
 };
 
 export function FixStatusBadge({ status, className }: { status: FixStatus; className?: string }) {

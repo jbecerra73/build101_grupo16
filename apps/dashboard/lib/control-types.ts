@@ -1,4 +1,4 @@
-import type { StartRunRequest } from "@frictionswarm/shared";
+import type { DecisionRequest, FixRequest, StartRunRequest } from "@frictionswarm/shared";
 import type { RunSummary } from "./types";
 
 /** Contract between the orchestrator (local process or tenki sandbox), the run
@@ -70,6 +70,7 @@ export type QueuedRun = {
 };
 
 export type CancelRequest = { runId: string; requestedAt: string; reason?: string };
+export type { DecisionRequest, FixRequest };
 
 /** GET /api/control */
 export type ControlOverview = {

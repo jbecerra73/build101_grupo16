@@ -212,6 +212,10 @@ export type RunConfig = {
   targetUrl: string;
   /** For a retest, the analysis run it is compared against. */
   baselineRunId?: string;
+  /** Snapshot of the flow this run was started with (custom flows live in the store). */
+  flow?: Flow;
+  /** Fix runs: the findings to fix, overriding the default top-N. */
+  fixFindingIds?: string[];
   createdAt: string;
 };
 
@@ -239,7 +243,11 @@ export type FixStatus =
   | "retesting"
   | "ready"
   | "not-proven"
-  | "failed";
+  | "failed"
+  /** The human accepted the fix and its PR was merged. */
+  | "merged"
+  /** The human rejected the fix. */
+  | "rejected";
 
 export type FixAttempt = {
   attempt: number;
@@ -255,6 +263,15 @@ export type FixAttempt = {
   verdict?: Verdict;
   status: FixStatus;
   error?: string;
+  /** The human's accept/reject of this attempt. */
+  decision?: {
+    decision: "accept" | "reject";
+    reason?: string;
+    override?: boolean;
+    decidedAt: string;
+    mergeSha?: string;
+    rehearsal?: boolean;
+  };
 };
 
 export type FixResult = {
@@ -273,6 +290,8 @@ export type RunPhase =
   /** Waiting for the swarm's events to be ingested by PostHog (waitForSwarm). */
   | "collecting"
   | "comparing"
+  /** The retest is compared; waiting for the human to accept or reject the fix. */
+  | "awaiting-decision"
   | "done"
   | "failed";
 
@@ -285,7 +304,15 @@ export type RunStatus = {
   /** Set once the retest swarm has started. */
   retestRunId?: string;
   error?: string;
+  /** Phase transitions, oldest first. */
+  history?: { phase: RunPhase; at: string; message?: string }[];
 };
+
+/** Fix the findings of an analysis run (written by the dashboard or MCP). */
+export type FixRequest = { runId: string; findingIds?: string[]; seedsPerPersona?: number; requestedAt: string };
+
+/** Accept or reject the proven fix of a run awaiting a decision. */
+export type DecisionRequest = { runId: string; decision: "accept" | "reject"; reason?: string; override?: boolean; requestedAt: string };
 
 /** What the dashboard sends to start a pipeline ("Analyze"). */
 export type StartRunRequest = {

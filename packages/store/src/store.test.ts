@@ -5,11 +5,13 @@ import { join } from "node:path";
 import { BlobsServer } from "@netlify/blobs/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  assertKey,
   BlobsStore,
   createStore,
   defaultSettings,
   FsStore,
   isOnline,
+  KEYS,
   MemoryStore,
   parseSettings,
   readSettings,
@@ -240,5 +242,16 @@ describe("usage and heartbeat", () => {
     expect(isOnline(undefined, now)).toBe(false);
     expect(isOnline(hb("2026-10-17T10:00:15Z"), now)).toBe(true);
     expect(isOnline(hb("2026-10-17T10:00:05Z"), now)).toBe(false);
+  });
+});
+
+describe("decision-gate keys", () => {
+  it("lays out flows, fix requests, decisions and the PR diff", () => {
+    expect(KEYS.flows).toBe("flows/");
+    expect(KEYS.flow("buy-tshirt")).toBe("flows/buy-tshirt.json");
+    expect(KEYS.fixRequest("r1")).toBe("runs/r1/fix-request.json");
+    expect(KEYS.decision("r1")).toBe("runs/r1/decision.json");
+    expect(KEYS.prDiff("r1")).toBe("runs/r1/fix/pr.diff");
+    for (const k of [KEYS.flow("buy-tshirt"), KEYS.fixRequest("r1"), KEYS.decision("r1"), KEYS.prDiff("r1")]) expect(() => assertKey(k)).not.toThrow();
   });
 });

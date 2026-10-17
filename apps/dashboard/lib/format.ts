@@ -15,7 +15,7 @@ export const FIX_PHASES: RunPhase[] = ["fixing", "waiting-preview", "retesting",
 export const RETEST_PHASES: RunPhase[] = ["retesting", "collecting", "comparing"];
 
 export const phaseLabel = (p: RunPhase) =>
-  p === "failed" ? "Failed" : (PIPELINE.find((x) => x.phase === p)?.label ?? p);
+  p === "failed" ? "Failed" : p === "awaiting-decision" ? "Awaiting decision" : (PIPELINE.find((x) => x.phase === p)?.label ?? p);
 
 export const isTerminal = (p: RunPhase) => p === "done" || p === "failed";
 
