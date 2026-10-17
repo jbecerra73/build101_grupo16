@@ -1,0 +1,12 @@
+{
+  "name": "@frictionswarm/pipeline",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "pipeline": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@frictionswarm/shared": "*"
+  }
+}
