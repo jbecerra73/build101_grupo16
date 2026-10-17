@@ -1,0 +1,87 @@
+{
+  "runId": "fixture-live-retest1",
+  "backend": "offline",
+  "sandboxes": [
+    {
+      "id": "offline-fixture-live-retest1-1",
+      "label": "sbx-1",
+      "region": "offline",
+      "status": "running",
+      "agentIds": [
+        "rosa-1",
+        "rosa-6",
+        "kai-1",
+        "kai-6",
+        "typical-1",
+        "typical-6"
+      ],
+      "startedAt": "2026-10-17T21:10:40.000Z",
+      "costUsd": 0.049
+    },
+    {
+      "id": "offline-fixture-live-retest1-2",
+      "label": "sbx-2",
+      "region": "offline",
+      "status": "running",
+      "agentIds": [
+        "rosa-2",
+        "rosa-7",
+        "kai-2",
+        "kai-7",
+        "typical-2",
+        "typical-7"
+      ],
+      "startedAt": "2026-10-17T21:10:40.000Z",
+      "costUsd": 0.049
+    },
+    {
+      "id": "offline-fixture-live-retest1-3",
+      "label": "sbx-3",
+      "region": "offline",
+      "status": "running",
+      "agentIds": [
+        "rosa-3",
+        "rosa-8",
+        "kai-3",
+        "kai-8",
+        "typical-3",
+        "typical-8"
+      ],
+      "startedAt": "2026-10-17T21:10:40.000Z",
+      "costUsd": 0.049
+    },
+    {
+      "id": "offline-fixture-live-retest1-4",
+      "label": "sbx-4",
+      "region": "offline",
+      "status": "running",
+      "agentIds": [
+        "rosa-4",
+        "rosa-9",
+        "kai-4",
+        "kai-9",
+        "typical-4",
+        "typical-9"
+      ],
+      "startedAt": "2026-10-17T21:10:40.000Z",
+      "costUsd": 0.049
+    },
+    {
+      "id": "offline-fixture-live-retest1-5",
+      "label": "sbx-5",
+      "region": "offline",
+      "status": "running",
+      "agentIds": [
+        "rosa-5",
+        "rosa-10",
+        "kai-5",
+        "kai-10",
+        "typical-5",
+        "typical-10"
+      ],
+      "startedAt": "2026-10-17T21:10:40.000Z",
+      "costUsd": 0.049
+    }
+  ],
+  "updatedAt": "2026-10-17T21:10:52.000Z"
+}

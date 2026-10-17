@@ -3,12 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dashboard": "npm run dev -w @frictionswarm/dashboard",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm run typecheck -w @frictionswarm/dashboard",
+    "pipeline": "tsx packages/pipeline/src/cli.ts",
+    "orchestrator": "tsx packages/pipeline/src/daemon.ts",
     "posthog:generate": "tsx tools/posthog-sim/generate.ts",
     "posthog:upload": "tsx tools/posthog-sim/upload.ts",
-    "analyze": "tsx packages/analyzer/src/cli.ts",
     "agent": "tsx worker/cli.ts",
+    "analyze": "tsx packages/analyzer/src/cli.ts",
+    "fix": "tsx orchestrator/cli.ts",
     "swarm": "tsx orchestrator/swarm/cli.ts",
     "swarm:snapshot": "tsx orchestrator/swarm/build-snapshot.ts",
     "swarm:worker": "tsx worker/swarm-cli.ts"

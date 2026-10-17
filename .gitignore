@@ -8,3 +8,15 @@ next-env.d.ts
 data/posthog/
 screenshots/
 runs/.swarm-ledger.json*
+# Dashboard fixtures keep their re-test screenshots
+!runs/*/screenshots/
+
+# Live pipeline runs (fixtures stay tracked)
+runs/.usage.json
+runs/.control/
+runs/20*/
+runs/run-*/
+runs/*.tmp
+
+# Orchestrator scratch (Blobs mode)
+.orchestrator-work/
