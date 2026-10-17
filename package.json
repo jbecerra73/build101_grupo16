@@ -5,7 +5,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "fix": "tsx orchestrator/cli.ts"
+    "fix": "tsx orchestrator/cli.ts",
+    "analyze": "tsx packages/analyzer/src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
