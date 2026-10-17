@@ -1,0 +1,1062 @@
+{
+  "from": "2026-04-19T00:00:00.000Z",
+  "to": "2026-10-19T00:00:00.000Z",
+  "sessions": 26468,
+  "releases": [
+    {
+      "sha": "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d",
+      "date": "2026-04-19",
+      "name": "Simulated checkout"
+    },
+    {
+      "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+      "date": "2026-05-20",
+      "name": "New product page"
+    },
+    {
+      "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+      "date": "2026-06-24",
+      "name": "Checkout redesign"
+    },
+    {
+      "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+      "date": "2026-08-05",
+      "name": "Promo codes"
+    },
+    {
+      "sha": "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9",
+      "date": "2026-09-09",
+      "name": "Accounts"
+    }
+  ],
+  "byRelease": [
+    {
+      "sha": "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d",
+      "date": "2026-04-19",
+      "name": "Simulated checkout",
+      "segments": {
+        "low_vision": {
+          "n": 204,
+          "completed": 39,
+          "completionRate": 0.19117647058823528,
+          "reached": {
+            "Home": 92,
+            "Browse": 79,
+            "Product": 146,
+            "Cart": 68,
+            "Shipping": 54,
+            "Payment": 54,
+            "Confirmation": 39,
+            "Payment failed": 4
+          },
+          "marks": {
+            "drop_off|Browse|": 28,
+            "drop_off|Payment|": 14,
+            "drop_off|Product|": 78,
+            "drop_off|Home|": 30,
+            "failed_submit|Shipping|shipping_submitted": 7,
+            "drop_off|Cart|": 14,
+            "drop_off|Payment failed|": 1,
+            "no_size|Product|add_to_cart_clicked": 1
+          }
+        },
+        "mobile": {
+          "n": 1976,
+          "completed": 351,
+          "completionRate": 0.17763157894736842,
+          "reached": {
+            "Home": 894,
+            "Browse": 865,
+            "Product": 1468,
+            "Cart": 594,
+            "Shipping": 461,
+            "Payment": 449,
+            "Confirmation": 351,
+            "Payment failed": 22
+          },
+          "marks": {
+            "drop_off|Browse|": 267,
+            "drop_off|Home|": 241,
+            "drop_off|Product|": 874,
+            "drop_off|Cart|": 133,
+            "no_size|Product|add_to_cart_clicked": 24,
+            "drop_off|Payment failed|": 11,
+            "drop_off|Shipping|": 12,
+            "drop_off|Payment|": 87,
+            "failed_submit|Shipping|shipping_submitted": 58
+          }
+        },
+        "desktop": {
+          "n": 1369,
+          "completed": 302,
+          "completionRate": 0.2205989773557341,
+          "reached": {
+            "Product": 1002,
+            "Cart": 456,
+            "Shipping": 361,
+            "Payment": 355,
+            "Home": 594,
+            "Browse": 592,
+            "Confirmation": 302,
+            "Payment failed": 13
+          },
+          "marks": {
+            "drop_off|Payment|": 46,
+            "drop_off|Product|": 546,
+            "failed_submit|Shipping|shipping_submitted": 44,
+            "drop_off|Browse|": 188,
+            "drop_off|Home|": 179,
+            "drop_off|Cart|": 95,
+            "drop_off|Shipping|": 6,
+            "no_size|Product|add_to_cart_clicked": 11,
+            "drop_off|Payment failed|": 7
+          }
+        }
+      }
+    },
+    {
+      "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+      "date": "2026-05-20",
+      "name": "New product page",
+      "segments": {
+        "low_vision": {
+          "n": 265,
+          "completed": 36,
+          "completionRate": 0.13584905660377358,
+          "reached": {
+            "Home": 119,
+            "Browse": 117,
+            "Product": 203,
+            "Cart": 67,
+            "Shipping": 49,
+            "Payment": 45,
+            "Confirmation": 36,
+            "Payment failed": 2
+          },
+          "marks": {
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 36,
+            "no_size|Product|add_to_cart_clicked": 36,
+            "drop_off|Product|": 136,
+            "drop_off|Browse|": 35,
+            "drop_off|Cart|": 18,
+            "drop_off|Home|": 27,
+            "drop_off|Shipping|": 4,
+            "drop_off|Payment|": 8,
+            "failed_submit|Shipping|shipping_submitted": 6,
+            "drop_off|Payment failed|": 1
+          }
+        },
+        "mobile": {
+          "n": 2519,
+          "completed": 291,
+          "completionRate": 0.11552203255260024,
+          "reached": {
+            "Product": 1802,
+            "Home": 1149,
+            "Browse": 1161,
+            "Cart": 503,
+            "Shipping": 380,
+            "Payment": 366,
+            "Confirmation": 291,
+            "Payment failed": 8
+          },
+          "marks": {
+            "drop_off|Product|": 1299,
+            "drop_off|Browse|": 377,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 417,
+            "no_size|Product|add_to_cart_clicked": 417,
+            "drop_off|Home|": 340,
+            "drop_off|Cart|": 123,
+            "drop_off|Payment|": 70,
+            "failed_submit|Shipping|shipping_submitted": 53,
+            "drop_off|Payment failed|": 5,
+            "drop_off|Shipping|": 14
+          }
+        },
+        "desktop": {
+          "n": 1733,
+          "completed": 376,
+          "completionRate": 0.21696480092325446,
+          "reached": {
+            "Home": 780,
+            "Browse": 777,
+            "Product": 1284,
+            "Cart": 573,
+            "Shipping": 439,
+            "Payment": 436,
+            "Payment failed": 17,
+            "Confirmation": 376
+          },
+          "marks": {
+            "drop_off|Browse|": 232,
+            "drop_off|Payment|": 55,
+            "drop_off|Product|": 711,
+            "drop_off|Home|": 217,
+            "drop_off|Cart|": 134,
+            "failed_submit|Shipping|shipping_submitted": 52,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 49,
+            "no_size|Product|add_to_cart_clicked": 49,
+            "drop_off|Shipping|": 3,
+            "drop_off|Payment failed|": 5
+          }
+        }
+      }
+    },
+    {
+      "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
+      "date": "2026-06-24",
+      "name": "Checkout redesign",
+      "segments": {
+        "low_vision": {
+          "n": 385,
+          "completed": 21,
+          "completionRate": 0.05454545454545454,
+          "reached": {
+            "Browse": 153,
+            "Product": 300,
+            "Home": 161,
+            "Cart": 87,
+            "Shipping": 66,
+            "Payment": 26,
+            "Confirmation": 21,
+            "Payment failed": 1
+          },
+          "marks": {
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 56,
+            "no_size|Product|add_to_cart_clicked": 56,
+            "drop_off|Product|": 213,
+            "drop_off|Home|": 45,
+            "drop_off|Browse|": 40,
+            "drop_off|Cart|": 21,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 45,
+            "drop_off|Shipping|": 40,
+            "failed_submit|Shipping|shipping_submitted": 3,
+            "drop_off|Payment|": 4,
+            "drop_off|Payment failed|": 1
+          }
+        },
+        "mobile": {
+          "n": 3321,
+          "completed": 353,
+          "completionRate": 0.10629328515507377,
+          "reached": {
+            "Product": 2454,
+            "Browse": 1480,
+            "Cart": 695,
+            "Shipping": 545,
+            "Payment": 448,
+            "Confirmation": 353,
+            "Home": 1482,
+            "Payment failed": 20
+          },
+          "marks": {
+            "drop_off|Product|": 1759,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 608,
+            "no_size|Product|add_to_cart_clicked": 608,
+            "drop_off|Cart|": 150,
+            "drop_off|Home|": 427,
+            "drop_off|Payment failed|": 11,
+            "drop_off|Browse|": 440,
+            "drop_off|Payment|": 84,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 118,
+            "drop_off|Shipping|": 97,
+            "failed_submit|Shipping|shipping_submitted": 50
+          }
+        },
+        "desktop": {
+          "n": 2284,
+          "completed": 456,
+          "completionRate": 0.19964973730297722,
+          "reached": {
+            "Product": 1650,
+            "Cart": 765,
+            "Shipping": 581,
+            "Payment": 535,
+            "Confirmation": 456,
+            "Browse": 1039,
+            "Home": 1025,
+            "Payment failed": 18
+          },
+          "marks": {
+            "drop_off|Cart|": 184,
+            "failed_submit|Shipping|shipping_submitted": 54,
+            "drop_off|Product|": 885,
+            "drop_off|Payment|": 73,
+            "drop_off|Browse|": 323,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 56,
+            "drop_off|Shipping|": 46,
+            "drop_off|Home|": 311,
+            "drop_off|Payment failed|": 6,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 71,
+            "no_size|Product|add_to_cart_clicked": 71
+          }
+        }
+      }
+    },
+    {
+      "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+      "date": "2026-08-05",
+      "name": "Promo codes",
+      "segments": {
+        "low_vision": {
+          "n": 364,
+          "completed": 22,
+          "completionRate": 0.06043956043956044,
+          "reached": {
+            "Home": 166,
+            "Product": 274,
+            "Cart": 96,
+            "Browse": 148,
+            "Shipping": 70,
+            "Payment": 28,
+            "Confirmation": 22,
+            "Payment failed": 1
+          },
+          "marks": {
+            "drop_off|Product|": 178,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 64,
+            "no_size|Product|add_to_cart_clicked": 64,
+            "drop_off|Cart|": 26,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 48,
+            "drop_off|Home|": 48,
+            "drop_off|Shipping|": 42,
+            "promo_wipe|Shipping|shipping_submitted": 6,
+            "drop_off|Payment failed|": 1,
+            "drop_off|Browse|": 42,
+            "drop_off|Payment|": 5,
+            "failed_submit|Shipping|shipping_submitted": 4
+          }
+        },
+        "mobile": {
+          "n": 3142,
+          "completed": 304,
+          "completionRate": 0.0967536600891152,
+          "reached": {
+            "Product": 2328,
+            "Cart": 631,
+            "Shipping": 476,
+            "Payment": 382,
+            "Confirmation": 304,
+            "Home": 1423,
+            "Browse": 1391,
+            "Payment failed": 11
+          },
+          "marks": {
+            "drop_off|Product|": 1697,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 594,
+            "no_size|Product|add_to_cart_clicked": 594,
+            "drop_off|Cart|": 155,
+            "drop_off|Browse|": 412,
+            "failed_submit|Shipping|shipping_submitted": 58,
+            "drop_off|Home|": 402,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 82,
+            "drop_off|Shipping|": 94,
+            "drop_off|Payment|": 75,
+            "promo_wipe|Shipping|shipping_submitted": 46,
+            "drop_off|Payment failed|": 3
+          }
+        },
+        "desktop": {
+          "n": 2198,
+          "completed": 388,
+          "completionRate": 0.17652411282984531,
+          "reached": {
+            "Browse": 965,
+            "Home": 992,
+            "Product": 1623,
+            "Cart": 695,
+            "Shipping": 523,
+            "Payment": 477,
+            "Confirmation": 388,
+            "Payment failed": 28
+          },
+          "marks": {
+            "drop_off|Browse|": 289,
+            "drop_off|Product|": 928,
+            "drop_off|Home|": 286,
+            "drop_off|Cart|": 172,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 58,
+            "no_size|Product|add_to_cart_clicked": 58,
+            "promo_wipe|Shipping|shipping_submitted": 49,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 40,
+            "drop_off|Shipping|": 46,
+            "drop_off|Payment|": 76,
+            "failed_submit|Shipping|shipping_submitted": 63,
+            "drop_off|Payment failed|": 13
+          }
+        }
+      }
+    },
+    {
+      "sha": "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9",
+      "date": "2026-09-09",
+      "name": "Accounts",
+      "segments": {
+        "low_vision": {
+          "n": 439,
+          "completed": 19,
+          "completionRate": 0.04328018223234624,
+          "reached": {
+            "Home": 193,
+            "Browse": 200,
+            "Product": 330,
+            "Cart": 111,
+            "Account": 86,
+            "Shipping": 47,
+            "Payment": 21,
+            "Confirmation": 19,
+            "Payment failed": 1
+          },
+          "marks": {
+            "drop_off|Home|": 53,
+            "drop_off|Account|": 39,
+            "drop_off|Browse|": 56,
+            "drop_off|Product|": 219,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 81,
+            "no_size|Product|add_to_cart_clicked": 81,
+            "drop_off|Cart|": 25,
+            "failed_submit|Account|account_submitted": 29,
+            "drop_off|Payment|": 2,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 26,
+            "drop_off|Shipping|": 26,
+            "failed_submit|Shipping|shipping_submitted": 3,
+            "promo_wipe|Shipping|shipping_submitted": 1
+          }
+        },
+        "mobile": {
+          "n": 3676,
+          "completed": 117,
+          "completionRate": 0.031828073993471165,
+          "reached": {
+            "Browse": 1620,
+            "Home": 1632,
+            "Product": 2707,
+            "Cart": 736,
+            "Account": 535,
+            "Shipping": 207,
+            "Payment": 161,
+            "Confirmation": 117,
+            "Payment failed": 10
+          },
+          "marks": {
+            "drop_off|Browse|": 512,
+            "drop_off|Product|": 1971,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 673,
+            "no_size|Product|add_to_cart_clicked": 673,
+            "drop_off|Home|": 457,
+            "drop_off|Account|": 331,
+            "failed_submit|Account|account_submitted": 103,
+            "drop_off|Payment|": 39,
+            "drop_off|Cart|": 198,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 43,
+            "drop_off|Shipping|": 46,
+            "drop_off|Payment failed|": 5,
+            "promo_wipe|Shipping|shipping_submitted": 19,
+            "failed_submit|Shipping|shipping_submitted": 21
+          }
+        },
+        "desktop": {
+          "n": 2593,
+          "completed": 349,
+          "completionRate": 0.13459313536444273,
+          "reached": {
+            "Home": 1181,
+            "Browse": 1163,
+            "Product": 1917,
+            "Cart": 876,
+            "Account": 632,
+            "Shipping": 443,
+            "Payment": 402,
+            "Confirmation": 349,
+            "Payment failed": 13
+          },
+          "marks": {
+            "drop_off|Browse|": 340,
+            "drop_off|Home|": 336,
+            "failed_submit|Account|account_submitted": 206,
+            "drop_off|Product|": 1041,
+            "drop_off|Payment|": 51,
+            "drop_off|Cart|": 221,
+            "rage_click|Shipping|div.flex.items-center.p-6.pt-0.justify-end": 34,
+            "drop_off|Shipping|": 41,
+            "rage_click|Product|div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")": 72,
+            "no_size|Product|add_to_cart_clicked": 72,
+            "failed_submit|Shipping|shipping_submitted": 56,
+            "drop_off|Account|": 212,
+            "promo_wipe|Shipping|shipping_submitted": 31,
+            "drop_off|Payment failed|": 2
+          }
+        }
+      }
+    }
+  ],
+  "trend": [
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-04-13",
+      "n": 7,
+      "completed": 2,
+      "completionRate": 0.2857142857142857
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-04-13",
+      "n": 77,
+      "completed": 14,
+      "completionRate": 0.18181818181818182
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-04-13",
+      "n": 59,
+      "completed": 24,
+      "completionRate": 0.4067796610169492
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-04-20",
+      "n": 56,
+      "completed": 13,
+      "completionRate": 0.23214285714285715
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-04-20",
+      "n": 411,
+      "completed": 80,
+      "completionRate": 0.19464720194647203
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-04-20",
+      "n": 297,
+      "completed": 64,
+      "completionRate": 0.21548821548821548
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-04-27",
+      "n": 41,
+      "completed": 8,
+      "completionRate": 0.1951219512195122
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-04-27",
+      "n": 447,
+      "completed": 74,
+      "completionRate": 0.16554809843400448
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-04-27",
+      "n": 292,
+      "completed": 61,
+      "completionRate": 0.2089041095890411
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-05-04",
+      "n": 34,
+      "completed": 4,
+      "completionRate": 0.11764705882352941
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-05-04",
+      "n": 462,
+      "completed": 87,
+      "completionRate": 0.18831168831168832
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-05-04",
+      "n": 321,
+      "completed": 51,
+      "completionRate": 0.1588785046728972
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-05-11",
+      "n": 58,
+      "completed": 11,
+      "completionRate": 0.1896551724137931
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-05-11",
+      "n": 469,
+      "completed": 80,
+      "completionRate": 0.17057569296375266
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-05-11",
+      "n": 319,
+      "completed": 81,
+      "completionRate": 0.25391849529780564
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-05-18",
+      "n": 47,
+      "completed": 3,
+      "completionRate": 0.06382978723404255
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-05-18",
+      "n": 474,
+      "completed": 58,
+      "completionRate": 0.12236286919831224
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-05-18",
+      "n": 339,
+      "completed": 78,
+      "completionRate": 0.23008849557522124
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-05-25",
+      "n": 58,
+      "completed": 7,
+      "completionRate": 0.1206896551724138
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-05-25",
+      "n": 468,
+      "completed": 59,
+      "completionRate": 0.12606837606837606
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-05-25",
+      "n": 344,
+      "completed": 78,
+      "completionRate": 0.22674418604651161
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-06-01",
+      "n": 54,
+      "completed": 9,
+      "completionRate": 0.16666666666666666
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-06-01",
+      "n": 540,
+      "completed": 59,
+      "completionRate": 0.10925925925925926
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-06-01",
+      "n": 327,
+      "completed": 72,
+      "completionRate": 0.22018348623853212
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-06-08",
+      "n": 44,
+      "completed": 5,
+      "completionRate": 0.11363636363636363
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-06-08",
+      "n": 492,
+      "completed": 57,
+      "completionRate": 0.11585365853658537
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-06-08",
+      "n": 351,
+      "completed": 73,
+      "completionRate": 0.20797720797720798
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-06-15",
+      "n": 58,
+      "completed": 13,
+      "completionRate": 0.22413793103448276
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-06-15",
+      "n": 516,
+      "completed": 56,
+      "completionRate": 0.10852713178294573
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-06-15",
+      "n": 381,
+      "completed": 80,
+      "completionRate": 0.2099737532808399
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-06-22",
+      "n": 62,
+      "completed": 2,
+      "completionRate": 0.03225806451612903
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-06-22",
+      "n": 567,
+      "completed": 60,
+      "completionRate": 0.10582010582010581
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-06-22",
+      "n": 367,
+      "completed": 79,
+      "completionRate": 0.21525885558583105
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-06-29",
+      "n": 74,
+      "completed": 8,
+      "completionRate": 0.10810810810810811
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-06-29",
+      "n": 541,
+      "completed": 54,
+      "completionRate": 0.09981515711645102
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-06-29",
+      "n": 371,
+      "completed": 79,
+      "completionRate": 0.21293800539083557
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-07-06",
+      "n": 55,
+      "completed": 0,
+      "completionRate": 0
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-07-06",
+      "n": 510,
+      "completed": 61,
+      "completionRate": 0.11960784313725491
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-07-06",
+      "n": 359,
+      "completed": 78,
+      "completionRate": 0.21727019498607242
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-07-13",
+      "n": 68,
+      "completed": 9,
+      "completionRate": 0.1323529411764706
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-07-13",
+      "n": 532,
+      "completed": 54,
+      "completionRate": 0.10150375939849623
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-07-13",
+      "n": 368,
+      "completed": 61,
+      "completionRate": 0.16576086956521738
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-07-20",
+      "n": 63,
+      "completed": 1,
+      "completionRate": 0.015873015873015872
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-07-20",
+      "n": 547,
+      "completed": 59,
+      "completionRate": 0.10786106032906764
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-07-20",
+      "n": 386,
+      "completed": 74,
+      "completionRate": 0.19170984455958548
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-07-27",
+      "n": 60,
+      "completed": 1,
+      "completionRate": 0.016666666666666666
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-07-27",
+      "n": 595,
+      "completed": 69,
+      "completionRate": 0.11596638655462185
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-07-27",
+      "n": 395,
+      "completed": 84,
+      "completionRate": 0.21265822784810126
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-08-03",
+      "n": 63,
+      "completed": 3,
+      "completionRate": 0.047619047619047616
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-08-03",
+      "n": 595,
+      "completed": 51,
+      "completionRate": 0.08571428571428572
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-08-03",
+      "n": 413,
+      "completed": 68,
+      "completionRate": 0.16464891041162227
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-08-10",
+      "n": 66,
+      "completed": 5,
+      "completionRate": 0.07575757575757576
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-08-10",
+      "n": 619,
+      "completed": 72,
+      "completionRate": 0.11631663974151858
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-08-10",
+      "n": 444,
+      "completed": 74,
+      "completionRate": 0.16666666666666666
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-08-17",
+      "n": 63,
+      "completed": 1,
+      "completionRate": 0.015873015873015872
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-08-17",
+      "n": 657,
+      "completed": 69,
+      "completionRate": 0.1050228310502283
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-08-17",
+      "n": 462,
+      "completed": 88,
+      "completionRate": 0.19047619047619047
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-08-24",
+      "n": 83,
+      "completed": 8,
+      "completionRate": 0.0963855421686747
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-08-24",
+      "n": 568,
+      "completed": 50,
+      "completionRate": 0.0880281690140845
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-08-24",
+      "n": 411,
+      "completed": 77,
+      "completionRate": 0.1873479318734793
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-08-31",
+      "n": 81,
+      "completed": 3,
+      "completionRate": 0.037037037037037035
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-08-31",
+      "n": 696,
+      "completed": 58,
+      "completionRate": 0.08333333333333333
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-08-31",
+      "n": 469,
+      "completed": 83,
+      "completionRate": 0.17697228144989338
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-09-07",
+      "n": 74,
+      "completed": 3,
+      "completionRate": 0.04054054054054054
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-09-07",
+      "n": 632,
+      "completed": 32,
+      "completionRate": 0.05063291139240506
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-09-07",
+      "n": 436,
+      "completed": 61,
+      "completionRate": 0.13990825688073394
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-09-14",
+      "n": 89,
+      "completed": 2,
+      "completionRate": 0.02247191011235955
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-09-14",
+      "n": 712,
+      "completed": 32,
+      "completionRate": 0.0449438202247191
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-09-14",
+      "n": 478,
+      "completed": 66,
+      "completionRate": 0.13807531380753138
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-09-21",
+      "n": 71,
+      "completed": 3,
+      "completionRate": 0.04225352112676056
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-09-21",
+      "n": 635,
+      "completed": 25,
+      "completionRate": 0.03937007874015748
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-09-21",
+      "n": 470,
+      "completed": 67,
+      "completionRate": 0.1425531914893617
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-09-28",
+      "n": 87,
+      "completed": 7,
+      "completionRate": 0.08045977011494253
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-09-28",
+      "n": 680,
+      "completed": 22,
+      "completionRate": 0.03235294117647059
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-09-28",
+      "n": 499,
+      "completed": 73,
+      "completionRate": 0.1462925851703407
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-10-05",
+      "n": 89,
+      "completed": 4,
+      "completionRate": 0.0449438202247191
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-10-05",
+      "n": 674,
+      "completed": 12,
+      "completionRate": 0.017804154302670624
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-10-05",
+      "n": 478,
+      "completed": 65,
+      "completionRate": 0.13598326359832635
+    },
+    {
+      "segmentId": "low_vision",
+      "weekStart": "2026-10-12",
+      "n": 52,
+      "completed": 2,
+      "completionRate": 0.038461538461538464
+    },
+    {
+      "segmentId": "mobile",
+      "weekStart": "2026-10-12",
+      "n": 518,
+      "completed": 12,
+      "completionRate": 0.023166023166023165
+    },
+    {
+      "segmentId": "desktop",
+      "weekStart": "2026-10-12",
+      "n": 341,
+      "completed": 32,
+      "completionRate": 0.093841642228739
+    }
+  ]
+}

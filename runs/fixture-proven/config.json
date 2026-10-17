@@ -1,0 +1,17 @@
+{
+  "runId": "fixture-proven",
+  "kind": "analysis",
+  "flowId": "buy-tshirt",
+  "window": {
+    "from": "2026-09-20",
+    "to": "2026-10-18"
+  },
+  "posthog": {
+    "source": "file",
+    "buildSha": "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9"
+  },
+  "personaIds": [],
+  "seeds": {},
+  "targetUrl": "https://swarm-ecommerce.netlify.app",
+  "createdAt": "2026-10-17T21:00:00.000Z"
+}

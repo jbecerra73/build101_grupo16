@@ -1,0 +1,167 @@
+{
+  "runId": "fixture-not-proven-retest1",
+  "flowId": "buy-tshirt",
+  "buildSha": "0ae493169457134a07fb7fee55004a8e06abd349",
+  "segments": [],
+  "personas": [
+    {
+      "personaId": "rosa",
+      "n": 10,
+      "users": 10,
+      "completed": 0,
+      "completionRate": 0,
+      "gaveUp": 10,
+      "invalidCompletions": 0,
+      "medianSteps": 0,
+      "medianTimeMs": 0,
+      "funnel": [
+        {
+          "step": "Home",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Browse",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Product",
+          "reached": 10,
+          "droppedHere": 2
+        },
+        {
+          "step": "Cart",
+          "reached": 8,
+          "droppedHere": 0
+        },
+        {
+          "step": "Account",
+          "reached": 8,
+          "droppedHere": 2
+        },
+        {
+          "step": "Shipping",
+          "reached": 6,
+          "droppedHere": 6
+        },
+        {
+          "step": "Payment",
+          "reached": 0,
+          "droppedHere": 0
+        },
+        {
+          "step": "Confirmation",
+          "reached": 0,
+          "droppedHere": 0
+        }
+      ]
+    },
+    {
+      "personaId": "kai",
+      "n": 10,
+      "users": 10,
+      "completed": 0,
+      "completionRate": 0,
+      "gaveUp": 10,
+      "invalidCompletions": 0,
+      "medianSteps": 0,
+      "medianTimeMs": 0,
+      "funnel": [
+        {
+          "step": "Home",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Browse",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Product",
+          "reached": 10,
+          "droppedHere": 4
+        },
+        {
+          "step": "Cart",
+          "reached": 6,
+          "droppedHere": 0
+        },
+        {
+          "step": "Account",
+          "reached": 6,
+          "droppedHere": 6
+        },
+        {
+          "step": "Shipping",
+          "reached": 0,
+          "droppedHere": 0
+        },
+        {
+          "step": "Payment",
+          "reached": 0,
+          "droppedHere": 0
+        },
+        {
+          "step": "Confirmation",
+          "reached": 0,
+          "droppedHere": 0
+        }
+      ]
+    },
+    {
+      "personaId": "typical",
+      "n": 10,
+      "users": 10,
+      "completed": 7,
+      "completionRate": 0.7,
+      "gaveUp": 3,
+      "invalidCompletions": 0,
+      "medianSteps": 19,
+      "medianTimeMs": 73813,
+      "funnel": [
+        {
+          "step": "Home",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Browse",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Product",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Cart",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Account",
+          "reached": 10,
+          "droppedHere": 0
+        },
+        {
+          "step": "Shipping",
+          "reached": 10,
+          "droppedHere": 3
+        },
+        {
+          "step": "Payment",
+          "reached": 7,
+          "droppedHere": 0
+        },
+        {
+          "step": "Confirmation",
+          "reached": 7,
+          "droppedHere": 0
+        }
+      ]
+    }
+  ]
+}

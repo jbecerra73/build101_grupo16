@@ -1,0 +1,127 @@
+[
+  {
+    "id": "T1",
+    "title": "Left at Product: Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 2310,
+    "quotes": [],
+    "findingIds": [
+      "F1"
+    ]
+  },
+  {
+    "id": "T2",
+    "title": "Left at Browse",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 656,
+    "quotes": []
+  },
+  {
+    "id": "T3",
+    "title": "Left at Home",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 613,
+    "quotes": []
+  },
+  {
+    "id": "T4",
+    "title": "Left at Account: Mobile shoppers leave at Account, a step the flow doesn't require; 229 failed 'account_submitted' submits (password, confirmPassword, birthDate)",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 413,
+    "quotes": [],
+    "findingIds": [
+      "F2"
+    ]
+  },
+  {
+    "id": "T5",
+    "title": "Left at Cart",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 328,
+    "quotes": []
+  },
+  {
+    "id": "T6",
+    "title": "Left at Shipping: Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 85,
+    "quotes": [],
+    "findingIds": [
+      "F4",
+      "F5"
+    ]
+  },
+  {
+    "id": "T7",
+    "title": "Left at Payment: Mobile shoppers and Desktop shoppers leave Payment seconds after it loads (median 11s): the $15 delivery fee first appears here",
+    "segments": [
+      "low_vision",
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "rosa",
+      "kai",
+      "typical"
+    ],
+    "sessions": 67,
+    "quotes": [],
+    "findingIds": [
+      "F3"
+    ]
+  }
+]

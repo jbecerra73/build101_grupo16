@@ -1,0 +1,7 @@
+{
+  "runId": "fixture-not-proven",
+  "phase": "done",
+  "updatedAt": "2026-10-17T20:01:35.000Z",
+  "message": "Fix attempted, not proven: rehearsal, no PR opened",
+  "retestRunId": "fixture-not-proven-retest1"
+}

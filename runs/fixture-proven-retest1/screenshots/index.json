@@ -1,0 +1,152 @@
+{
+  "kai-1": {
+    "step": "Payment",
+    "at": "2026-10-17T22:21:03.445Z",
+    "n": 4
+  },
+  "rosa-6": {
+    "step": "Payment",
+    "at": "2026-10-17T22:21:03.397Z",
+    "n": 3
+  },
+  "kai-2": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.501Z",
+    "n": 5
+  },
+  "typical-7": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.549Z",
+    "n": 5
+  },
+  "kai-3": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.413Z",
+    "n": 3
+  },
+  "kai-4": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.531Z",
+    "n": 6
+  },
+  "typical-9": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.531Z",
+    "n": 6
+  },
+  "kai-10": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.371Z",
+    "n": 2
+  },
+  "typical-5": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.532Z",
+    "n": 6
+  },
+  "rosa-1": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.516Z",
+    "n": 5
+  },
+  "kai-6": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.398Z",
+    "n": 2
+  },
+  "typical-1": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.587Z",
+    "n": 5
+  },
+  "typical-6": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.599Z",
+    "n": 6
+  },
+  "rosa-7": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.516Z",
+    "n": 5
+  },
+  "kai-7": {
+    "step": "Payment",
+    "at": "2026-10-17T22:21:03.475Z",
+    "n": 4
+  },
+  "typical-2": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.574Z",
+    "n": 5
+  },
+  "rosa-3": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.413Z",
+    "n": 2
+  },
+  "rosa-8": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.413Z",
+    "n": 2
+  },
+  "typical-3": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.654Z",
+    "n": 7
+  },
+  "typical-8": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.587Z",
+    "n": 6
+  },
+  "rosa-9": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.562Z",
+    "n": 6
+  },
+  "kai-9": {
+    "step": "Product",
+    "at": "2026-10-17T22:21:03.423Z",
+    "n": 2
+  },
+  "typical-4": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.574Z",
+    "n": 5
+  },
+  "rosa-5": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.588Z",
+    "n": 6
+  },
+  "rosa-10": {
+    "step": "Shipping",
+    "at": "2026-10-17T22:21:03.477Z",
+    "n": 4
+  },
+  "typical-10": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.519Z",
+    "n": 5
+  },
+  "rosa-2": {
+    "step": "Shipping",
+    "at": "2026-10-17T22:21:03.498Z",
+    "n": 4
+  },
+  "kai-8": {
+    "step": "Payment",
+    "at": "2026-10-17T22:21:03.475Z",
+    "n": 3
+  },
+  "rosa-4": {
+    "step": "Shipping",
+    "at": "2026-10-17T22:21:03.476Z",
+    "n": 2
+  },
+  "kai-5": {
+    "step": "Confirmation",
+    "at": "2026-10-17T22:21:03.600Z",
+    "n": 6
+  }
+}

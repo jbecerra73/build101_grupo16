@@ -1,0 +1,55 @@
+{
+  "runId": "fixture-not-proven-retest1",
+  "kind": "retest",
+  "flowId": "buy-tshirt",
+  "posthog": {
+    "source": "file",
+    "buildSha": "0ae493169457134a07fb7fee55004a8e06abd349"
+  },
+  "personaIds": [
+    "rosa",
+    "kai",
+    "typical"
+  ],
+  "seeds": {
+    "rosa": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "kai": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "typical": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "targetUrl": "https://deploy-preview-rehearsal--swarm-ecommerce.netlify.app",
+  "baselineRunId": "fixture-not-proven",
+  "createdAt": "2026-10-17T20:00:40.000Z"
+}
