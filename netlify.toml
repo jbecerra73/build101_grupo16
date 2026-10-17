@@ -1,0 +1,27 @@
+# Netlify site shimmering-melomakarona-fcc08f: the FrictionSwarm dashboard
+# (apps/dashboard) only. See docs/DEPLOY.md.
+#
+# Monorepo: Netlify installs the npm workspaces from the repo root, then builds
+# the dashboard workspace with the Next.js runtime. The site never runs the
+# pipeline: "Analyze" only enqueues a run in Netlify Blobs, and the orchestrator
+# (`npm run orchestrator:tenki -- up`) takes it from there.
+
+[build]
+  command = "npm run build -w @frictionswarm/dashboard"
+  publish = "apps/dashboard/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Build-time only on Netlify; next.config.ts bakes them into the functions
+  # (lib/deploy.ts). Runtime env vars set in the Netlify UI still win.
+  RUN_STORE = "blobs"
+  ORCHESTRATOR = "queue"
+  # Fail closed: without DASHBOARD_PASSWORD (Netlify UI) the site serves only
+  # a "set DASHBOARD_PASSWORD" page.
+  DASHBOARD_REQUIRE_PASSWORD = "1"
+  # Playwright is a root dependency for the worker; the site never runs a browser.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

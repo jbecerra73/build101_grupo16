@@ -1,8 +1,11 @@
 // Password gate for the deployed dashboard (Netlify's own password protection
-// is a paid feature). With DASHBOARD_PASSWORD unset the gate is off (local dev).
+// is a paid feature). With DASHBOARD_PASSWORD unset the gate is off locally and
+// fails closed on Netlify builds ("setup": every request gets the "set
+// DASHBOARD_PASSWORD" page, see lib/deploy.ts).
 // The cookie is "<expiry>.<hmac>": HMAC-SHA256 over the expiry, keyed with
 // AUTH_SECRET (or the password itself), so it cannot be forged and changing the
 // password or secret logs everyone out. Web Crypto only: runs in proxy.ts too.
+import { passwordRequired } from "./deploy";
 
 export const AUTH_COOKIE = "fs_auth";
 export const AUTH_MAX_AGE_S = 7 * 24 * 3600;
@@ -50,11 +53,13 @@ export async function checkPassword(password: unknown, env: Env = process.env): 
 export const isPublicPath = (path: string) =>
   path === "/login" || path === "/api/login" || path === "/api/logout" || path.startsWith("/_next/") || path === "/favicon.ico";
 
-export type GateDecision = "allow" | "unauthorized" | "login";
+export type GateDecision = "allow" | "unauthorized" | "login" | "setup";
 
-/** What proxy.ts does with a request. */
+/** What proxy.ts does with a request. "setup": this deploy requires a password
+ * (Netlify) but none is configured, so nothing is served. */
 export async function gate(path: string, cookie: string | undefined, env: Env = process.env): Promise<GateDecision> {
-  if (!authEnabled(env) || isPublicPath(path)) return "allow";
+  if (!authEnabled(env)) return passwordRequired(env) ? "setup" : "allow";
+  if (isPublicPath(path)) return "allow";
   if (await verifySession(cookie, env)) return "allow";
   return path.startsWith("/api/") ? "unauthorized" : "login";
 }

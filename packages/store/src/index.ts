@@ -5,6 +5,7 @@ import type { RunStore } from "./types";
 export { BlobsStore, BLOBS_STORE_NAME, type BlobsClient, type BlobsStoreOptions } from "./blobs";
 export { CONTROL_DIR, FsStore } from "./fs";
 export { MemoryStore } from "./memory";
+export { FixtureFallbackStore, isFixtureKey } from "./layered";
 export { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore } from "./types";
 export * from "./control";
 
