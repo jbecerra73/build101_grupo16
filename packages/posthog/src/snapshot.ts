@@ -18,7 +18,7 @@ export async function snapshot(events: Iterable<PostHogEvent> | AsyncIterable<Po
   let n = 0;
   try {
     for await (const e of events as AsyncIterable<PostHogEvent>) {
-      if (!out.write(JSON.stringify(e) + "\n")) await new Promise((r) => out.once("drain", r));
+      if (!out.write(JSON.stringify(e) + "\n")) await new Promise<void>((r) => out.once("drain", () => r()));
       n++;
     }
   } finally {
