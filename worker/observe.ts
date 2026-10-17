@@ -134,8 +134,8 @@ async function withMarks<T>(page: Page, elements: PageElement[], fn: () => Promi
       const tag = document.createElement("div");
       tag.textContent = e.id;
       tag.style.cssText =
-        `position:absolute;left:${Math.max(0, e.rect.x)}px;top:${Math.max(0, e.rect.y - 14)}px;` +
-        "font:bold 11px/13px monospace;background:#e11d48;color:#fff;padding:0 3px;border-radius:3px";
+        `position:absolute;left:${Math.max(0, e.rect.x)}px;top:${Math.max(0, e.rect.y - 16)}px;` +
+        "font:bold 13px/15px monospace;background:#e11d48;color:#fff;padding:0 3px;border-radius:3px";
       const box = document.createElement("div");
       box.style.cssText =
         `position:absolute;left:${e.rect.x}px;top:${e.rect.y}px;width:${e.rect.width}px;height:${e.rect.height}px;` +

@@ -2,16 +2,17 @@
 //
 //   npm run agent -- --persona typical --seed 1 [--url https://...] [--run <runId>] [--headed]
 //
-// Several invocations with the same --run add agents to the same run folder.
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+// The agent is Claude Code headless (`claude -p`, logged-in account or CLAUDE_CODE_OAUTH_TOKEN)
+// whose only tools come from worker/mcp-server.ts. Several invocations with the same --run add
+// agents to the same run folder.
+import { spawn } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { chromium } from "playwright";
-import { FLOWS, MAX_ACTIONS_PER_AGENT, PERSONAS, type RunConfig } from "../shared";
-import { runAgent, systemPrompt } from "./agent";
-import { createBrain, DEFAULT_AGENT_MODEL } from "./brain";
+import { FLOWS, PERSONAS, type Event, type RunConfig } from "../shared";
+import { systemPrompt, type ToolName } from "./session";
 
-// API keys (OPENCODE_API_KEY or ANTHROPIC_API_KEY) and optionally AGENT_MODEL live in a gitignored .env.
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 const { values: args } = parseArgs({
@@ -22,7 +23,8 @@ const { values: args } = parseArgs({
     url: { type: "string" },
     run: { type: "string" },
     runs: { type: "string", default: "runs" },
-    model: { type: "string", default: DEFAULT_AGENT_MODEL() },
+    model: { type: "string", default: process.env.AGENT_MODEL ?? "haiku" },
+    "timeout-min": { type: "string", default: "10" },
     headed: { type: "boolean", default: false },
   },
 });
@@ -34,7 +36,9 @@ if (!flow) throw new Error(`Unknown flow ${args.flow}; known: ${Object.keys(FLOW
 const seed = Number(args.seed);
 const targetUrl = args.url ?? flow.startUrl;
 const runId = args.run ?? `run-${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}`;
-const runDir = join(args.runs!, runId);
+const runDir = resolve(args.runs!, runId);
+const agentId = `${persona.id}-${seed}`;
+const repo = resolve(import.meta.dirname, "..");
 
 async function readBuildSha(url: string): Promise<string> {
   try {
@@ -52,34 +56,92 @@ function writeConfig(buildSha: string) {
     ? JSON.parse(readFileSync(file, "utf8"))
     : { runId, kind: "baseline", flowId: flow.id, personaIds: [], seeds: {}, targetUrl, buildSha, createdAt: new Date().toISOString() };
   if (!config.personaIds.includes(persona.id)) config.personaIds.push(persona.id);
-  const seeds = new Set([...(config.seeds[persona.id] ?? []), seed]);
-  config.seeds[persona.id] = [...seeds].sort((a, b) => a - b);
+  config.seeds[persona.id] = [...new Set([...(config.seeds[persona.id] ?? []), seed])].sort((a, b) => a - b);
   writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+}
+
+const TOOLS: ToolName[] = ["look", "click", "type", "scroll", "back", "think_aloud", "give_up", "done"];
+
+/** Claude Code with nothing but our MCP tools: no built-in tools, settings, skills or other servers. */
+function claudeArgs() {
+  const mcp = {
+    mcpServers: {
+      shop: {
+        command: join(repo, "node_modules", ".bin", "tsx"),
+        args: [
+          join(repo, "worker", "mcp-server.ts"),
+          "--persona", persona.id, "--seed", String(seed), "--flow", flow.id,
+          "--run", runId, "--run-dir", runDir, "--url", targetUrl,
+          ...(args.headed ? ["--headed"] : []),
+        ],
+      },
+    },
+  };
+  return [
+    "-p", "Start shopping. Call look first.",
+    "--system-prompt", systemPrompt(persona, flow, seed),
+    "--model", args.model!,
+    "--mcp-config", JSON.stringify(mcp),
+    "--strict-mcp-config",
+    "--tools", "",
+    "--allowedTools", TOOLS.map((t) => `mcp__shop__${t}`).join(","),
+    "--setting-sources", "",
+    "--disable-slash-commands",
+    "--no-session-persistence",
+    "--output-format", "stream-json",
+    "--verbose",
+  ];
+}
+
+/** Print each tool call as Claude Code streams it. */
+function printProgress(line: string) {
+  let msg: { type?: string; message?: { content?: { type: string; name?: string; input?: unknown }[] }; result?: string };
+  try {
+    msg = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (msg.type === "assistant")
+    for (const b of msg.message?.content ?? [])
+      if (b.type === "tool_use") console.log(`  → ${b.name?.replace("mcp__shop__", "")} ${JSON.stringify(b.input)}`);
+  if (msg.type === "result" && msg.result) console.log(`  claude: ${msg.result.trim().slice(0, 200)}`);
+}
+
+function readEvents(): Event[] {
+  const file = join(runDir, "events", `${agentId}.jsonl`);
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
 }
 
 const buildSha = await readBuildSha(targetUrl);
 writeConfig(buildSha);
-console.log(`run ${runId} · ${persona.id}-${seed} · ${targetUrl} · build ${buildSha} · ${args.model}`);
+console.log(`run ${runId} · ${agentId} · ${targetUrl} · build ${buildSha} · claude ${args.model}`);
 
-const browser = await chromium.launch({ headless: !args.headed });
-try {
-  const context = await browser.newContext({
-    viewport: { width: persona.viewport.width, height: persona.viewport.height },
-    isMobile: persona.viewport.mobile,
-    hasTouch: persona.viewport.mobile,
-  });
-  const page = await context.newPage();
-  const maxActions = Math.min(persona.actions.maxActions, MAX_ACTIONS_PER_AGENT);
-  const brain = createBrain(systemPrompt(persona, flow, seed, maxActions), args.model);
-  const startUrl = new URL(targetUrl);
-  startUrl.searchParams.set("swarm", runId);
-  const result = await runAgent({ page, brain, persona, flow, runId, runDir, seed, startUrl: startUrl.toString() });
-  for (const e of result.events) {
-    const what = e.action ? `${e.action.kind} ${e.action.text ?? e.action.selector ?? ""}${e.action.missed ? " (missed)" : ""}` : e.note ?? "";
-    console.log(`  ${e.type.padEnd(11)} ${(e.step ?? "-").padEnd(13)} ${what}`);
-  }
-  console.log(`${result.outcome} after ${result.actions} actions → ${runDir}`);
-  process.exitCode = result.outcome === "error" ? 1 : 0;
-} finally {
-  await browser.close();
+const child = spawn("claude", claudeArgs(), { cwd: runDir, stdio: ["ignore", "pipe", "inherit"] });
+createInterface({ input: child.stdout }).on("line", printProgress);
+const timer = setTimeout(() => child.kill("SIGTERM"), Number(args["timeout-min"]) * 60_000);
+const stop = () => child.kill("SIGTERM");
+process.on("SIGINT", stop);
+const code: number | null = await new Promise((done) => child.on("close", done));
+clearTimeout(timer);
+process.off("SIGINT", stop);
+
+const events = readEvents();
+const last = events.at(-1);
+if (last && !["success", "give_up", "error"].includes(last.type)) {
+  // Claude Code stopped before the MCP server could record an ending.
+  const end: Event = { ...last, ts: Date.now(), type: "give_up", note: "Stopped without finishing." };
+  delete end.action;
+  delete end.screenshot;
+  appendFileSync(join(runDir, "events", `${agentId}.jsonl`), JSON.stringify(end) + "\n");
+  events.push(end);
 }
+
+console.log("");
+for (const e of events) {
+  const what = e.action ? `${e.action.kind} ${e.action.text ?? e.action.selector ?? ""}${e.action.missed ? " (missed)" : ""}` : (e.note ?? "");
+  console.log(`  ${e.type.padEnd(11)} ${(e.step ?? "-").padEnd(13)} ${what}`);
+}
+const outcome = events.at(-1)?.type ?? "no events";
+console.log(`${outcome} · ${events.filter((e) => e.type === "action").length} actions · claude exit ${code} → ${runDir}`);
+process.exitCode = outcome === "success" || outcome === "give_up" ? 0 : 1;

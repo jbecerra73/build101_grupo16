@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buyTshirt, typical, type Event, type Flow } from "../shared";
-import { runAgent } from "./agent";
-import type { Brain, ToolCall } from "./brain";
+import { runAgent, type Brain } from "./agent";
 import type { Observation } from "./observe";
+import type { ToolCall } from "./session";
 
 // A tiny store at http://store.test that walks Home → Cart → Shipping → Payment → Confirmation.
 const PAGES: Record<string, string> = {
@@ -28,11 +28,9 @@ const flow: Flow = { ...buyTshirt, startUrl: ORIGIN };
 /** Plays a fixed list of moves, finding elements by their visible name. */
 class ScriptedBrain implements Brain {
   private n = 0;
-  constructor(private readonly moves: ((o: Observation) => Omit<ToolCall, "id">[])[]) {}
+  constructor(private readonly moves: ((o: Observation) => ToolCall[])[]) {}
   async decide({ observation }: { observation: Observation }) {
-    const move = this.moves[Math.min(this.n, this.moves.length - 1)];
-    this.n++;
-    return move(observation).map((c, i) => ({ ...c, id: `t${this.n}-${i}` }));
+    return this.moves[Math.min(this.n++, this.moves.length - 1)](observation);
   }
 }
 const byName = (o: Observation, name: string) => {
@@ -75,7 +73,7 @@ describe("runAgent", () => {
       (o) => [{ name: "type", input: { id: byName(o, "Card number"), text: "4242 4242 4242 4242" } }],
       click("Pay $120"),
     ]);
-    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r1", runDir, seed: 1, settleMs: 50 });
+    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r1", runDir, seed: 1, settleMs: 50, navWaitMs: 50 });
 
     expect(res.outcome).toBe("success");
     const events = readLog(runDir, "typical-1");
@@ -101,7 +99,7 @@ describe("runAgent", () => {
   it("gives up with a reason when the agent does", async () => {
     const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
     const brain = new ScriptedBrain([() => [{ name: "give_up", input: { reason: "Too confusing." } }]]);
-    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r2", runDir, seed: 2, settleMs: 50 });
+    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r2", runDir, seed: 2, settleMs: 50, navWaitMs: 50 });
     expect(res.outcome).toBe("give_up");
     expect(res.events.at(-1)).toMatchObject({ type: "give_up", step: "Home", note: "Too confusing." });
   }, 30_000);
@@ -110,7 +108,7 @@ describe("runAgent", () => {
     const runDir = mkdtempSync(join(tmpdir(), "fs-run-"));
     const generous = { ...typical, actions: { ...typical.actions, maxActions: 100 } };
     const brain = new ScriptedBrain([() => [{ name: "scroll", input: { direction: "down" } }]]);
-    const res = await runAgent({ page: await newPage(), brain, persona: generous, flow, runId: "r3", runDir, seed: 3, settleMs: 50 });
+    const res = await runAgent({ page: await newPage(), brain, persona: generous, flow, runId: "r3", runDir, seed: 3, settleMs: 50, navWaitMs: 50 });
     expect(res.outcome).toBe("give_up");
     expect(res.events.filter((e) => e.type === "action")).toHaveLength(25);
     expect(res.events.at(-1)?.note).toMatch(/Ran out of actions \(25\)/);
@@ -122,7 +120,7 @@ describe("runAgent", () => {
       (o) => [...click("Go to cart")(o), ...click("Go to cart")(o)],
       () => [{ name: "give_up", input: { reason: "done testing" } }],
     ]);
-    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r4", runDir, seed: 4, settleMs: 50 });
+    const res = await runAgent({ page: await newPage(), brain, persona: typical, flow, runId: "r4", runDir, seed: 4, settleMs: 50, navWaitMs: 50 });
     expect(res.actions).toBe(1);
   }, 30_000);
 });
