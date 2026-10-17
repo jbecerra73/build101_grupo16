@@ -10,8 +10,8 @@
       "completionRate": 0,
       "gaveUp": 1,
       "invalidCompletions": 0,
-      "medianSteps": 14,
-      "medianTimeMs": 42300,
+      "medianSteps": 0,
+      "medianTimeMs": 0,
       "funnel": [
         {
           "step": "Home",
@@ -62,8 +62,8 @@
       "completionRate": 0,
       "gaveUp": 1,
       "invalidCompletions": 1,
-      "medianSteps": 2.5,
-      "medianTimeMs": 7250,
+      "medianSteps": 0,
+      "medianTimeMs": 0,
       "funnel": [
         {
           "step": "Home",
