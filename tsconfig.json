@@ -18,6 +18,7 @@
   "include": [
     "shared",
     "orchestrator",
-    "packages"
+    "packages",
+    "tools"
   ]
 }
