@@ -16,7 +16,7 @@ import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
 import { topFindings } from "./fix-prompt";
 import { finalizePr, gh, uploadEvidence, type Gh } from "./pr";
 import { waitForBuildSha } from "./preview";
-import type { Shell } from "./shell";
+import { tenkiShell, type Shell } from "./shell";
 import { compareRuns } from "./verdict";
 
 export const RUNS_DIR = join(import.meta.dirname, "..", "runs");
@@ -44,12 +44,21 @@ export function retestSeeds(personaIds: string[], perPersona: number, attempt: n
   return Object.fromEntries(personaIds.map((p) => [p, seeds]));
 }
 
+// Compatible with packages/pipeline's FixLoopOptions, so the pipeline loads runFixLoop as its real
+// fix loop (FIX_LOOP=real); the extra fields are optional and default for that path.
 export type FixLoopOptions = {
   baselineRunId: string;
   runSwarm: SwarmRunner;
+  /** Waits until the swarm's events are in PostHog (waitForSwarm), when runSwarm doesn't. */
+  collect?: (config: RunConfig) => Promise<void>;
   analyze: Analyzer;
-  /** A fresh shell per attempt (tenkiShell or localShell). */
-  shell: () => Promise<Shell>;
+  /** Segments vs personas; defaults to the analyzer's compareSegmentsToPersonas. */
+  compare?: typeof compareRuns;
+  /** Attempt 1's seeds per persona (the pipeline allocates fresh ones); each retry shifts them by
+   * a block of 1000. Default: retestSeeds over every segment's persona. */
+  retestSeeds?: Record<string, number[]>;
+  /** A fresh shell per attempt (tenkiShell or localShell). Default: a tenki sandbox. */
+  shell?: (attempt: number) => Promise<Shell>;
   /** Findings handed to the coding agent per attempt (SPEC: top 1–3). */
   maxFindings?: number;
   /** 1 normally; 2 retries once with the re-test's findings (stretch). */
@@ -73,13 +82,18 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const ghImpl = opts.ghImpl ?? gh;
   const codingAgent = opts.codingAgent ?? runCodingAgent;
   const waitForBuild = opts.waitForBuild ?? waitForBuildSha;
+  const compare = opts.compare ?? compareRuns;
+  const openShell = opts.shell ?? ((n: number) => tenkiShell(`fix-${baselineRunId}-${n}`));
   const baseDir = join(runsDir, baselineRunId);
   const config = await readJson<RunConfig>(join(baseDir, "config.json"));
   const baseline = await readJson<Metrics>(join(baseDir, "metrics.json"));
   const flow = FLOWS[config.flowId];
   if (!flow) throw new Error(`unknown flow ${config.flowId}`);
   // Every segment's persona re-tests, control included, so a fix can't quietly hurt the others.
-  const personaIds = SEGMENTS.map((s) => s.personaId);
+  const seedsFor = (n: number) =>
+    opts.retestSeeds
+      ? Object.fromEntries(Object.entries(opts.retestSeeds).map(([p, seeds]) => [p, seeds.map((x) => x + (n - 1) * 1000)]))
+      : retestSeeds(SEGMENTS.map((s) => s.personaId), seedsPerPersona, n);
 
   const result: FixResult = { baselineRunId, repo, attempts: [] };
   const save = () => writeJson(join(baseDir, "fix.json"), result);
@@ -96,7 +110,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
     await save();
 
     try {
-      const shell = await opts.shell();
+      const shell = await openShell(n);
       let agent;
       try {
         agent = await codingAgent(shell, { runId: baselineRunId, attempt: n, flow, findings: targets, repo, log });
@@ -120,13 +134,15 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       });
 
       const retestRunId = `${baselineRunId}-retest${n}`;
+      const seeds = seedsFor(n);
+      const personaIds = Object.keys(seeds);
       const retestConfig: RunConfig = {
         runId: retestRunId,
         kind: "retest",
         flowId: flow.id,
         posthog: { source: config.posthog.source, buildSha: agent.commitSha },
         personaIds,
-        seeds: retestSeeds(personaIds, seedsPerPersona, n),
+        seeds,
         targetUrl: attempt.previewUrl!,
         baselineRunId,
         createdAt: new Date().toISOString(),
@@ -138,10 +154,11 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
 
       log(`re-testing ${personaIds.join(", ")} on the preview (run ${retestRunId})`);
       await opts.runSwarm(retestConfig);
+      await opts.collect?.(retestConfig);
       const retest = await opts.analyze(retestRunId);
 
       const targeted = [...new Set(targets.flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
-      const verdict = compareRuns(baseline, retest.metrics, targeted);
+      const verdict = compare(baseline, retest.metrics, targeted);
       attempt.verdict = verdict;
       log(`verdict: ${verdict.improved ? "improved" : "not proven"}\n  ${verdict.reasons.join("\n  ")}`);
 

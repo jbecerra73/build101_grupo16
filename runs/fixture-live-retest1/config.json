@@ -1,0 +1,55 @@
+{
+  "runId": "fixture-live-retest1",
+  "kind": "retest",
+  "flowId": "buy-tshirt",
+  "posthog": {
+    "source": "file",
+    "buildSha": "709940067489dd2344ebbf446378c4606ba94a6a"
+  },
+  "personaIds": [
+    "rosa",
+    "kai",
+    "typical"
+  ],
+  "seeds": {
+    "rosa": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "kai": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "typical": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "targetUrl": "https://deploy-preview-rehearsal--swarm-ecommerce.netlify.app",
+  "baselineRunId": "fixture-live",
+  "createdAt": "2026-10-17T21:10:40.000Z"
+}

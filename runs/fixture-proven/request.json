@@ -1,0 +1,6 @@
+{
+  "flowId": "buy-tshirt",
+  "source": "file",
+  "autoFix": true,
+  "seedsPerPersona": 10
+}

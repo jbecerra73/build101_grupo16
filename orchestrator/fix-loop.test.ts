@@ -1,6 +1,7 @@
 import { cp, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { FixLoop } from "@frictionswarm/pipeline";
 import { describe, expect, it } from "vitest";
 import { buyTshirt, type FixResult, type Finding, type Metrics, type PersonaMetrics, type RunConfig } from "../shared";
 import { readJson, retestSeeds, runFixLoop, type FixLoopOptions } from "./fix-loop";
@@ -68,6 +69,24 @@ describe("runFixLoop", () => {
     expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["edit", "ready"]);
     const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
     expect(saved.attempts[0].verdict?.improved).toBe(true);
+  });
+
+  it("plugs into the pipeline: its seeds, collect after the swarm, its compare", async () => {
+    const asPipelineFixLoop: FixLoop = runFixLoop; // compile-time check of the seam
+    const { opts, swarmConfigs } = await setup([metrics("r1", 6, 7, 10)]);
+    const calls: string[] = [];
+    const result = await asPipelineFixLoop({
+      ...opts,
+      runsDir: opts.runsDir!,
+      log: () => {},
+      retestSeeds: { rosa: [31, 32], kai: [33, 34], typical: [35, 36] },
+      runSwarm: async (c) => void calls.push(`swarm ${c.runId}`),
+      collect: async (c) => void calls.push(`collect ${c.runId}`),
+      compare: (_a, _r, targeted) => (calls.push("compare"), { improved: true, targetedPersonas: targeted, comparisons: [], reasons: [] }),
+    });
+    expect(swarmConfigs).toEqual([]);
+    expect(calls).toEqual(["swarm fixture-analysis-retest1", "collect fixture-analysis-retest1", "compare"]);
+    expect(result.attempts[0].status).toBe("ready");
   });
 
   it("not proven: closes with the label after one attempt by default", async () => {
