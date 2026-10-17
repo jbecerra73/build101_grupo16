@@ -27,6 +27,7 @@ import {
   type Settings,
 } from "@frictionswarm/store";
 import { RunMirror } from "./mirror";
+import { registerTenkiSwarmRunner } from "./swarm";
 import {
   analysisConfig,
   buildDeps,
@@ -289,6 +290,13 @@ function gitVersion(): string {
 }
 
 /** Orchestrator configured from env (RUN_STORE, RUNS_DIR, ORCHESTRATOR_WORK_DIR, ...). */
+/** Plugs P2's tenki swarm (orchestrator/swarm/pipeline-runner.ts) into tenkiSwarmRunner. Entry
+ * points only: the Next server (inline orchestrator) can't load it, use ORCHESTRATOR=daemon there. */
+export async function registerP2SwarmRunner() {
+  const { tenkiRunnerFactory } = await import(/*turbopackIgnore: true*/ "../../../orchestrator/swarm/pipeline-runner");
+  registerTenkiSwarmRunner(tenkiRunnerFactory());
+}
+
 export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestrator {
   const runsDir = resolve(/*turbopackIgnore: true*/ env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
   const store = createStore(runsDir, env);
@@ -310,6 +318,7 @@ const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(resolve(pr
 if (isMain) {
   const envFile = join(REPO_ROOT, ".env.local");
   if (existsSync(envFile)) process.loadEnvFile(envFile);
+  await registerP2SwarmRunner();
   const o = orchestratorFromEnv();
   await o.start();
   const shutdown = async (sig: string) => {
