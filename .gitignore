@@ -7,3 +7,4 @@ node_modules/
 next-env.d.ts
 data/posthog/
 screenshots/
+runs/.swarm-ledger.json*

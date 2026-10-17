@@ -20,6 +20,8 @@ const { values: args } = parseArgs({
     "run-dir": { type: "string" },
     url: { type: "string" },
     headed: { type: "boolean", default: false },
+    /** A Playwright browser server (see swarm.ts): open a context in it instead of a new browser. */
+    "browser-ws": { type: "string" },
   },
 });
 
@@ -30,7 +32,8 @@ if (!persona || !flow || !args.run || !args["run-dir"] || !args.seed) {
   process.exit(2);
 }
 
-const browser = await chromium.launch({ headless: !args.headed });
+// Closing a connected browser closes only the contexts this process created.
+const browser = args["browser-ws"] ? await chromium.connect(args["browser-ws"]) : await chromium.launch({ headless: !args.headed });
 const context = await browser.newContext({
   viewport: { width: persona.viewport.width, height: persona.viewport.height },
   isMobile: persona.viewport.mobile,
