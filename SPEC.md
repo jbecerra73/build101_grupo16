@@ -181,7 +181,7 @@ type Finding = {
 
 ### Improvement threshold
 "Before" = the targeted segment's **real users** on the production `build_sha` over the analysis window. "After" = the matching **persona swarm** on the preview `build_sha`.
-"Real improvement" = completion rate up **≥ 20 percentage points** for at least one targeted persona vs its segment AND **no persona below its segment** on completion rate or any step's conversion, including the control. Re-test always uses **fresh seeds**. Show N alongside every number; no p-value claims. The dashboard states plainly that before and after are different populations (people vs. constrained agents).
+"Real improvement" = completion rate up **≥ 20 percentage points** for at least one targeted persona vs its segment AND **no persona below its segment** on completion rate or any step's conversion, including the control. Completion is compared strictly; with ~10 agents one agent is 10 pts, so a step only counts as a regression when the persona is **more than 15 pts below** its segment AND the segment's rate is above the persona's **95% Wilson upper bound** for its N at that step (steps with N = 0 are skipped). Re-test always uses **fresh seeds**. Show N alongside every number; no p-value claims. The dashboard states plainly that before and after are different populations (people vs. constrained agents).
 
 ### Coding agent
 - Claude Code headless (`claude -p`, **Opus 5.5**) in a tenki sandbox (base image ships Claude Code, git, gh; pass a GitHub token).

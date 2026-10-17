@@ -371,14 +371,54 @@ describe("compareSegmentsToPersonas (reference verdict)", () => {
   it("not improved when the control regresses, even with a big lift", () => {
     const v = compareSegmentsToPersonas(before, after(["rosa-1", "typical-1"]), ["rosa"]);
     expect(v.improved).toBe(false);
-    expect(v.comparisons.find((c) => c.personaId === "typical")!.regressions).toEqual([
-      "completion 0% < 25%",
-      "Payment conversion 0% < 33.3%",
-    ]);
+    // Payment 0% at n=1 vs 33.3% is within the small-N margin; the completion drop is not.
+    expect(v.comparisons.find((c) => c.personaId === "typical")!.regressions).toEqual(["completion 0% < 25%"]);
+    expect(v.reasons.some((r) => /typical Payment 0% \(n=1\) vs 33.3%: within small-N margin/.test(r))).toBe(true);
   });
 
   it("not improved without a +20 pt lift on a targeted persona", () => {
     expect(compareSegmentsToPersonas(before, after(["rosa-1", "typical-1", "typical-2"]), ["kai"]).improved).toBe(false);
+  });
+
+  // Funnels as [n, Cart, Shipping, Payment, Confirmation]; completion = Confirmation / n.
+  type F = [number, number, number, number, number];
+  const group = ([n, ...r]: F) => ({
+    n, users: n, completed: r[3], completionRate: r[3] / n, gaveUp: 0, invalidCompletions: 0, medianSteps: 0, medianTimeMs: 0,
+    funnel: ["Cart", "Shipping", "Payment", "Confirmation"].map((step, i) => ({ step, reached: r[i], droppedHere: 0 })),
+  });
+  const segs = (s: Record<string, F>): Metrics => ({
+    runId: "a", flowId: "buy-tshirt", buildSha: "p", personas: [],
+    segments: Object.entries(s).map(([segmentId, f]) => ({ segmentId: segmentId as "mobile", ...group(f) })),
+  });
+  const pers = (p: Record<string, F>): Metrics => ({
+    runId: "r", flowId: "buy-tshirt", buildSha: "x", segments: [],
+    personas: Object.entries(p).map(([personaId, f]) => ({ personaId, ...group(f) })),
+  });
+  const baseline = segs({ low_vision: [439, 86, 42, 19, 18], mobile: [400, 120, 60, 30, 28], desktop: [100, 20, 18, 16, 15] });
+
+  it("tolerates small-N step dips (one agent = 10 pts) when completion holds", () => {
+    const v = compareSegmentsToPersonas(baseline, pers({ rosa: [10, 10, 9, 5, 4], kai: [10, 10, 8, 6, 5], typical: [10, 10, 9, 7, 7] }), ["rosa", "kai"]);
+    expect(v.improved).toBe(true);
+    expect(v.comparisons.every((c) => c.regressions.length === 0)).toBe(true);
+    expect(v.reasons).toContain(
+      "rosa Confirmation 80% (n=5) vs 94.7%: within small-N margin (95% upper bound 96.4%, tolerance 15 pts), not a regression",
+    );
+  });
+
+  it("still fails a real step regression (20% at n=10 vs 90%)", () => {
+    const v = compareSegmentsToPersonas(baseline, pers({ rosa: [10, 10, 9, 5, 4], typical: [10, 10, 2, 2, 2] }), ["rosa"]);
+    expect(v.improved).toBe(false);
+    expect(v.comparisons.find((c) => c.personaId === "typical")!.regressions).toEqual([
+      "Shipping conversion 20% (n=10) < 90% (95% upper bound 51%)",
+    ]);
+  });
+
+  it("still fails any completion-rate drop, and the tolerance and confidence are options", () => {
+    const v = compareSegmentsToPersonas(baseline, pers({ rosa: [10, 10, 9, 5, 4], typical: [10, 10, 9, 5, 1] }), ["rosa"]);
+    expect(v.improved).toBe(false);
+    expect(v.comparisons.find((c) => c.personaId === "typical")!.regressions[0]).toBe("completion 10% < 15%");
+    const strict = compareSegmentsToPersonas(baseline, pers({ rosa: [10, 10, 9, 5, 4] }), ["rosa"], { stepTolerancePts: 0, confidence: 0.5 });
+    expect(strict.comparisons[0].regressions.map((r) => r.split(" ")[0])).toEqual(["Confirmation"]);
   });
 });
 
