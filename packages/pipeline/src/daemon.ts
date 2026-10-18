@@ -369,7 +369,7 @@ export class Orchestrator {
     const dir = join(this.workDir, runId);
     const status = (await readJson<RunStatus>(join(dir, "status.json")))!;
     const fix = await readJson<FixResult>(join(dir, "fix.json"));
-    const refusal = decisionRefusal(request, fix?.attempts.at(-1));
+    const last = fix?.attempts.at(-1);
     const save = async (s: RunStatus) => {
       await writeJson(join(dir, "status.json"), s);
       await this.#sync(runId);
@@ -379,6 +379,16 @@ export class Orchestrator {
       this.#log(`${runId}: decision ${request.decision} not applied (${error})`);
       return save({ ...status, error, updatedAt: this.#now().toISOString() });
     };
+    const finish = (attempt: FixAttempt & { decision: NonNullable<FixAttempt["decision"]> }) => {
+      const message = decisionMessage(attempt.decision.decision, attempt);
+      const at = this.#now().toISOString();
+      const { error: _error, ...rest } = status;
+      this.#log(`${runId} done: ${message}`);
+      return save({ ...rest, phase: "done", message, updatedAt: at, history: [...(status.history ?? []), { phase: "done", at, message }] });
+    };
+    // Already applied (the daemon stopped before the run reached done): finish, never merge or close twice.
+    if (isDecided(last)) return finish(last);
+    const refusal = decisionRefusal(request, last);
     if (refusal) return parked(refusal);
 
     const settings = await readSettings(this.store, this.#o.env);
@@ -390,24 +400,39 @@ export class Orchestrator {
     } catch (e) {
       return parked(errMsg(e));
     }
-    const message = decisionMessage(request.decision, attempt);
-    const at = this.#now().toISOString();
-    const { error: _error, ...rest } = status;
-    log(`done: ${message}`);
-    await save({ ...rest, phase: "done", message, updatedAt: at, history: [...(status.history ?? []), { phase: "done", at, message }] });
+    // Get the decided fix.json to the store before anything else can fail.
+    await this.#sync(runId);
+    await finish({ ...attempt, decision: attempt.decision ?? { decision: request.decision, decidedAt: this.#now().toISOString() } });
   }
 
   /** Copies the run's files from the store over the work dir (mirroring only):
-   * the run is not active, so the store has its latest state, and after a
-   * restart elsewhere the work dir may not have them at all. */
+   * the run is not active, so the store normally has its latest state, and
+   * after a restart elsewhere the work dir may not have them at all. A local
+   * copy the mirror never uploaded wins: a status.json with a later updatedAt,
+   * or a fix.json whose last attempt is decided while the store's is not. */
   async #pull(runId: string) {
     if (!this.mirror) return;
     for (const f of RUN_FILES) {
       const bytes = await this.store.getBytes(KEYS.runFile(runId, f));
       if (!bytes) continue;
+      if (await this.#localIsNewer(join(this.workDir, runId, f), f, bytes)) continue;
       await mkdir(join(this.workDir, runId), { recursive: true });
       await writeFile(join(this.workDir, runId, f), bytes);
     }
+  }
+
+  async #localIsNewer(file: string, name: string, remoteBytes: Uint8Array): Promise<boolean> {
+    if (name !== "status.json" && name !== "fix.json") return false;
+    const local = await readJson<RunStatus & FixResult>(file).catch(() => undefined);
+    if (!local) return false;
+    let remote: (RunStatus & FixResult) | undefined;
+    try {
+      remote = JSON.parse(new TextDecoder().decode(remoteBytes));
+    } catch {
+      return true;
+    }
+    if (name === "status.json") return (local.updatedAt ?? "") > (remote?.updatedAt ?? "");
+    return isDecided(local.attempts?.at(-1)) && !isDecided(remote?.attempts?.at(-1));
   }
 
   /** Mirrors a run and its retest folders (<runId>-retestN) to the store. */
@@ -424,6 +449,10 @@ export class Orchestrator {
 }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The attempt's PR was already merged or closed on the Product Owner's decision. */
+const isDecided = (a: FixAttempt | undefined): a is FixAttempt & { decision: NonNullable<FixAttempt["decision"]> } =>
+  !!a?.decision && (a.status === "merged" || a.status === "rejected");
 
 /** Why a decision cannot be applied to this attempt, if it cannot. */
 function decisionRefusal(r: DecisionRequest, last: FixAttempt | undefined): string | undefined {

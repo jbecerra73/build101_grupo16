@@ -380,6 +380,38 @@ describe("orchestrator daemon: fix requests and decisions", () => {
     expect(calls).toBe(1);
   });
 
+  it("finishes a parked run whose decision was already applied, without applying it again", async () => {
+    let calls = 0;
+    const applyDecision: ApplyDecision = async (o) => (calls++, fakeApplyDecision(o));
+    const { store, orch } = await parkedRun({ applyDecision });
+    const fix = (await store.getJson<FixResult>("runs/a1/fix.json"))!;
+    Object.assign(fix.attempts[0], { status: "merged", prNumber: 12, decision: { decision: "accept", decidedAt: "x", mergeSha: "abcdef1234567" } });
+    await store.putJson("runs/a1/fix.json", fix);
+    await decide(store, "a1");
+    await ticks(orch, 2);
+    const s = await phase(store, "a1", "done");
+    expect(s.message).toBe("Merged PR #12 (abcdef1)");
+    expect(s.history?.at(-1)).toMatchObject({ phase: "done", message: "Merged PR #12 (abcdef1)" });
+    await until(async () => !(await store.getJson("runs/a1/decision.json")));
+    expect(calls).toBe(0);
+  });
+
+  it("keeps a local decided fix.json over a stale store copy (died before the mirror)", async () => {
+    let calls = 0;
+    const applyDecision: ApplyDecision = async (o) => (calls++, fakeApplyDecision(o));
+    const { store, orch, workDir } = await parkedRun({ applyDecision });
+    const stale = (await store.getJson<FixResult>("runs/a1/fix.json"))!;
+    expect(stale.attempts[0].status).toBe("ready");
+    const merged: FixResult = structuredClone(stale);
+    Object.assign(merged.attempts[0], { status: "merged", prNumber: 12, decision: { decision: "accept", decidedAt: "x", mergeSha: "abcdef1234567" } });
+    await writeFile(join(workDir, "a1", "fix.json"), JSON.stringify(merged));
+    await decide(store, "a1");
+    await ticks(orch, 2);
+    expect((await phase(store, "a1", "done")).message).toBe("Merged PR #12 (abcdef1)");
+    expect(calls).toBe(0);
+    expect((await store.getJson<FixResult>("runs/a1/fix.json"))!.attempts[0].status).toBe("merged");
+  });
+
   it("ignores and deletes a decision on a run that is not awaiting one", async () => {
     const { store, orch } = await setup();
     await enqueue(store, "d1", { ...req, autoFix: false });
