@@ -118,7 +118,7 @@ function Stamp({ improved, rehearsal, delay }: { improved: boolean; rehearsal: b
         {improved ? "PR ready for review" : "Not proven"}
       </span>
       <span className="text-lg text-muted-foreground">
-        {improved ? "improvement proven against the threshold" : "PR closed with the metrics, labelled not-proven"}
+        {improved ? "improvement proven against the threshold" : "metrics comment, labelled not-proven, left for your decision"}
         {rehearsal ? " · rehearsal" : ""}
       </span>
     </motion.div>
