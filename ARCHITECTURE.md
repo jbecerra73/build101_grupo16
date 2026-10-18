@@ -119,7 +119,7 @@ sequenceDiagram
     alt ≥20pp gain for a targeted persona AND none below its segment
         O->>G: Rewrite PR body (metrics table), mark ready
     else not improved
-        O->>G: Metrics comment, label not-proven, close
+        O->>G: Metrics comment, label not-proven (PR left open for the PO's decision)
     end
     O-->>D: Before/after + PR status
 ```

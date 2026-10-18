@@ -59,9 +59,9 @@ claude mcp add frictionswarm -e FS_API_URL=http://localhost:3000 -e FS_API_TOKEN
 | `FS_API_URL` | MCP server | dashboard base URL, default `http://localhost:3000` |
 | `FS_API_TOKEN` | MCP server | the same token as `DASHBOARD_API_TOKEN` |
 
-These three should also be added to `.env.example` (not done here).
+These three should also be added to `.env.example` .
 
-Example conversation:
+Example conversation (numbers are illustrative):
 
 ```
 You:    Which flows do we have? Analyze checkout for the last 28 days.
