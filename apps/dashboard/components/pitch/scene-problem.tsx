@@ -51,7 +51,7 @@ export function SceneProblem({ d }: { d: PitchData }) {
 
       <div className="flex flex-col gap-10">
         <Reveal delay={0.15}>
-          <h1 className="max-w-[1500px] text-[8.5rem] leading-[0.95] font-semibold tracking-tight">Los POs lanzan a ciegas.</h1>
+          <h1 className="max-w-[1500px] text-[8.5rem] leading-[0.95] font-semibold tracking-tight">Los POs shipean a ciegas.</h1>
         </Reveal>
         <Reveal delay={0.55}>
           <p className="max-w-[1600px] text-[3.4rem] leading-tight text-muted-foreground">

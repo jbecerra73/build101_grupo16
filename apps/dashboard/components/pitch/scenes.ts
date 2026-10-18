@@ -20,7 +20,7 @@ export const SCENES: SceneMeta[] = [
     notes: (d) => {
       const worst = d.impacts.toSorted((a, b) => a.deltaPts - b.deltaPts)[0];
       return [
-        "Los POs lanzan cambios al checkout a ciegas: nadie mira cada segmento después de un release.",
+        "Los POs shipean cambios al checkout a ciegas: nadie mira cada segmento después de un release.",
         worst
           ? `En esta tienda, “${worst.release.name}” bajó la completion de ${segmentEs(worst.segmentId)} de ${pct1(worst.before)} a ${pct1(worst.after)}, y nadie lo notó durante semanas.`
           : "La fricción aparece como drop-off en analytics, semanas después del release que la causó.",
