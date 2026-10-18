@@ -8,6 +8,7 @@ export const KNOWN_RELEASES: Release[] = [
   { sha: "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70", date: "2026-06-24", name: "Checkout redesign" },
   { sha: "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f", date: "2026-08-05", name: "Promo codes" },
   { sha: "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9", date: "2026-09-09", name: "Accounts" },
+  { sha: "a9c1e3b5d7f0294b6d8f1a3c5e7b9d0f2a4c6e81", date: "2026-09-23", name: "Shop filters" },
 ];
 
 export const shortSha = (sha: string) => sha.slice(0, 7);

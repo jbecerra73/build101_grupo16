@@ -45,6 +45,7 @@ const F_T2: Finding = { ...F_T1, id: "F2", segments: ["mobile"], personas: ["kai
 const F_T3: Finding = { ...F_T1, id: "F3", severity: "medium", segments: ["desktop"], personas: ["typical"], step: "Payment", page: "/checkout", selector: undefined, title: "Delivery fee shows up late" };
 const F_T4: Finding = { ...F_T1, id: "F4", step: "Product", page: "/shop/product/1", title: "Size picker only opens on hover" };
 const F_T5: Finding = { ...F_T1, id: "F5", severity: "low", title: "Applying a promo code wipes the address form" };
+const F_T6: Finding = { ...F_T1, id: "F6", severity: "medium", segments: ["mobile"], step: "Browse", page: "/shop", selector: undefined, title: "Picked filters do nothing until Apply" };
 
 /** Writes metrics.json + findings.json like the analyzer; analysis → T1/T2/T3 findings. */
 const fakeAnalyzer = (runsDir: string, calls: string[]): Analyzer => async (runId) => {
@@ -183,7 +184,7 @@ describe("startPipeline", () => {
 
 describe("traps", () => {
   it("maps findings to the trap they describe", () => {
-    expect([F_T1, F_T2, F_T3, F_T4, F_T5].map(trapOf)).toEqual(["T1", "T2", "T3", "T4", "T5"]);
+    expect([F_T1, F_T2, F_T3, F_T4, F_T5, F_T6].map(trapOf)).toEqual(["T1", "T2", "T3", "T4", "T5", "T6"]);
     expect(trapsOf([F_T2, F_T1, F_T2])).toEqual(["T1", "T2"]);
   });
 

@@ -15,19 +15,19 @@
     "selector": "div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")",
     "title": "Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
     "evidence": {
-      "sessions": 533,
-      "users": 521,
-      "dropOffRate": 0.719,
-      "rageClicks": 576,
+      "sessions": 413,
+      "users": 409,
+      "dropOffRate": 0.725,
+      "rageClicks": 461,
       "sinceRelease": {
         "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
         "date": "2026-05-20",
         "name": "New product page"
       },
       "exampleSessions": [
-        "01a0bc76-836c-7532-9d7d-2d95037a0275",
-        "01a0bdb0-4bbc-7c6f-8b4d-46e2a27c5976",
-        "01a0bdef-dac7-73d2-8ae8-0b68e9d14524"
+        "01a0cd39-6bda-7dab-960c-10e24a8058d6",
+        "01a0cdbb-58b9-75a4-a379-21a04e948c3f",
+        "01a0ce53-7a3b-7905-b2e0-7edef5e6f444"
       ],
       "quotes": []
     },
@@ -37,6 +37,40 @@
     "id": "F2",
     "severity": "high",
     "segments": [
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "kai",
+      "typical"
+    ],
+    "step": "Browse",
+    "page": "/shop",
+    "selector": "button.bg-black.rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]",
+    "title": "Rage clicks on button.bg-black.rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"] at Browse",
+    "evidence": {
+      "sessions": 296,
+      "users": 290,
+      "dropOffRate": 0.375,
+      "rageClicks": 311,
+      "sinceRelease": {
+        "sha": "a9c1e3b5d7f0294b6d8f1a3c5e7b9d0f2a4c6e81",
+        "date": "2026-09-23",
+        "name": "Shop filters"
+      },
+      "exampleSessions": [
+        "01a0ce3e-8f93-734c-b009-f9e092bcc191",
+        "01a0cec5-e80b-7837-b513-2909e071bf92",
+        "01a0ced2-888c-7599-9a61-5da618fecd9e"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Make 'button.bg-black.rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]' respond visibly on the first click (state change, feedback or navigation)."
+  },
+  {
+    "id": "F3",
+    "severity": "high",
+    "segments": [
       "mobile"
     ],
     "personas": [
@@ -44,27 +78,27 @@
     ],
     "step": "Account",
     "page": "/checkout/account",
-    "title": "Mobile shoppers leave at Account, a step the flow doesn't require; 229 failed 'account_submitted' submits (password, confirmPassword, birthDate)",
+    "title": "Mobile shoppers leave at Account, a step the flow doesn't require; 205 failed 'account_submitted' submits (password, birthDate, confirmPassword)",
     "evidence": {
-      "sessions": 287,
-      "users": 286,
-      "dropOffRate": 0.621,
+      "sessions": 246,
+      "users": 243,
+      "dropOffRate": 0.645,
       "sinceRelease": {
         "sha": "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9",
         "date": "2026-09-09",
         "name": "Accounts"
       },
       "exampleSessions": [
-        "01a0bd38-7572-7e73-9c9a-31c12cc3cdab",
-        "01a0be09-05a6-7f40-babe-007b73448ce0",
-        "01a0be0d-85ec-7411-b90e-92dc714ba292"
+        "01a0cda3-0f56-7e89-b45c-9a584bd47602",
+        "01a0ce14-f629-7028-b83d-200ae62e82ac",
+        "01a0ce3c-9e0f-7207-a72a-84277273dfd2"
       ],
       "quotes": []
     },
     "suggestedFix": "Make Account optional (e.g. continue as a guest; offer it after the purchase): it isn't a required step, and its form fails people."
   },
   {
-    "id": "F3",
+    "id": "F4",
     "severity": "high",
     "segments": [
       "mobile",
@@ -78,53 +112,22 @@
     "page": "/checkout",
     "title": "Mobile shoppers and Desktop shoppers leave Payment seconds after it loads (median 11s): the $15 delivery fee first appears here",
     "evidence": {
-      "sessions": 66,
-      "users": 66,
-      "dropOffRate": 0.169,
+      "sessions": 37,
+      "users": 37,
+      "dropOffRate": 0.108,
       "sinceRelease": {
         "sha": "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d",
         "date": "2026-04-19",
         "name": "Simulated checkout"
       },
       "exampleSessions": [
-        "01a0c099-66ae-7cd6-8675-13a3d8c911ca",
-        "01a0c14f-3cc8-75ee-8ed4-9927b9c00cab",
-        "01a0c2fa-cc37-7a3f-9257-9792d6e54282"
+        "01a0ce5c-006f-7800-addf-19cbb7f00d82",
+        "01a0cfc6-8d7d-78c8-949d-a73f9b057f15",
+        "01a0d421-7173-7812-b88a-5b1a99927634"
       ],
       "quotes": []
     },
     "suggestedFix": "Show the $15 delivery fee and the order total in the cart, before checkout, so Payment holds no surprises."
-  },
-  {
-    "id": "F4",
-    "severity": "high",
-    "segments": [
-      "mobile",
-      "desktop"
-    ],
-    "personas": [
-      "kai",
-      "typical"
-    ],
-    "step": "Shipping",
-    "page": "/checkout",
-    "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
-    "evidence": {
-      "sessions": 41,
-      "users": 41,
-      "sinceRelease": {
-        "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
-        "date": "2026-08-05",
-        "name": "Promo codes"
-      },
-      "exampleSessions": [
-        "01a0c17c-a6c8-7575-bb0f-0aae843868a5",
-        "01a0caea-1c98-7f2f-95b1-2b0facba51b5",
-        "01a0d00c-9dcd-722f-8c6f-50efa8198f29"
-      ],
-      "quotes": []
-    },
-    "suggestedFix": "Keep the shipping form's values when a promo code is applied (don't reset or re-mount the form), and keep the code applied."
   },
   {
     "id": "F5",
@@ -140,22 +143,83 @@
     "selector": "button.text-[11px].text-[#c4c4c4].underline-offset-2[type=\"submit\"]:has-text(\"Continue to payment\")",
     "title": "Large-text users can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
     "evidence": {
-      "sessions": 23,
-      "users": 23,
-      "dropOffRate": 0.537,
-      "rageClicks": 77,
+      "sessions": 19,
+      "users": 19,
+      "dropOffRate": 0.515,
+      "rageClicks": 66,
       "sinceRelease": {
         "sha": "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70",
         "date": "2026-06-24",
         "name": "Checkout redesign"
       },
       "exampleSessions": [
-        "01a0c000-7541-7fc0-8bc1-3b1f2f9ee638",
-        "01a0ca34-42c0-7893-9bbc-be69d083aa88",
-        "01a0ca39-2abb-7845-ab1f-f8243fd4ab6e"
+        "01a0d3f2-f073-77df-a1fe-1399e2fa8ad2",
+        "01a0d54a-cb5f-72bb-b60e-05c19a6a9512",
+        "01a0d7b8-6488-77ad-898e-3ea43963e311"
       ],
       "quotes": []
     },
     "suggestedFix": "Make 'Continue to payment' a high-contrast, full-width primary button with readable text (at least 16px, WCAG AA contrast)."
+  },
+  {
+    "id": "F6",
+    "severity": "high",
+    "segments": [
+      "desktop"
+    ],
+    "personas": [
+      "typical"
+    ],
+    "step": "Payment failed",
+    "page": "/checkout/failed",
+    "title": "Desktop shoppers leave at Payment failed, a step the flow doesn't require",
+    "evidence": {
+      "sessions": 3,
+      "users": 3,
+      "dropOffRate": 0.429,
+      "sinceRelease": {
+        "sha": "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c",
+        "date": "2026-05-20",
+        "name": "New product page"
+      },
+      "exampleSessions": [
+        "01a1039e-908d-7094-ac1e-016a086ddc76",
+        "01a11861-e706-7d5a-a58c-873398f44591",
+        "01a12b02-5b01-7472-a710-854c0cf2fc83"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Make Payment failed optional (e.g. continue as a guest): it isn't a required step."
+  },
+  {
+    "id": "F7",
+    "severity": "medium",
+    "segments": [
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "kai",
+      "typical"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
+    "evidence": {
+      "sessions": 38,
+      "users": 38,
+      "sinceRelease": {
+        "sha": "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f",
+        "date": "2026-08-05",
+        "name": "Promo codes"
+      },
+      "exampleSessions": [
+        "01a0de5d-f983-72bf-bce2-f1d512741f26",
+        "01a0e2b7-ffcd-7392-a582-43162983add0",
+        "01a0ee37-ef3a-7996-9ae5-6745847d9bba"
+      ],
+      "quotes": []
+    },
+    "suggestedFix": "Keep the shipping form's values when a promo code is applied (don't reset or re-mount the form), and keep the code applied."
   }
 ]

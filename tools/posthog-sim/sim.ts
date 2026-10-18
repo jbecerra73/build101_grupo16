@@ -15,10 +15,10 @@ import {
   type SwarmEventProperties,
 } from "../../shared/analytics";
 
-export type TrapId = "T1" | "T2" | "T3" | "T4" | "T5";
+export type TrapId = "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
 
 /** Production history. Each release ships with the traps live at that point;
- * the last one is the store as it is now (all five traps). */
+ * the last one is the store as it is now (all six traps). */
 export type Release = { sha: string; date: string; name: string; traps: TrapId[] };
 
 export const RELEASES: Release[] = [
@@ -27,6 +27,7 @@ export const RELEASES: Release[] = [
   { sha: "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70", date: "2026-06-24", name: "Checkout redesign", traps: ["T1", "T3", "T4"] },
   { sha: "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f", date: "2026-08-05", name: "Promo codes", traps: ["T1", "T3", "T4", "T5"] },
   { sha: "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9", date: "2026-09-09", name: "Accounts", traps: ["T1", "T2", "T3", "T4", "T5"] },
+  { sha: "a9c1e3b5d7f0294b6d8f1a3c5e7b9d0f2a4c6e81", date: "2026-09-23", name: "Shop filters", traps: ["T1", "T2", "T3", "T4", "T5", "T6"] },
 ];
 
 export const releaseAt = (ts: number): Release =>
@@ -89,6 +90,7 @@ type Product = (typeof PRODUCTS)[number];
 const productPath = (p: Product) => `/shop/product/${p.id}/${p.name.split(" ").join("-")}`;
 const SIZES = ["Small", "Medium", "Large", "X-Large"];
 const COLORS = ["Brown", "Green", "Blue", "Black"];
+const SWATCHES: Record<string, string> = { Brown: "bg-[#4F4631]", Green: "bg-[#314F4A]", Blue: "bg-[#31344F]", Red: "bg-[#9B2C2C]", Black: "bg-black", White: "bg-white" };
 const DELIVERY_FEE = 15;
 const SHIPPING_FIELDS = ["email", "fullName", "address", "city", "postalCode"];
 const ACCOUNT_FIELDS = ["username", "password", "confirmPassword", "phone", "birthDate", "acceptTerms"];
@@ -110,6 +112,8 @@ export const ELEMENTS = {
   shippingTitle: 'div.text-xl.md:text-2xl.font-bold:nth-child="1"nth-of-type="1"text="Contact & Shipping"',
   promoApply: 'button.h-11.w-28.rounded-full:attr__type="button"nth-child="2"nth-of-type="1"text="Apply"',
   pay: 'button.text-sm.md:text-base.font-medium.rounded-full.w-full:attr__type="submit"nth-child="1"nth-of-type="1"text="Pay now"',
+  colorSwatch: (color: string) => `button.${SWATCHES[color]}.rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center:attr__aria-label="${color}"attr__type="button"nth-child="${Object.keys(SWATCHES).indexOf(color) + 1}"nth-of-type="${Object.keys(SWATCHES).indexOf(color) + 1}";div.flex.space-2.5.flex-wrap.md:grid.grid-cols-5`,
+  applyFilter: 'button.bg-black.w-full.rounded-full.text-sm.font-medium.py-4.h-12:attr__type="button"nth-child="12"nth-of-type="2"text="Apply Filter"',
   tryAgain: 'a.text-sm.md:text-base.font-medium.rounded-full:attr__href="/checkout?step=payment"nth-child="1"nth-of-type="1"text="Try Again"',
 } as const;
 
@@ -126,20 +130,22 @@ export type Profile = {
   feeShock: number;
   /** T5: leaves after the promo code wipes the shipping form. */
   wipeQuit: number;
+  /** T6: leaves when a picked filter seems to do nothing (Apply is below the fold). */
+  failFilter: number;
   base: { failSize: number; failContinue: number; feeShock: number };
 };
 
 export const SEGMENT_PROFILES: Record<SegmentId, Profile> = {
   desktop: {
-    failSize: 0.08, failAccount: 0.27, failContinue: 0.09, feeShock: 0.13, wipeQuit: 0.35,
+    failSize: 0.08, failAccount: 0.27, failContinue: 0.09, feeShock: 0.13, wipeQuit: 0.35, failFilter: 0.12,
     base: { failSize: 0.02, failContinue: 0.02, feeShock: 0.04 },
   },
   mobile: {
-    failSize: 0.48, failAccount: 0.58, failContinue: 0.2, feeShock: 0.2, wipeQuit: 0.5,
+    failSize: 0.48, failAccount: 0.58, failContinue: 0.2, feeShock: 0.2, wipeQuit: 0.5, failFilter: 0.42,
     base: { failSize: 0.03, failContinue: 0.03, feeShock: 0.06 },
   },
   low_vision: {
-    failSize: 0.38, failAccount: 0.4, failContinue: 0.64, feeShock: 0.15, wipeQuit: 0.45,
+    failSize: 0.38, failAccount: 0.4, failContinue: 0.64, feeShock: 0.15, wipeQuit: 0.45, failFilter: 0.4,
     base: { failSize: 0.04, failContinue: 0.05, feeShock: 0.05 },
   },
 };
@@ -148,15 +154,15 @@ export const SEGMENT_PROFILES: Record<SegmentId, Profile> = {
  * enforced constraints rather than shopping intent. */
 export const PERSONA_PROFILES: Record<PersonaId, Profile> = {
   rosa: {
-    failSize: 0.3, failAccount: 0.2, failContinue: 0.92, feeShock: 0.1, wipeQuit: 0.3,
+    failSize: 0.3, failAccount: 0.2, failContinue: 0.92, feeShock: 0.1, wipeQuit: 0.3, failFilter: 0.3,
     base: { failSize: 0.04, failContinue: 0.04, feeShock: 0.03 },
   },
   kai: {
-    failSize: 0.3, failAccount: 0.88, failContinue: 0.25, feeShock: 0.2, wipeQuit: 0.6,
+    failSize: 0.3, failAccount: 0.88, failContinue: 0.25, feeShock: 0.2, wipeQuit: 0.6, failFilter: 0.35,
     base: { failSize: 0.03, failContinue: 0.03, feeShock: 0.05 },
   },
   typical: {
-    failSize: 0.04, failAccount: 0.05, failContinue: 0.04, feeShock: 0.04, wipeQuit: 0.12,
+    failSize: 0.04, failAccount: 0.05, failContinue: 0.04, feeShock: 0.04, wipeQuit: 0.12, failFilter: 0.08,
     base: { failSize: 0.01, failContinue: 0.01, feeShock: 0.02 },
   },
 };
@@ -246,6 +252,11 @@ const QUOTES: Record<string, string[]> = {
   fee: [
     "A $15 delivery fee only now, on the last step? No thanks.",
     "The total jumped at payment. I wasn't told about shipping before.",
+  ],
+  filter: [
+    "I picked Blue but the list didn't change. The filters don't work.",
+    "I tapped the color and nothing happened. I can't narrow this down.",
+    "The filters do nothing. I'm not scrolling through everything.",
   ],
   wipe: [
     "Applying the promo code erased my whole address. I'm not typing it again.",
@@ -360,6 +371,21 @@ export function simulateSession(o: SessionOptions): SessionResult {
   } else if (entry === "shop") {
     view("/shop", "Browse");
     wait(14);
+  }
+  if (entry !== "product" && path === "/shop" && chance(swarm ? 0.3 : 0.35)) {
+    // Filter by color (T6: nothing happens until "Apply Filter", below the fold
+    // on desktop and at the bottom of the drawer on mobile)
+    const color = swarm ? "Blue" : pick(rng, COLORS);
+    click(ELEMENTS.colorSwatch(color));
+    if (live("T6")) {
+      wait(4);
+      if (chance(0.5)) rage(ELEMENTS.colorSwatch(color));
+      if (chance(profile.failFilter)) return leave("Browse", "filter");
+      wait(10);
+      click(ELEMENTS.applyFilter, "Apply Filter");
+    }
+    view(`/shop?color=${color}`, "Browse");
+    wait(8);
   }
   if (entry !== "product") {
     if (!swarm && chance(0.3)) return leave(path === "/" ? "Home" : "Browse");

@@ -4,30 +4,32 @@
     "severity": "high",
     "segments": [
       "low_vision",
-      "mobile"
+      "mobile",
+      "desktop"
     ],
     "personas": [
       "rosa",
-      "kai"
+      "kai",
+      "typical"
     ],
     "step": "Product",
     "page": "/shop/product/*",
     "selector": "div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")",
-    "title": "Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
+    "title": "Shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
     "evidence": {
-      "sessions": 6,
-      "users": 6,
-      "dropOffRate": 0.3,
-      "rageClicks": 6,
+      "sessions": 11,
+      "users": 11,
+      "dropOffRate": 0.407,
+      "rageClicks": 11,
       "exampleSessions": [
-        "01a14bf4-4ab0-79ca-83cf-ca4449f370c4",
-        "01a14bf4-4f5f-704c-805f-81ffe26f546e",
-        "01a14bf4-6eb9-70f0-9051-c3d2081164d6"
+        "01a14cea-93b1-7607-baa2-4ad287667966",
+        "01a14cea-947b-79ca-83cf-ca4449f370c4",
+        "01a14cea-992a-704c-805f-81ffe26f546e"
       ],
       "quotes": [
         "It keeps saying select a size but I don't see any sizes.",
-        "There's a 'Size' label but no sizes I can choose.",
-        "I tapped the size box but nothing opens. I can't pick a size."
+        "I tapped the size box but nothing opens. I can't pick a size.",
+        "There's a 'Size' label but no sizes I can choose."
       ]
     },
     "suggestedFix": "Show every size as a visible button that works on tap and without hover, and say which size is missing when Add to Cart is pressed."
@@ -43,51 +45,50 @@
       "rosa",
       "kai"
     ],
-    "step": "Payment",
-    "page": "/checkout",
-    "selector": "button.text-sm.md:text-base.font-medium.rounded-full.w-full[type=\"submit\"]:has-text(\"Pay now\")",
-    "title": "Large-text users and Mobile shoppers give up at Payment: \"The total jumped at payment. I wasn't told about shipping before.\"",
+    "step": "Browse",
+    "page": "/shop",
+    "selector": "button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]",
+    "title": "Rage clicks on button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"] at Browse",
     "evidence": {
       "sessions": 4,
       "users": 4,
-      "dropOffRate": 0.364,
+      "dropOffRate": 0.15,
+      "rageClicks": 5,
       "exampleSessions": [
-        "01a14bf4-49e6-7607-baa2-4ad287667966",
-        "01a14bf4-4a63-70ae-87ca-34d7b526d92a",
-        "01a14bf4-7edc-70e1-96e3-6728402ed570"
+        "01a14cea-a0b9-71e9-8584-d2466bbd7bb2",
+        "01a14cea-c87d-7faf-a608-5beb86b4a418",
+        "01a14cea-cf7d-7ae7-89c8-8bedd379269f"
       ],
       "quotes": [
-        "The total jumped at payment. I wasn't told about shipping before.",
-        "Payment page. Entering the test card."
+        "I tapped the color and nothing happened. I can't narrow this down.",
+        "I picked Blue but the list didn't change. The filters don't work.",
+        "I see a list of products. Looking for a blue t-shirt."
       ]
     },
-    "suggestedFix": "Remove the blocker on /checkout so shoppers can continue without extra effort."
+    "suggestedFix": "Make 'button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]' respond visibly on the first click (state change, feedback or navigation)."
   },
   {
     "id": "F3",
     "severity": "high",
     "segments": [
-      "low_vision"
+      "mobile"
     ],
     "personas": [
-      "rosa"
+      "kai"
     ],
     "step": "Shipping",
     "page": "/checkout",
     "selector": "button.text-[11px].text-[#c4c4c4].underline-offset-2[type=\"submit\"]:has-text(\"Continue to payment\")",
-    "title": "Large-text users give up at Shipping: \"Applying the promo code erased my whole address. I'm not typing it again.\"",
+    "title": "Mobile shoppers give up at Shipping: \"Applying the promo code erased my whole address. I'm not typing it again.\"",
     "evidence": {
-      "sessions": 3,
-      "users": 3,
-      "dropOffRate": 0.375,
+      "sessions": 1,
+      "users": 1,
+      "dropOffRate": 0.333,
       "exampleSessions": [
-        "01a14bf4-6dc8-7f93-aff3-8d4b2785d50c",
-        "01a14bf4-934e-7add-861b-8791e96970dd",
-        "01a14bf4-9438-714e-a9b3-3a4f45470505"
+        "01a14cea-dc00-725e-bfa7-8d2667e93cdd"
       ],
       "quotes": [
         "Applying the promo code erased my whole address. I'm not typing it again.",
-        "This is taking too long.",
         "Now the shipping form. Filling in my address."
       ]
     },
@@ -97,23 +98,23 @@
     "id": "F4",
     "severity": "medium",
     "segments": [
-      "low_vision",
+      "mobile",
       "desktop"
     ],
     "personas": [
-      "rosa",
+      "kai",
       "typical"
     ],
     "step": "Shipping",
     "page": "/checkout",
     "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
     "evidence": {
-      "sessions": 12,
-      "users": 12,
+      "sessions": 9,
+      "users": 9,
       "exampleSessions": [
-        "01a14bf4-6dc8-7f93-aff3-8d4b2785d50c",
-        "01a14bf4-934e-7add-861b-8791e96970dd",
-        "01a14bf4-4a97-79f0-9521-bc337779ea56"
+        "01a14cea-dc00-725e-bfa7-8d2667e93cdd",
+        "01a14cea-9462-79f0-9521-bc337779ea56",
+        "01a14cea-957e-7a2b-9bc3-d95e1b98c37d"
       ],
       "quotes": [
         "Applying the promo code erased my whole address. I'm not typing it again.",

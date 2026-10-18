@@ -12,7 +12,7 @@
       "kai",
       "typical"
     ],
-    "sessions": 2310,
+    "sessions": 1957,
     "quotes": [],
     "findingIds": [
       "F1"
@@ -20,7 +20,7 @@
   },
   {
     "id": "T2",
-    "title": "Left at Browse",
+    "title": "Left at Browse: Rage clicks on button.bg-black.rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"] at Browse",
     "segments": [
       "low_vision",
       "mobile",
@@ -31,8 +31,11 @@
       "kai",
       "typical"
     ],
-    "sessions": 656,
-    "quotes": []
+    "sessions": 699,
+    "quotes": [],
+    "findingIds": [
+      "F2"
+    ]
   },
   {
     "id": "T3",
@@ -47,12 +50,12 @@
       "kai",
       "typical"
     ],
-    "sessions": 613,
+    "sessions": 531,
     "quotes": []
   },
   {
     "id": "T4",
-    "title": "Left at Account: Mobile shoppers leave at Account, a step the flow doesn't require; 229 failed 'account_submitted' submits (password, confirmPassword, birthDate)",
+    "title": "Left at Account: Mobile shoppers leave at Account, a step the flow doesn't require; 205 failed 'account_submitted' submits (password, birthDate, confirmPassword)",
     "segments": [
       "low_vision",
       "mobile",
@@ -63,10 +66,10 @@
       "kai",
       "typical"
     ],
-    "sessions": 413,
+    "sessions": 358,
     "quotes": [],
     "findingIds": [
-      "F2"
+      "F3"
     ]
   },
   {
@@ -82,12 +85,12 @@
       "kai",
       "typical"
     ],
-    "sessions": 328,
+    "sessions": 241,
     "quotes": []
   },
   {
     "id": "T6",
-    "title": "Left at Shipping: Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
+    "title": "Left at Shipping: Large-text users can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
     "segments": [
       "low_vision",
       "mobile",
@@ -98,30 +101,11 @@
       "kai",
       "typical"
     ],
-    "sessions": 85,
+    "sessions": 75,
     "quotes": [],
     "findingIds": [
-      "F4",
-      "F5"
-    ]
-  },
-  {
-    "id": "T7",
-    "title": "Left at Payment: Mobile shoppers and Desktop shoppers leave Payment seconds after it loads (median 11s): the $15 delivery fee first appears here",
-    "segments": [
-      "low_vision",
-      "mobile",
-      "desktop"
-    ],
-    "personas": [
-      "rosa",
-      "kai",
-      "typical"
-    ],
-    "sessions": 67,
-    "quotes": [],
-    "findingIds": [
-      "F3"
+      "F5",
+      "F7"
     ]
   }
 ]

@@ -1,5 +1,5 @@
 // Ground truth (#5, #11, #15): on the fake six-month history (npm run posthog:generate), the
-// analyzer must reproduce the generator's per-release segment completion and surface the five
+// analyzer must reproduce the generator's per-release segment completion and surface the six
 // planted traps, each attributed to the release that shipped it. Skips when the history is missing.
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +27,7 @@ export const TRAPS: { id: string; release: string; match: (f: Finding) => boolea
   { id: "T3", release: "Simulated checkout", match: (f) => f.step === "Payment" },
   { id: "T4", release: "New product page", match: (f) => f.step === "Product" },
   { id: "T5", release: "Promo codes", match: (f) => f.step === "Shipping" && /promo|coupon|discount/i.test(f.title) },
+  { id: "T6", release: "Shop filters", match: (f) => f.step === "Browse" },
 ];
 
 /** Per trap: the finding that covers it and the release it names. */
@@ -56,7 +57,7 @@ describe.skipIf(!have)("ground truth on the fake PostHog history", () => {
   const to = have ? Date.parse(manifest.to) : 0;
   const last28 = { from: day(to - 27 * DAY), to: manifest.to };
 
-  it("analyzes the last 28 days of the current release: completion per release matches the manifest, findings cover T1–T5", async () => {
+  it("analyzes the last 28 days of the current release: completion per release matches the manifest, findings cover T1–T6", async () => {
     const r = await analyzeRun(runDir(last28, current.sha), { source: fileSource({ dataDir: DATA }), env: {} });
     console.log(`28-day analysis: ${r.sessions} sessions, ${r.events} events in window; read ${r.timings.readMs}ms, total ${r.timings.totalMs}ms`);
 
@@ -77,7 +78,7 @@ describe.skipIf(!have)("ground truth on the fake PostHog history", () => {
     const coverage = trapCoverage(r.findings);
     console.log(coverage.map((c) => `${c.trap} → ${c.finding ?? "-"} since ${c.release ?? "-"} (want ${c.expected})`).join("\n"));
     for (const f of r.findings) console.log(`${f.id} [${f.severity}] ${f.step} ${f.segments.join(",")}: ${f.title}`);
-    expect(coverage.filter((c) => c.ok).map((c) => c.trap)).toEqual(["T1", "T2", "T3", "T4", "T5"]);
+    expect(coverage.filter((c) => c.ok).map((c) => c.trap)).toEqual(["T1", "T2", "T3", "T4", "T5", "T6"]);
     expect(r.metrics.segments.map((s) => s.n).reduce((a, b) => a + b)).toBe(r.sessions);
     expect(r.metrics.trend!.releases.map((x) => x.name)).toEqual(manifest.releases.map((x) => x.name));
   }, 60_000);

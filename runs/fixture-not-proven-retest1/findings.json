@@ -4,102 +4,134 @@
     "severity": "high",
     "segments": [
       "low_vision",
+      "mobile",
       "desktop"
     ],
     "personas": [
       "rosa",
+      "kai",
       "typical"
-    ],
-    "step": "Shipping",
-    "page": "/checkout",
-    "selector": "button.text-[11px].text-[#c4c4c4].underline-offset-2[type=\"submit\"]:has-text(\"Continue to payment\")",
-    "title": "Large-text users and Desktop shoppers can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
-    "evidence": {
-      "sessions": 9,
-      "users": 9,
-      "dropOffRate": 0.563,
-      "rageClicks": 7,
-      "exampleSessions": [
-        "01a14bf4-58b6-70ae-87ca-34d7b526d92a",
-        "01a14bf4-5dde-7377-a18d-4044f15fbfe9",
-        "01a14bf4-6ef8-77d6-9730-3de3c8e178e3"
-      ],
-      "quotes": [
-        "There is nothing at the bottom I can read. I don't see how to continue to payment.",
-        "I filled everything in but I can't find a button to continue.",
-        "Where is the next button? I give up.",
-        "Applying the promo code erased my whole address. I'm not typing it again."
-      ]
-    },
-    "suggestedFix": "Make 'Continue to payment' a high-contrast, full-width primary button with readable text (at least 16px, WCAG AA contrast)."
-  },
-  {
-    "id": "F2",
-    "severity": "high",
-    "segments": [
-      "low_vision",
-      "mobile"
-    ],
-    "personas": [
-      "rosa",
-      "kai"
-    ],
-    "step": "Account",
-    "page": "/checkout/account",
-    "selector": "button.text-sm.md:text-base.font-medium.rounded-full.w-full[type=\"submit\"]:has-text(\"Create account\")",
-    "title": "Large-text users and Mobile shoppers give up at Account: \"Nine fields just to buy a t-shirt? Not doing that on my phone.\"",
-    "evidence": {
-      "sessions": 8,
-      "users": 8,
-      "dropOffRate": 0.571,
-      "exampleSessions": [
-        "01a14bf4-5839-7607-baa2-4ad287667966",
-        "01a14bf4-6541-71e9-8584-d2466bbd7bb2",
-        "01a14bf4-65ca-7ff3-b720-84fe2c94909a"
-      ],
-      "quotes": [
-        "Nine fields just to buy a t-shirt? Not doing that on my phone.",
-        "Forced to create an account with a password and birth date. I'm out.",
-        "It wants me to create an account first."
-      ]
-    },
-    "suggestedFix": "Remove the blocker on /checkout/account so shoppers can continue without extra effort."
-  },
-  {
-    "id": "F3",
-    "severity": "high",
-    "segments": [
-      "low_vision",
-      "mobile"
-    ],
-    "personas": [
-      "rosa",
-      "kai"
     ],
     "step": "Product",
     "page": "/shop/product/*",
     "selector": "div.flex.items-center.gap-3.bg-[#F0F0F0].px-5.py-2.5.rounded-full.text-sm.cursor-default:has-text(\"Size\")",
-    "title": "Large-text users and Mobile shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
+    "title": "Shoppers can't pick a size: 'Size' gets rage clicks and Add to Cart is pressed without a size",
     "evidence": {
-      "sessions": 6,
-      "users": 6,
-      "dropOffRate": 0.3,
-      "rageClicks": 6,
+      "sessions": 11,
+      "users": 11,
+      "dropOffRate": 0.407,
+      "rageClicks": 11,
       "exampleSessions": [
-        "01a14bf4-5903-79ca-83cf-ca4449f370c4",
-        "01a14bf4-5db2-704c-805f-81ffe26f546e",
-        "01a14bf4-7d0c-70f0-9051-c3d2081164d6"
+        "01a14cea-9ea2-7607-baa2-4ad287667966",
+        "01a14cea-9f6c-79ca-83cf-ca4449f370c4",
+        "01a14cea-a41b-704c-805f-81ffe26f546e"
       ],
       "quotes": [
         "It keeps saying select a size but I don't see any sizes.",
-        "There's a 'Size' label but no sizes I can choose.",
-        "I tapped the size box but nothing opens. I can't pick a size."
+        "I tapped the size box but nothing opens. I can't pick a size.",
+        "There's a 'Size' label but no sizes I can choose."
       ]
     },
     "suggestedFix": "Show every size as a visible button that works on tap and without hover, and say which size is missing when Add to Cart is pressed."
   },
   {
+    "id": "F2",
+    "severity": "high",
+    "segments": [
+      "mobile",
+      "desktop"
+    ],
+    "personas": [
+      "kai",
+      "typical"
+    ],
+    "step": "Account",
+    "page": "/checkout/account",
+    "title": "Mobile shoppers and Desktop shoppers leave at Account, a step the flow doesn't require; 9 failed 'account_submitted' submits (password, confirmPassword, phone)",
+    "evidence": {
+      "sessions": 10,
+      "users": 10,
+      "dropOffRate": 0.455,
+      "exampleSessions": [
+        "01a14cea-a06f-7a2b-9bc3-d95e1b98c37d",
+        "01a14cea-ac33-7ff3-b720-84fe2c94909a",
+        "01a14cea-c700-7620-bb64-2fca390ff0ba"
+      ],
+      "quotes": [
+        "Why do they need my date of birth to sell me a shirt?",
+        "It wants me to create an account first.",
+        "Forced to create an account with a password and birth date. I'm out."
+      ]
+    },
+    "suggestedFix": "Make Account optional (e.g. continue as a guest; offer it after the purchase): it isn't a required step, and its form fails people."
+  },
+  {
+    "id": "F3",
+    "severity": "high",
+    "segments": [
+      "low_vision"
+    ],
+    "personas": [
+      "rosa"
+    ],
+    "step": "Shipping",
+    "page": "/checkout",
+    "selector": "button.text-[11px].text-[#c4c4c4].underline-offset-2[type=\"submit\"]:has-text(\"Continue to payment\")",
+    "title": "Large-text users can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
+    "evidence": {
+      "sessions": 4,
+      "users": 4,
+      "dropOffRate": 0.6,
+      "rageClicks": 4,
+      "exampleSessions": [
+        "01a14cea-9f1f-70ae-87ca-34d7b526d92a",
+        "01a14cea-c375-70f0-9051-c3d2081164d6",
+        "01a14cea-ce3a-704d-b102-e8a265029e63"
+      ],
+      "quotes": [
+        "Where is the next button? I give up.",
+        "I filled everything in but I can't find a button to continue.",
+        "Now the shipping form. Filling in my address.",
+        "The form went blank after I added the discount code."
+      ]
+    },
+    "suggestedFix": "Make 'Continue to payment' a high-contrast, full-width primary button with readable text (at least 16px, WCAG AA contrast)."
+  },
+  {
     "id": "F4",
+    "severity": "high",
+    "segments": [
+      "low_vision",
+      "mobile"
+    ],
+    "personas": [
+      "rosa",
+      "kai"
+    ],
+    "step": "Browse",
+    "page": "/shop",
+    "selector": "button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]",
+    "title": "Rage clicks on button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"] at Browse",
+    "evidence": {
+      "sessions": 4,
+      "users": 4,
+      "dropOffRate": 0.15,
+      "rageClicks": 5,
+      "exampleSessions": [
+        "01a14cea-abaa-71e9-8584-d2466bbd7bb2",
+        "01a14cea-d36e-7faf-a608-5beb86b4a418",
+        "01a14cea-da6e-7ae7-89c8-8bedd379269f"
+      ],
+      "quotes": [
+        "I tapped the color and nothing happened. I can't narrow this down.",
+        "I picked Blue but the list didn't change. The filters don't work.",
+        "I see a list of products. Looking for a blue t-shirt."
+      ]
+    },
+    "suggestedFix": "Make 'button.bg-[#31344F].rounded-full.w-9.sm:w-10.h-9.sm:h-10.flex.items-center.justify-center[type=\"button\"]' respond visibly on the first click (state change, feedback or navigation)."
+  },
+  {
+    "id": "F5",
     "severity": "medium",
     "segments": [
       "desktop"
@@ -111,16 +143,15 @@
     "page": "/checkout",
     "title": "Applying a promo code wipes the shipping form: the next submit fails on 5 fields",
     "evidence": {
-      "sessions": 10,
-      "users": 10,
+      "sessions": 6,
+      "users": 6,
       "exampleSessions": [
-        "01a14bf4-5dde-7377-a18d-4044f15fbfe9",
-        "01a14bf4-6ef8-77d6-9730-3de3c8e178e3",
-        "01a14bf4-82cd-7848-ab01-6b924970e997"
+        "01a14cea-b561-77d6-9730-3de3c8e178e3",
+        "01a14cea-c936-7848-ab01-6b924970e997",
+        "01a14cea-9f53-79f0-9521-bc337779ea56"
       ],
       "quotes": [
-        "Applying the promo code erased my whole address. I'm not typing it again.",
-        "I filled everything in but I can't find a button to continue.",
+        "The form went blank after I added the discount code.",
         "Now the shipping form. Filling in my address."
       ]
     },

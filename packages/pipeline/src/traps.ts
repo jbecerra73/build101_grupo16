@@ -7,12 +7,14 @@ import type { TrapId } from "../../../tools/posthog-sim/sim";
 
 export type { TrapId };
 
-export const TRAP_IDS: TrapId[] = ["T1", "T2", "T3", "T4", "T5"];
+export const TRAP_IDS: TrapId[] = ["T1", "T2", "T3", "T4", "T5", "T6"];
 
 /** Trap a finding points at, or undefined when it matches none. */
 export function trapOf(f: Pick<Finding, "step" | "page" | "selector" | "title">): TrapId | undefined {
   const text = `${f.selector ?? ""} ${f.title}`.toLowerCase();
   if (f.step === "Account" || f.page.includes("/checkout/account")) return "T2";
+  // T6: a picked filter does nothing until "Apply Filter", below the fold
+  if (f.step === "Browse" || /filter|swatch/.test(text)) return "T6";
   if (f.step === "Product" || /size/.test(text)) return "T4";
   if (/promo|coupon|wipe|erase|discount/.test(text)) return "T5";
   if (f.step === "Payment" || /deliver|fee|shipping cost|total/.test(text)) return "T3";

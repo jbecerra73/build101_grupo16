@@ -15,9 +15,9 @@
         "typical-1",
         "typical-6"
       ],
-      "startedAt": "2026-10-17T22:21:06.950Z",
-      "costUsd": 0.1475,
-      "endedAt": "2026-10-17T22:21:07.277Z"
+      "startedAt": "2026-10-18T02:50:06.830Z",
+      "costUsd": 0.1425,
+      "endedAt": "2026-10-18T02:50:07.131Z"
     },
     {
       "id": "offline-fixture-not-proven-retest1-2",
@@ -32,9 +32,9 @@
         "typical-2",
         "typical-7"
       ],
-      "startedAt": "2026-10-17T22:21:06.950Z",
-      "costUsd": 0.1475,
-      "endedAt": "2026-10-17T22:21:07.277Z"
+      "startedAt": "2026-10-18T02:50:06.830Z",
+      "costUsd": 0.1275,
+      "endedAt": "2026-10-18T02:50:07.161Z"
     },
     {
       "id": "offline-fixture-not-proven-retest1-3",
@@ -49,9 +49,9 @@
         "typical-3",
         "typical-8"
       ],
-      "startedAt": "2026-10-17T22:21:06.950Z",
-      "costUsd": 0.1375,
-      "endedAt": "2026-10-17T22:21:07.354Z"
+      "startedAt": "2026-10-18T02:50:06.830Z",
+      "costUsd": 0.14,
+      "endedAt": "2026-10-18T02:50:07.147Z"
     },
     {
       "id": "offline-fixture-not-proven-retest1-4",
@@ -66,9 +66,9 @@
         "typical-4",
         "typical-9"
       ],
-      "startedAt": "2026-10-17T22:21:06.950Z",
-      "costUsd": 0.1325,
-      "endedAt": "2026-10-17T22:21:07.218Z"
+      "startedAt": "2026-10-18T02:50:06.830Z",
+      "costUsd": 0.15,
+      "endedAt": "2026-10-18T02:50:07.233Z"
     },
     {
       "id": "offline-fixture-not-proven-retest1-5",
@@ -83,10 +83,10 @@
         "typical-5",
         "typical-10"
       ],
-      "startedAt": "2026-10-17T22:21:06.950Z",
+      "startedAt": "2026-10-18T02:50:06.830Z",
       "costUsd": 0.1325,
-      "endedAt": "2026-10-17T22:21:07.243Z"
+      "endedAt": "2026-10-18T02:50:07.148Z"
     }
   ],
-  "updatedAt": "2026-10-17T22:21:07.354Z"
+  "updatedAt": "2026-10-18T02:50:07.234Z"
 }

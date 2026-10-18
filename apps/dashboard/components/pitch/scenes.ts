@@ -83,7 +83,7 @@ export const SCENES: SceneMeta[] = [
       "Evidence first: findings come from real users in PostHog, not from the agents.",
       "The personas' limits are enforced on what the model sees and can do, not just prompted: that's Rosa's view, and Kai's 44px grid.",
       "A control persona must not regress; re-tests use fresh seeds; completions need the required steps, so shortcuts don't count.",
-      "On the planted-trap history, it found all five traps and the release that introduced each.",
+      "On the planted-trap history, it found all six traps and the release that introduced each.",
     ],
   },
   {
