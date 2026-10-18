@@ -5,13 +5,16 @@
 //   runs/<runId>/screenshots/ for the live grid → close every sandbox → waitForSwarm.
 //
 // Sandboxes are closed on success, on failure (any worker failing stops the whole swarm) and on
-// abort (the CLI turns Ctrl-C into one). Agents' tracks go to PostHog; locally the run folder
-// gets config.json, screenshots/ and agents/<agentId>.json.
+// abort (the CLI turns Ctrl-C into one). Agents' tracks go to PostHog and are also recorded by
+// their browsers (worker/posthog-recorder.ts); locally the run folder gets config.json,
+// screenshots/, agents/<agentId>.json, events/<agentId>.jsonl and posthog.jsonl (the merged
+// recording). With a recording, waitForSwarm is skipped.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
 import type { SwarmWorkerInput } from "../../worker/swarm";
 import { reserveSeeds } from "./ledger";
+import { mergeRecorded } from "./recorded";
 import { freshSeeds, planSwarm, type SwarmPlan } from "./plan";
 import { sandboxPath, type Sandbox, type SandboxProcess, type SandboxProvider } from "./provider";
 import type { SwarmWaiter } from "./wait";
@@ -118,6 +121,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   const runDir = join(o.runsDir, o.runId);
   mkdirSync(join(runDir, "screenshots"), { recursive: true });
   mkdirSync(join(runDir, "agents"), { recursive: true });
+  mkdirSync(join(runDir, "events"), { recursive: true });
   const config: RunConfig = {
     runId: o.runId,
     kind: "retest",
@@ -138,6 +142,9 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   const procs: SandboxProcess[] = [];
   const closed = new Set<Sandbox>();
   const copiedResults = new Set<string>();
+  /** Bytes of each agent's events/<agentId>.jsonl copied so far. */
+  const eventBytes = new Map<string, number>();
+  const agentIds = plan.agents.map((a) => a.agentId);
   /** Set on the first failure or abort, so sandboxes that come up afterwards start nothing. */
   let stopping = false;
   const now = () => (o.now?.() ?? new Date()).toISOString();
@@ -156,8 +163,10 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
   };
   report();
 
-  /** Copies each agent's latest screenshot (and its result, once there) into the local run folder. */
+  /** Copies each agent's latest screenshot, recorded events (and its result, once there) into the
+   * local run folder, then refreshes the merged posthog.jsonl. */
   const pull = async () => {
+    let newEvents = false;
     await Promise.all(
       plan.sandboxes.flatMap((agents, i) => {
         const sb = sandboxes[i];
@@ -166,6 +175,12 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
           try {
             const png = await sb.readFile(`${remoteRun}/screenshots/${agentId}.png`);
             if (png) writeAtomic(join(runDir, "screenshots", `${agentId}.png`), png);
+            const events = await sb.readFile(`${remoteRun}/events/${agentId}.jsonl`);
+            if (events && events.length !== eventBytes.get(agentId)) {
+              writeAtomic(join(runDir, "events", `${agentId}.jsonl`), events);
+              eventBytes.set(agentId, events.length);
+              newEvents = true;
+            }
             if (!copiedResults.has(agentId)) {
               const result = await sb.readFile(`${remoteRun}/agents/${agentId}.json`);
               if (result) {
@@ -180,6 +195,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
         });
       }),
     );
+    if (newEvents) mergeRecorded(runDir, o.runId, agentIds);
   };
 
   const closeAll = async () => {
@@ -263,9 +279,13 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     await closeAll();
   }
 
-  // 4. Agents are done; wait for PostHog to ingest their last events (sandboxes already closed).
-  const agentIds = plan.agents.map((a) => a.agentId);
-  if (o.waiter) {
+  // 4. Agents are done. Their browsers recorded what they sent PostHog; only without a recording
+  //    do we wait for PostHog to ingest their last events (sandboxes already closed).
+  const recorded = mergeRecorded(runDir, o.runId, agentIds);
+  if (recorded.events) {
+    const missing = agentIds.filter((a) => !recorded.finished.has(a));
+    log(`swarm tracks recorded locally: ${recorded.events} events${missing.length ? ` (no swarm_done/give_up from ${missing.join(", ")})` : ""}; not waiting for PostHog`);
+  } else if (o.waiter) {
     log(`waiting for PostHog to ingest ${agentIds.length} agents' tracks…`);
     await Promise.race([o.waiter.waitForSwarm({ runId: o.runId, agentIds, timeoutMs: o.waitTimeoutMs ?? 10 * 60_000 }), abortion(o.signal)]);
   }
