@@ -61,7 +61,13 @@ export class BlobsStore implements RunStore {
   /** Created lazily: getStore throws when no Netlify context or credentials exist. */
   get client(): BlobsClient {
     if (!this.#client) {
-      const { name = BLOBS_STORE_NAME, siteID, token, apiURL, edgeURL, uncachedEdgeURL } = this.#opts;
+      const { name = BLOBS_STORE_NAME, apiURL, edgeURL, uncachedEdgeURL } = this.#opts;
+      // Inside a Netlify function the runtime's own Blobs context wins over
+      // NETLIFY_SITE_ID + NETLIFY_AUTH_TOKEN: with them, every read would go
+      // through the rate-limited REST API with a personal token.
+      const native = !edgeURL && !!blobsContext();
+      const siteID = native ? undefined : this.#opts.siteID;
+      const token = native ? undefined : this.#opts.token;
       // Strong reads go to the uncached edge, so they need its URL; through the
       // API (siteID + token, no edge) every read is fresh anyway.
       const consistency = edgeURL ? (uncachedEdgeURL ? "strong" : "eventual") : siteID && token ? "eventual" : contextConsistency();
@@ -162,10 +168,16 @@ export class BlobsStore implements RunStore {
   }
 }
 
+/** The Blobs context the Netlify runtime hands a function, if any. */
+function blobsContext(): string | undefined {
+  const raw = (globalThis as { netlifyBlobsContext?: unknown }).netlifyBlobsContext || process.env.NETLIFY_BLOBS_CONTEXT;
+  return typeof raw === "string" && raw ? raw : undefined;
+}
+
 /** "strong" when the Netlify function context has an uncached edge URL. */
 function contextConsistency(): "strong" | "eventual" {
-  const raw = (globalThis as { netlifyBlobsContext?: unknown }).netlifyBlobsContext ?? process.env.NETLIFY_BLOBS_CONTEXT;
-  if (typeof raw !== "string" || !raw) return "eventual";
+  const raw = blobsContext();
+  if (!raw) return "eventual";
   try {
     const ctx = JSON.parse(Buffer.from(raw, "base64").toString("utf8")) as { uncachedEdgeURL?: string };
     return ctx.uncachedEdgeURL ? "strong" : "eventual";

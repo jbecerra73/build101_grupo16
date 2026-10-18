@@ -52,4 +52,28 @@ describe("FixtureFallbackStore", () => {
     expect(await blobs.getJson("runs/fixture-proven/config.json")).toBeUndefined();
     expect(await store.getJson("runs/fixture-proven/config.json")).toEqual({ runId: "fixture-proven" });
   });
+
+  it("after a runs/ listing, skips the primary for fixture folders it does not hold", async () => {
+    const { blobs, store } = await setup();
+    const reads: string[] = [];
+    const getJson = blobs.getJson.bind(blobs);
+    blobs.getJson = async <T,>(key: string) => (reads.push(key), getJson<T>(key));
+    await store.listDirs("runs/");
+    expect(await store.getJson("runs/fixture-proven/config.json")).toEqual({ runId: "fixture-proven" });
+    expect(await store.getJson("runs/2026-10-18T00-00-00-beef/config.json")).toEqual({ runId: "live" });
+    expect(reads).toEqual(["runs/2026-10-18T00-00-00-beef/config.json"]);
+    // A write through this store still shadows the bundled copy.
+    await store.putJson("runs/fixture-proven/config.json", { runId: "shadowed" });
+    expect(await store.getJson("runs/fixture-proven/config.json")).toEqual({ runId: "shadowed" });
+  });
+
+  it("trusts the listing only for its TTL", async () => {
+    const blobs = new MemoryStore();
+    const repo = new MemoryStore();
+    await repo.putJson("runs/fixture-proven/config.json", { runId: "fixture-proven" });
+    const store = new FixtureFallbackStore(blobs, repo, 0);
+    await store.listDirs("runs/");
+    await blobs.putJson("runs/fixture-proven/config.json", { runId: "written elsewhere" });
+    expect(await store.getJson("runs/fixture-proven/config.json")).toEqual({ runId: "written elsewhere" });
+  });
 });
