@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Polls `fn` every `ms` while `enabled`. Keeps the last good value on errors. */
+/** Polls `fn` while `enabled`, waiting `ms` after each call settles so a slow
+ * response never overlaps the next poll. Keeps the last good value on errors. */
 export function usePoll<T>(fn: () => Promise<T>, ms: number, enabled = true) {
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<unknown>(undefined);
@@ -26,14 +27,15 @@ export function usePoll<T>(fn: () => Promise<T>, ms: number, enabled = true) {
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
-      if (alive) await refresh();
+      await refresh();
+      if (alive) t = setTimeout(tick, ms);
     };
     void tick();
-    const t = setInterval(tick, ms);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   }, [ms, enabled, refresh]);
 

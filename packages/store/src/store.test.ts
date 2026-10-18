@@ -138,6 +138,20 @@ describe("BlobsStore against a local Netlify Blobs server", () => {
   const real = () =>
     new BlobsStore({ siteID: "test-site", token: "test-token", edgeURL: `http://localhost:${port}`, uncachedEdgeURL: `http://localhost:${port}`, name: `t${Math.random().toString(36).slice(2)}` });
   contract("BlobsStore (BlobsServer)", async () => real());
+
+  it("uses the function's Blobs context over NETLIFY_SITE_ID + NETLIFY_AUTH_TOKEN", async () => {
+    const edge = `http://localhost:${port}`;
+    const g = globalThis as { netlifyBlobsContext?: string };
+    g.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID: "test-site", token: "test-token", edgeURL: edge, uncachedEdgeURL: edge })).toString("base64");
+    try {
+      // With these credentials the client would call the REST API instead.
+      const s = new BlobsStore({ siteID: "other-site", token: "nfp_personal", name: "ctx" });
+      await s.putJson("settings.json", { ok: true });
+      expect(await s.getJson("settings.json")).toEqual({ ok: true });
+    } finally {
+      delete g.netlifyBlobsContext;
+    }
+  });
 });
 
 describe("FsStore layout", () => {
