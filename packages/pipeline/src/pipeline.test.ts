@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   Finding,
   FixResult,
@@ -20,7 +20,7 @@ import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeFixLoop, pickTargets } from "./fakeFix";
 import { realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { analysisConfig, defaultWindow, seedsFor, startPipeline, validateRequest, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, moduleAnalyzer, seedsFor, startPipeline, validateRequest, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -340,5 +340,24 @@ describe("realFixLoop", () => {
     const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
     expect((await realFixLoop(mod)(opts)).repo).toBe("3");
     expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
+  });
+});
+
+describe("moduleAnalyzer", () => {
+  it("analyzes a retest from the swarm's recorded events, not the configured source", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "");
+    try {
+      const runsDir = await mkdtemp(join(tmpdir(), "fs-analyzer-"));
+      await cp(join(import.meta.dirname, "..", "..", "..", "runs", "fixture-retest"), join(runsDir, "fixture-retest"), { recursive: true });
+      // The configured source (here: file) has none of this run's events.
+      const empty: PostHogSource = { realUserEvents: async function* () {}, swarmEvents: async function* () {}, waitForSwarm: async () => {} };
+      const { metrics } = await moduleAnalyzer(runsDir, () => empty)("fixture-retest");
+      expect(metrics.personas.map((p) => [p.personaId, p.n])).toEqual([["rosa", 3], ["kai", 3], ["typical", 3]]);
+      // And the recording is still there for the dashboard.
+      expect((await readFile(join(runsDir, "fixture-retest", "posthog.jsonl"), "utf8")).trim().split("\n").length).toBeGreaterThan(200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
