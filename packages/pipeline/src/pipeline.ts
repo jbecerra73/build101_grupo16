@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  flowPersonas,
   FLOWS,
   MAX_GOAL_LENGTH,
   PERSONAS,
@@ -137,7 +138,11 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
 }
 
 /** The same fresh seeds for every re-test persona. */
-export const seedsFor = (seeds: number[]): Record<PersonaId, number[]> => Object.fromEntries(RETEST_PERSONAS.map((p) => [p, seeds]));
+/** The same seeds for each persona that re-tests: the flow's (Flow.personas), else RETEST_PERSONAS. */
+export const seedsFor = (seeds: number[], flowId?: string): Record<PersonaId, number[]> => {
+  const flow = flowId ? FLOWS[flowId] : undefined;
+  return Object.fromEntries((flow ? flowPersonas(flow) : RETEST_PERSONAS).map((p) => [p, seeds]));
+};
 
 /** Validate, enforce the runs/day cap, write config.json + status.json, and
  * run the pipeline in the background. Resolves as soon as the run exists. */
@@ -154,7 +159,7 @@ export async function startPipeline(
   await writeJson(join(deps.runsDir, runId, "request.json"), req);
   const status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString(), message: "Starting" };
   await writeJson(join(deps.runsDir, runId, "status.json"), status);
-  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds) }, deps);
+  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, req.flowId) }, deps);
   done.catch(() => {}); // runPipeline never rejects; belt and braces
   return { runId, done };
 }

@@ -16,7 +16,7 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 
 ## Demo loop (the one thing that must work end to end)
 
-1. PM opens the dashboard, picks the flow "Buy a size M blue t-shirt, check out" and an analysis window (default: the current production release, last 28 days).
+1. PM opens the dashboard, picks the flow "Find a blue polo shirt, buy it in size M and check out" and an analysis window (default: the current production release, last 28 days).
 2. Analyzer pulls real-user events from PostHog (or the fake dataset file), computes the funnel per segment, and shows the report: funnel per segment over time with release markers, hotspots (rage clicks, failed submits, drop-offs), and which release introduced each.
 3. Analyzer writes `findings.json`; the top 1–3 findings go to the coding agent (Claude Code headless, Opus 5.5) in a tenki sandbox with the storefront repo cloned.
 4. Coding agent pushes a branch and opens a **draft PR**. Netlify builds a deploy preview.
@@ -101,7 +101,7 @@ A segment is a slice of real users; a persona is the swarm's stand-in for it on 
 ### Personas
 Unchanged in shape and constraints; they now run **only on the re-test**. A persona = `{ prompt, perception filters, action limits, patience model }`. The constraints, not the prompt, are the validity argument.
 - **Rosa, 67, low vision**: screenshot only (no DOM text), blurred/downscaled; elements below a contrast/size threshold removed from what the agent sees; distrusts jargon; gives up after 2 failed attempts at the same thing; no hover-only elements.
-- **Kai, 19, impatient, mobile**: 375px viewport; tap targets < 44px register as misses; action budget drawn per seed (8–12); patience drains on page loads, modals, errors.
+- **Kai, 19, impatient, mobile**: 375px viewport; tap targets < 44px register as misses; action budget drawn per seed (16–22); patience drains on page loads, modals, errors.
 - **Typical shopper (control)**: desktop, standard perception, generous budget, applies WELCOME10. Must not regress.
 
 ### Swarm worker (re-test only, runs inside tenki sandboxes)
@@ -157,11 +157,12 @@ type Flow = {
   attempt?: EventMatch;       // real users only: which sessions count (default all)
   doneWhen: string;           // tells the agent when to call done
 };
-type EventMatch = { event: string; where?: Record<string, string | number | boolean> };
+// A list in `where` matches any of its values.
+type EventMatch = { event: string; where?: Record<string, EventValue | EventValue[]> };
 ```
 Flows (`shared/flows.ts`), all on the same store and the same PostHog events:
-- `buy-tshirt`: buy a size M blue t-shirt; completion = a placed order.
-- `buy-jeans`: buy the Skinny Fit Jeans; placed order + `product_added {product_id: 2}`; real users who viewed product 2.
+- `buy-tshirt`: find a blue polo shirt and buy it in size M (the id stays `buy-tshirt` for stored runs); completion = a placed order.
+- `buy-jeans`: a broad goal, "buy jeans as a gift for your grandchild, who loves green" (no jeans come in green, so the agent has to judge); placed order + `product_added {product_id: 2|8}`; real users who viewed either pair; swarmed by Rosa only (`Flow.personas`).
 - `promo-checkout`: buy with WELCOME10; placed order + `promo_applied {success: true}`; real users who tried a code (T5).
 - `add-to-cart`: pick a size and add to cart; success at `/cart`, `product_added`; steps Home → Cart (T4).
 

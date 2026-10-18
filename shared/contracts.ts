@@ -61,8 +61,11 @@ export type Persona = {
  * listed in funnel order. */
 export type FlowStep = { route: string; name: string };
 
-/** A PostHog event a session must contain; `where` matches its properties exactly. */
-export type EventMatch = { event: string; where?: Record<string, string | number | boolean> };
+type EventValue = string | number | boolean;
+
+/** A PostHog event a session must contain; `where` matches its properties exactly, or any of
+ * the values when given a list. */
+export type EventMatch = { event: string; where?: Record<string, EventValue | EventValue[]> };
 
 export type Flow = {
   id: string;
@@ -79,6 +82,8 @@ export type Flow = {
   attempt?: EventMatch;
   /** Tells the swarm agent when to call done. */
   doneWhen: string;
+  /** The personas that swarm this flow (default: every segment's persona; see flowPersonas). */
+  personas?: PersonaId[];
 };
 
 export type RequiredField =

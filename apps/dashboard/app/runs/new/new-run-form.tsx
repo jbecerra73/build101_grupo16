@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Database, FileJson, Lock, ScanSearch, ShieldCheck, TriangleAlert } from "lucide-react";
-import { describeEvent, FLOWS, MAX_GOAL_LENGTH, PERSONAS, SEGMENTS, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
+import { describeEvent, flowPersonas, FLOWS, MAX_GOAL_LENGTH, PERSONAS, SEGMENTS, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
 import { PersonaAvatar } from "@/components/persona/avatar";
 import { PersonaConstraints } from "@/components/persona-constraints";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -58,7 +58,7 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
   const [errors, setErrors] = useState<string[]>([]);
 
   const flow = FLOWS[flowId];
-  const personas = SEGMENTS.map((s) => PERSONAS[s.personaId]).filter(Boolean);
+  const personas = flowPersonas(flow).map((id) => PERSONAS[id]).filter(Boolean);
   const total = seeds * personas.length;
   const chosen = options.find((o) => o.id === preset)!;
   // Custom "to" is inclusive in the UI; the request's window is [from, to).

@@ -248,7 +248,7 @@ export class Orchestrator {
     const log: Log = (l) => this.#log(`${runId} ${l}`);
     const deps = (this.#o.makeDeps ?? settingsDeps(this.#o.env))(settings, { runId, signal: controller.signal, workDir: this.workDir, log });
     this.#log(`${runId}: starting (${settings.swarmRunner} swarm, ${settings.fixLoop} fix loop, ${config.posthog.source} source, retest x${n} per persona)`);
-    const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds) }, {
+    const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, req.flowId) }, {
       ...deps,
       runsDir: this.workDir,
       signal: controller.signal,

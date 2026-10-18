@@ -85,7 +85,8 @@ describe("posthog-sim", () => {
 
   it("swarm agents follow their flow: the jeans, a promo code, or stopping at the cart", () => {
     const viewed = (evs: { event: string; properties: Record<string, unknown> }[]) => evs.find((e) => e.event === "product_viewed")?.properties.product_id;
-    expect(agents("typical", [], 10, "buy-jeans").every((r) => viewed(r.events) === 2)).toBe(true);
+    expect(agents("typical", [], 10, "buy-jeans").every((r) => viewed(r.events) === 8)).toBe(true);
+    expect(agents("typical", [], 10, "buy-tshirt").every((r) => viewed(r.events) === 12)).toBe(true);
     const promo = agents("kai", [], 10, "promo-checkout");
     expect(promo.every((r) => r.events.some((e) => e.event === "promo_applied" && e.properties.success === true))).toBe(true);
     const cart = agents("typical", ALL, 20, "add-to-cart").filter((r) => r.completed);

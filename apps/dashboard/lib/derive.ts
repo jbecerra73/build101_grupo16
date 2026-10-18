@@ -20,7 +20,7 @@ import type { AgentOutcome, AgentState, ScreenshotIndex } from "./types";
 export const agentIdsOf = (config: RunConfig) =>
   config.personaIds.flatMap((p) => (config.seeds[p] ?? []).map((seed) => ({ agentId: `${p}-${seed}`, personaId: p, seed })));
 
-/** The agent's action budget, drawn by seed for personas with a range (Kai: 8–12). */
+/** The agent's action budget, drawn by seed for personas with a range (Kai: 16–22). */
 export const budgetOf = (personaId: string, seed: number) => {
   const persona = PERSONAS[personaId];
   return persona ? actionBudget(persona, seed) : MAX_ACTIONS_PER_AGENT;

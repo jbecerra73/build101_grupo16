@@ -34,10 +34,10 @@ describe("resolveStep", () => {
 });
 
 describe("actionBudget", () => {
-  it("draws Kai's budget from 8–12 deterministically by seed", () => {
+  it("draws Kai's budget from 16–22 deterministically by seed", () => {
     const budgets = Array.from({ length: 50 }, (_, i) => actionBudget(PERSONAS.kai, i + 1));
-    expect(Math.min(...budgets)).toBe(8);
-    expect(Math.max(...budgets)).toBe(12);
+    expect(Math.min(...budgets)).toBe(16);
+    expect(Math.max(...budgets)).toBe(22);
     expect(actionBudget(PERSONAS.kai, 7)).toBe(actionBudget(PERSONAS.kai, 7));
   });
   it("uses maxActions when there is no range", () => {
