@@ -2,7 +2,8 @@
 
 import { GitCommitVertical, MousePointerClick, TriangleAlert, Users } from "lucide-react";
 import type { Finding } from "@frictionswarm/shared";
-import { compact, pct, segmentColor, segmentShort, shortDate } from "@/lib/format";
+import { compact, pct, segmentColor } from "@/lib/format";
+import { segmentEs as segmentShort, shortDateEs as shortDate } from "./es";
 import { cn } from "@/lib/utils";
 import { Dot } from "./parts";
 
@@ -58,7 +59,7 @@ export function PitchFindingCard({
         <div className="tabular flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
           <span className="flex items-center gap-2">
             <Users className="size-5" aria-hidden />
-            <span className="font-semibold text-foreground">{compact(e.sessions)}</span> sessions
+            <span className="font-semibold text-foreground">{compact(e.sessions)}</span> sesiones
           </span>
           {e.rageClicks ? (
             <span className="flex items-center gap-2">
@@ -75,7 +76,7 @@ export function PitchFindingCard({
         {e.sinceRelease && (
           <span className="flex items-center gap-2">
             <GitCommitVertical className="size-5 text-muted-foreground" aria-hidden />
-            <span className="text-muted-foreground">since</span>
+            <span className="text-muted-foreground">desde</span>
             <span className="font-semibold">{e.sinceRelease.name}</span>
             <span className="text-muted-foreground">· {shortDate(e.sinceRelease.date)}</span>
           </span>

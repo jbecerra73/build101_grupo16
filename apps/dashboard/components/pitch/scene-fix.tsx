@@ -19,8 +19,8 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
   if (!a)
     return (
       <div className="flex h-full flex-col gap-10">
-        <SceneHeader index={index} kicker="The fix" title="The coding agent is preparing a fix" />
-        <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "No fix attempt on this run yet."}</p>
+        <SceneHeader index={index} kicker="El fix" title="El coding agent está preparando un fix" />
+        <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "Todavía no hay un intento de fix en este run."}</p>
       </div>
     );
   const rehearsal = isRehearsal(a);
@@ -30,8 +30,8 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
     <div className="flex h-full flex-col gap-8">
       <SceneHeader
         index={index}
-        kicker="The fix"
-        title="A coding agent opens the PR"
+        kicker="El fix"
+        title="Un coding agent abre el PR"
       />
 
       <ol className="-mt-2 flex items-center gap-2 text-xl whitespace-nowrap" aria-label="Pipeline">
@@ -57,12 +57,12 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
               <div className="flex min-w-0 flex-col">
                 <span className="text-4xl font-semibold whitespace-nowrap">
                   {a.prNumber ? `PR #${a.prNumber}` : "Draft PR"}
-                  <span className="text-2xl font-normal text-muted-foreground"> · attempt {a.attempt}</span>
+                  <span className="text-2xl font-normal text-muted-foreground"> · intento {a.attempt}</span>
                 </span>
               </div>
               {rehearsal && (
                 <span className="ml-auto shrink-0 rounded-full border-2 border-dashed border-[var(--status-warning)] px-4 py-1 text-lg font-semibold tracking-wide whitespace-nowrap uppercase">
-                  Rehearsal · no PR opened
+                  Rehearsal · sin PR abierto
                 </span>
               )}
             </div>
@@ -86,7 +86,7 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
 
         <div className="flex min-h-0 flex-col gap-4">
           <Reveal delay={0.5} y={0}>
-            <span className="text-xl tracking-wide text-muted-foreground uppercase">Findings it targets</span>
+            <span className="text-xl tracking-wide text-muted-foreground uppercase">Findings que ataca</span>
           </Reveal>
           {targets.map((f, i) => (
             <Reveal key={f.id} delay={0.6 + i * 0.2} x={24} y={0}>

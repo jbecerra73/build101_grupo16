@@ -39,6 +39,7 @@ function Replayed({ retest }: { retest: RunDetail }) {
       size="lg"
       live={!r.atEnd}
       minimal
+      lang="es"
     />
   );
 }
@@ -50,14 +51,14 @@ export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
       <SceneHeader
         compact
         index={index}
-        kicker={d.live ? "Swarm re-test · live on the preview" : "Swarm re-test on the preview"}
+        kicker={d.live ? "Re-test del swarm · en vivo en el preview" : "Re-test del swarm en el preview"}
         title={
           retest ? (
             <>
-              {retest.agents.length || retest.config.personaIds.length * 10} constrained agents shop the fix
+              {retest.agents.length || retest.config.personaIds.length * 10} agents con restricciones prueban el fix
             </>
           ) : (
-            "Waiting for the swarm"
+            "Esperando al swarm"
           )
         }
         aside={
@@ -66,7 +67,7 @@ export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
               {d.live ? (
                 <>
                   <Radio className="size-5 animate-pulse" style={{ color: "var(--status-running)" }} aria-hidden />
-                  <span className="font-semibold text-foreground">Live</span>
+                  <span className="font-semibold text-foreground">En vivo</span>
                 </>
               ) : (
                 <>
@@ -82,9 +83,9 @@ export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
       <Reveal delay={0.25} className="flex min-h-0 flex-1 flex-col">
         <FitBox className="flex-1">
         {!retest ? (
-          <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "The re-test starts once the preview is up."}</p>
+          <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "El re-test arranca cuando el preview está arriba."}</p>
         ) : d.live || !retest.events?.length ? (
-          <SwarmMap agents={retest.agents} metrics={retest.metrics ?? retest.provisionalMetrics} flow={retest.flow} size="lg" live={d.live} minimal />
+          <SwarmMap agents={retest.agents} metrics={retest.metrics ?? retest.provisionalMetrics} flow={retest.flow} size="lg" live={d.live} minimal lang="es" />
         ) : (
           <Replayed retest={retest} />
         )}
