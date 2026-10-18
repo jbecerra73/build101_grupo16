@@ -13,7 +13,7 @@ export const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-function Tile({ label, children, sub, size }: { label: string; children: React.ReactNode; sub?: React.ReactNode; size: MapSize }) {
+function Tile({ label, children, sub, size }: { label: string; children: React.ReactNode; sub?: React.ReactNode | false; size: MapSize }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className={cn("text-muted-foreground", size === "lg" ? "text-base" : "text-sm")}>{label}</span>
@@ -24,14 +24,14 @@ function Tile({ label, children, sub, size }: { label: string; children: React.R
 }
 
 /** Live counters next to the map. Numbers use tabular figures so they don't
- * jitter as they tick. */
-export function SwarmStatsRow({ agents, live, size = "md" }: { agents: AgentState[]; live?: boolean; size?: MapSize }) {
+ * jitter as they tick. `minimal` keeps running / valid completion / elapsed, without sub-lines or persona counters. */
+export function SwarmStatsRow({ agents, live, size = "md", minimal }: { agents: AgentState[]; live?: boolean; size?: MapSize; minimal?: boolean }) {
   const s = useSwarmStats(agents);
   const personas = [...new Set(agents.map((a) => a.personaId))];
   const rate = s.n ? s.valid / s.n : 0;
   return (
     <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
-      <Tile label="Agents running" size={size} sub={`${s.done}/${s.n} done`}>
+      <Tile label="Agents running" size={size} sub={!minimal && `${s.done}/${s.n} done`}>
         <span className="inline-flex items-center gap-2">
           {live && s.running > 0 && (
             <span className="relative flex size-3" aria-hidden>
@@ -42,15 +42,18 @@ export function SwarmStatsRow({ agents, live, size = "md" }: { agents: AgentStat
           {s.running}
         </span>
       </Tile>
-      <Tile label="Actions / s" size={size} sub={`${s.actions} actions total`}>
-        {s.aps.toFixed(1)}
-      </Tile>
-      <Tile label="Valid completion" size={size} sub={`${s.valid}/${s.n} agents · N=${s.n}`}>
+      {!minimal && (
+        <Tile label="Actions / s" size={size} sub={`${s.actions} actions total`}>
+          {s.aps.toFixed(1)}
+        </Tile>
+      )}
+      <Tile label="Valid completion" size={size} sub={!minimal && `${s.valid}/${s.n} agents · N=${s.n}`}>
         {Math.round(rate * 100)}%
       </Tile>
-      <Tile label="Elapsed" size={size} sub="swarm time">
+      <Tile label="Elapsed" size={size} sub={!minimal && "swarm time"}>
         {clock(s.elapsedMs)}
       </Tile>
+      {!minimal && (
       <div className="ml-auto flex flex-wrap items-end gap-x-6 gap-y-2">
         {personas.map((p) => {
           const mine = agents.filter((a) => a.personaId === p);
@@ -70,6 +73,7 @@ export function SwarmStatsRow({ agents, live, size = "md" }: { agents: AgentStat
           );
         })}
       </div>
+      )}
     </div>
   );
 }

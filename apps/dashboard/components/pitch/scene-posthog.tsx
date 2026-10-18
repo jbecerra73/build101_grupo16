@@ -2,17 +2,15 @@
 
 import { compact, pct1, segmentColor, segmentShort, shortDate } from "@/lib/format";
 import type { PitchData } from "./data";
-import { PitchFindingCard } from "./finding-card";
 import { Dot, FitBox, Reveal, SceneHeader } from "./parts";
 import { HIGHLIGHT_AT, PitchTrend } from "./pitch-trend";
 
-const CARDS_AT = HIGHLIGHT_AT + 1.4;
+const SUMMARY_AT = HIGHLIGHT_AT + 1.4;
 
 export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
   const trend = d.run.metrics?.trend;
   const sessions = d.run.metrics?.segments.reduce((n, s) => n + s.n, 0) ?? 0;
   const weeks = new Set(trend?.points.map((p) => p.weekStart)).size;
-  const top = d.findings.slice(0, 3);
 
   return (
     <div className="flex h-full flex-col gap-5">
@@ -21,14 +19,9 @@ export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
         kicker="Six months of PostHog · real users only"
         title="Which release broke which shoppers"
         aside={
-          <div className="tabular flex flex-col items-end text-2xl text-muted-foreground">
-            <span>
-              <span className="font-semibold text-foreground">{weeks}</span> weeks · {trend?.releases.length ?? 0} releases
-            </span>
-            <span>
-              N = <span className="font-semibold text-foreground">{compact(sessions)}</span> sessions in the window
-            </span>
-          </div>
+          <span className="tabular text-2xl text-muted-foreground">
+            N = <span className="font-semibold text-foreground">{compact(sessions)}</span> sessions · {weeks} weeks
+          </span>
         }
       />
 
@@ -46,9 +39,8 @@ export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
               <span aria-hidden className="inline-block h-6 border-l-2 border-dashed border-muted-foreground/60" />
               production release
             </span>
-            <span className="text-muted-foreground">weekly checkout completion</span>
           </Reveal>
-          {trend ? <PitchTrend points={trend.points} releases={trend.releases} impacts={d.impacts} width={1210} height={312} /> : <p className="text-2xl text-muted-foreground">This run has no trend data.</p>}
+          {trend ? <PitchTrend points={trend.points} releases={trend.releases} impacts={d.impacts} width={1210} height={430} /> : <p className="text-2xl text-muted-foreground">This run has no trend data.</p>}
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-4 pt-16">
@@ -74,13 +66,10 @@ export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
         </div>
       </div>
 
-      <div className="grid flex-1 grid-cols-3 gap-6">
-        {top.map((f, i) => (
-          <Reveal key={f.id} delay={CARDS_AT + i * 0.15}>
-            <PitchFindingCard f={f} compactTitle />
-          </Reveal>
-        ))}
-      </div>
+      <Reveal delay={SUMMARY_AT} className="mt-auto text-3xl">
+        <span className="font-semibold">{d.findings.length} findings</span>
+        <span className="text-muted-foreground">, each tied to the release that introduced it.</span>
+      </Reveal>
       </FitBox>
     </div>
   );

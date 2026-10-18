@@ -42,9 +42,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cancelRun, getControl, getRun, retryRun } from "@/lib/client/api";
 import type { ControlOverview, OrchestratorHeartbeat, Settings } from "@/lib/control-types";
 import { usePoll, useNow } from "@/lib/hooks/use-poll";
-import { compact, duration, formatDateTime, pct1, personaShort, RETEST_PHASES, segmentColor, segmentShort, relativeTime, windowLabel } from "@/lib/format";
+import { compact, duration, pct1, personaShort, RETEST_PHASES, segmentColor, segmentShort, relativeTime, runIdShort, windowLabel } from "@/lib/format";
 import type { RunSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { RunId, TimeAgo } from "@/components/run-meta";
 import { HeartbeatDot, MiniFunnel, MiniStepper, UsageMeter } from "./bits";
 
 const STALE_MS = 20_000;
@@ -214,7 +215,7 @@ function CancelButton({ runId, onDone }: { runId: string; onDone: () => void }) 
         <AlertDialogHeader>
           <AlertDialogTitle>Cancel this pipeline?</AlertDialogTitle>
           <AlertDialogDescription>
-            <code className="font-mono">{runId}</code> stops at the next checkpoint: running agents are closed and no further fix or PR step is started.
+            <code className="font-mono">#{runIdShort(runId)}</code> stops at the next checkpoint: running agents are closed and no further fix or PR step is started.
             The run folder is kept.
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -226,7 +227,7 @@ function CancelButton({ runId, onDone }: { runId: string; onDone: () => void }) 
               setBusy(true);
               try {
                 await cancelRun(runId, "Cancelled from the control center");
-                toast.success(`Cancel requested for ${runId}`);
+                toast.success(`Cancel requested for #${runIdShort(runId)}`);
                 onDone();
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : "Cancel failed");
@@ -262,9 +263,7 @@ function ActiveRow({ r, now, onChange }: { r: RunSummary; now: number; onChange:
       <div className="flex min-w-0 items-center gap-3">
         <PersonaStack ids={SEGMENTS.map((s) => s.personaId)} size={36} />
         <div className="flex min-w-0 flex-col">
-          <Link href={`/runs/${r.runId}`} className="truncate font-mono text-sm font-medium hover:underline">
-            {r.runId}
-          </Link>
+          <RunId runId={r.runId} href={`/runs/${r.runId}`} retest={r.config.kind === "retest"} />
           <span className="tabular text-sm text-muted-foreground">
             {windowLabel(r.config.window)} · started {ago(r.config.createdAt, now)}
           </span>
@@ -318,7 +317,7 @@ function RetryButton({ r }: { r: RunSummary }) {
         setBusy(true);
         try {
           const res = await retryRun(r.runId);
-          toast.success(`Retry queued as ${res.runId}`);
+          toast.success(`Retry queued as #${runIdShort(res.runId)}`);
           router.push(`/runs/${res.runId}`);
         } catch (e) {
           toast.error(e instanceof Error ? e.message : "Retry failed");
@@ -341,7 +340,7 @@ export function ControlCenter() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Control center</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Control center</h1>
           <p className="text-muted-foreground">Orchestrator health, the queue, pipelines in flight and today&apos;s budget.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -419,7 +418,7 @@ export function ControlCenter() {
                         <span className="tabular flex size-7 items-center justify-center rounded-full bg-background text-sm font-semibold">{i + 1}</span>
                         <PersonaStack ids={SEGMENTS.map((s) => s.personaId)} size={26} />
                         <div className="flex min-w-0 flex-col">
-                          <span className="truncate font-mono text-sm">{q.runId}</span>
+                          <RunId runId={q.runId} />
                           <span className="tabular text-xs text-muted-foreground">
                             {windowLabel(q.req.window)} · {q.req.autoFix ? `auto-fix, ${SEGMENTS.length * (q.req.seedsPerPersona ?? c.settings.defaultSeedsPerPersona)} re-test agents` : "report only"} · {ago(q.requestedAt, now)}
                           </span>
@@ -459,12 +458,8 @@ export function ControlCenter() {
                         <TableRow key={r.runId}>
                           <TableCell className="pl-6">
                             <div className="flex flex-col">
-                              <Link href={`/runs/${r.runId}`} className="font-mono text-sm font-medium hover:underline">
-                                {r.runId}
-                              </Link>
-                              <span className="text-xs text-muted-foreground">
-                                {r.config.kind} · {formatDateTime(r.config.createdAt)}
-                              </span>
+                              <RunId runId={r.runId} href={`/runs/${r.runId}`} retest={r.config.kind === "retest"} />
+                              <TimeAgo iso={r.config.createdAt} stacked className="text-xs" />
                             </div>
                           </TableCell>
                           <TableCell>

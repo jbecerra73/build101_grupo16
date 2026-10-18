@@ -6,7 +6,7 @@ import { PersonaAvatar } from "@/components/persona/avatar";
 import { fileUrl } from "@/components/run/screenshot";
 import { pct1, personaShort, segmentShort } from "@/lib/format";
 import type { AgentState } from "@/lib/types";
-import { pickCapture, seedLabel, trapChecks, type PitchData } from "./data";
+import { pickCapture, trapChecks, type PitchData } from "./data";
 import { FitBox, Reveal, SceneHeader } from "./parts";
 
 const rosa = PERSONAS.rosa;
@@ -59,8 +59,7 @@ function RosaPanel({ runId, shot }: { runId: string; shot?: AgentState }) {
         ))}
       </div>
       <p className="text-xl text-muted-foreground">
-        Screenshot only, downscaled to {Math.round((p.downscale ?? 1) * 100)}%, blur {p.blur}px; text under {p.minContrast}:1 contrast or {p.minFontPx}px is
-        invisible to her.
+        {Math.round((p.downscale ?? 1) * 100)}% size · {p.blur}px blur · text under {p.minFontPx}px is gone
       </p>
     </div>
   );
@@ -106,16 +105,10 @@ function KaiPanel({ runId, shot }: { runId: string; shot?: AgentState }) {
             </Reveal>
           </div>
         </Reveal>
-        <div className="flex flex-col justify-center gap-4 text-xl">
-          <p>
-            <span className="text-3xl font-semibold">{kai.actions.minTapTargetPx}px</span>
-            <br />
-            <span className="text-muted-foreground">One square = one tap. Smaller targets register as misses.</span>
-          </p>
-          <p className="text-muted-foreground">
-            {kai.viewport.width}×{kai.viewport.height} phone · {kai.actions.maxActionsRange?.join("–")} actions, then he leaves
-          </p>
-        </div>
+        <p className="flex flex-col justify-center text-xl">
+          <span className="text-3xl font-semibold">{kai.actions.minTapTargetPx}px</span>
+          <span className="text-muted-foreground">One square = one tap. Smaller is a miss.</span>
+        </p>
       </div>
     </div>
   );
@@ -130,7 +123,6 @@ export function SceneTrust({ d, index }: { d: PitchData; index: number }) {
   const controlHolds = control ? control.regressions.length === 0 : undefined;
   const traps = trapChecks(d.findings);
   const found = traps.filter((t) => t.releaseRight).length;
-  const seeds = d.retest ? Object.entries(d.retest.config.seeds) : [];
 
   return (
     <div className="flex h-full flex-col gap-5">
@@ -150,9 +142,7 @@ export function SceneTrust({ d, index }: { d: PitchData; index: number }) {
             <span className="flex flex-col">
               <span className="text-2xl font-semibold">{controlHolds === false ? "Control regressed" : "Control persona holds"}</span>
               <span className="text-muted-foreground">
-                {control
-                  ? `${personaShort(control.personaId)}: ${pct1(control.after.completionRate)} (n=${control.after.n}) vs ${segmentShort(control.segmentId)} ${pct1(control.before.completionRate)}, ${control.regressions.length ? `${control.regressions.length} regression${control.regressions.length > 1 ? "s" : ""}` : "no regressions"}`
-                  : "a fix for one group must not hurt everyone else"}
+                {control ? `${personaShort(control.personaId)} ${pct1(control.after.completionRate)} vs ${segmentShort(control.segmentId)} ${pct1(control.before.completionRate)}` : "a fix must not hurt everyone else"}
               </span>
             </span>
           </Reveal>
@@ -160,14 +150,14 @@ export function SceneTrust({ d, index }: { d: PitchData; index: number }) {
             <Dices className="mt-1 size-8 shrink-0 text-muted-foreground" aria-hidden />
             <span className="flex flex-col">
               <span className="text-2xl font-semibold">Fresh seeds every re-test</span>
-              <span className="tabular text-muted-foreground">{seeds.length ? seeds.map(([p, s]) => `${personaShort(p)} ${seedLabel(s)}`).join(" · ") : "no overfitting to one run"}</span>
+              <span className="text-muted-foreground">no overfitting to one run</span>
             </span>
           </Reveal>
           <Reveal as="li" delay={1.8} x={20} y={0} className="flex gap-4">
             <Database className="mt-1 size-8 shrink-0 text-muted-foreground" aria-hidden />
             <span className="flex flex-col">
               <span className="text-2xl font-semibold">Real-user evidence first</span>
-              <span className="text-muted-foreground">Findings come from PostHog. Swarm traffic is tagged and never counted as users; shortcuts to the confirmation don&apos;t count as orders.</span>
+              <span className="text-muted-foreground">Findings come from PostHog, not the agents</span>
             </span>
           </Reveal>
         </ul>
@@ -180,7 +170,7 @@ export function SceneTrust({ d, index }: { d: PitchData; index: number }) {
           </span>
           <span className="text-2xl">planted traps found, each with the release that introduced it</span>
         </span>
-        <ol className="grid grid-cols-5 gap-5 text-base">
+        <ol className="grid grid-cols-5 gap-5 text-lg">
           {traps.map((t) => (
             <li key={t.id} className="flex gap-2.5">
               {t.releaseRight ? (
@@ -188,14 +178,7 @@ export function SceneTrust({ d, index }: { d: PitchData; index: number }) {
               ) : (
                 <CircleX className="mt-0.5 size-6 shrink-0" style={{ color: "var(--status-critical)" }} aria-label={t.finding ? "found, wrong release" : "not found"} />
               )}
-              <span className="flex flex-col leading-snug">
-                <span className="font-semibold">
-                  {t.id} · {t.label}
-                </span>
-                <span className="text-muted-foreground">
-                  {t.finding ? `${t.finding.id}, since ${t.finding.evidence.sinceRelease?.name ?? "?"}` : "not found"}
-                </span>
-              </span>
+              <span className="leading-snug font-semibold">{t.label}</span>
             </li>
           ))}
         </ol>
