@@ -55,6 +55,6 @@ ${findings.map(describeFinding).join("\n\n")}
 1. Find the code behind each finding and fix the cause, following the existing code style and components.
 2. Run \`npm run build\` and fix any error it reports.
 3. Do not commit, push or open a pull request; that is done for you after you finish.
-4. End with a short summary: one line per finding saying what you changed.
+4. End with a summary for a product owner, not a developer: one short sentence per finding saying what shoppers will now see or do differently and why it helps them finish the task. No file names, code, components or technical details, and nothing else before or after.
 `;
 }
