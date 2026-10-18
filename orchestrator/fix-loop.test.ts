@@ -301,7 +301,8 @@ describe("runFixLoop", () => {
     await expect(runFixLoop({ ...opts, maxAttempts: 2 })).rejects.toThrow("has no agents");
     const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
     expect(saved.attempts.map((a) => a.status)).toEqual(["failed"]);
-    expect(ghCalls.filter((c) => c[0] === "pr")).toEqual([]);
+    // Only the read-only diff fetch (for the decision package); nothing edits, labels or closes the PR.
+    expect(ghCalls.filter((c) => c[0] === "pr" && c[1] !== "diff")).toEqual([]);
   });
 
   it("records a failed attempt in fix.json", async () => {
