@@ -1,4 +1,4 @@
-import { FLOWS, type StartRunRequest } from "@frictionswarm/shared";
+import { FLOWS, MAX_GOAL_LENGTH, type StartRunRequest } from "@frictionswarm/shared";
 
 export const MAX_SEEDS_PER_PERSONA = 10;
 
@@ -12,6 +12,10 @@ export function parseStartRunRequest(body: unknown): { ok: true; value: StartRun
   const b = body as Record<string, unknown>;
 
   if (typeof b.flowId !== "string" || !FLOWS[b.flowId]) errors.push(`flowId must be one of: ${Object.keys(FLOWS).join(", ")}`);
+
+  const goal = typeof b.goal === "string" ? b.goal.trim() : undefined;
+  if (b.goal !== undefined && b.goal !== null && (goal === undefined || goal.length > MAX_GOAL_LENGTH))
+    errors.push(`goal must be a string of at most ${MAX_GOAL_LENGTH} characters`);
 
   let window: StartRunRequest["window"];
   if (b.window !== undefined && b.window !== null) {
@@ -34,6 +38,8 @@ export function parseStartRunRequest(body: unknown): { ok: true; value: StartRun
     ok: true,
     value: {
       flowId: b.flowId as string,
+      // An empty goal or the preset's own means "use the flow's goal".
+      ...(goal && goal !== FLOWS[b.flowId as string].goal ? { goal } : {}),
       ...(window ? { window } : {}),
       ...(b.source ? { source: b.source as "file" | "api" } : {}),
       ...(seeds !== undefined ? { seedsPerPersona: seeds as number } : {}),

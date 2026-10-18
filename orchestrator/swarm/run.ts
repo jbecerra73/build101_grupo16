@@ -19,6 +19,8 @@ import type { SwarmWaiter } from "./wait";
 export type RunSwarmOptions = {
   runId: string;
   flowId: string;
+  /** Overrides the flow's goal for the agents. */
+  goal?: string;
   /** Deploy preview URL; agents open it with their swarm tag. */
   previewUrl: string;
   /** The preview's build_sha (RunConfig.posthog.buildSha). */
@@ -122,6 +124,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     runId: o.runId,
     kind: "retest",
     flowId: o.flowId,
+    ...(o.goal ? { goal: o.goal } : {}),
     posthog: { source: "api", buildSha: o.buildSha },
     personaIds: o.personaIds,
     seeds,
@@ -213,6 +216,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     const input: SwarmWorkerInput = {
       runId: o.runId,
       flowId: o.flowId,
+      ...(o.goal ? { goal: o.goal } : {}),
       targetUrl: o.previewUrl,
       agents: plan.sandboxes[i].map(({ personaId, seed }) => ({ personaId, seed })),
     };

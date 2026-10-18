@@ -15,11 +15,12 @@ import type {
   StartRunRequest,
   Verdict,
 } from "@frictionswarm/shared";
+import { runFlow } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeFixLoop, pickTargets } from "./fakeFix";
-import { realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { defaultWindow, startPipeline, validateRequest, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, startPipeline, validateRequest, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -174,6 +175,16 @@ describe("startPipeline", () => {
     await expect(startPipeline({ ...req, seedsPerPersona: 11 }, opts)).rejects.toThrow(/1 to 10/);
     await expect(startPipeline({ ...req, window: { from: "2026-10-17", to: "2026-10-01" } }, opts)).rejects.toThrow(/before/);
     expect(() => validateRequest({ ...req, source: "s3" as never })).toThrow(/Unknown source/);
+    expect(() => validateRequest({ ...req, goal: " " })).toThrow(/goal/);
+  });
+
+  it("carries a custom goal from the request to the analysis and its retests", async () => {
+    const config = await analysisConfig("r1", { ...req, goal: "Buy black sneakers and check out." });
+    expect(config.goal).toBe("Buy black sneakers and check out.");
+    const retest = retestConfig(config, { attempt: 1, commitSha: "abc", previewUrl: "https://p.example", seeds: { rosa: [1] } });
+    expect(retest.goal).toBe("Buy black sneakers and check out.");
+    expect(runFlow(retest)).toMatchObject({ id: "buy-tshirt", goal: "Buy black sneakers and check out." });
+    expect(runFlow({ flowId: "buy-tshirt" })!.goal).toBe("Buy a size M blue t-shirt and check out.");
   });
 
   it("defaults to the last 28 days, today included", () => {

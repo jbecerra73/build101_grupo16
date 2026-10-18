@@ -11,6 +11,7 @@
 import "server-only";
 import {
   FLOWS,
+  runFlow,
   PRODUCTION_URL,
   type Finding,
   type Metrics,
@@ -156,7 +157,7 @@ async function queuedRun(runId: string): Promise<RunDetail | undefined> {
     runId,
     config: placeholderConfig(runId, q.req, q.requestedAt),
     status: { runId, phase: "analyzing", message: "Queued: waiting for the orchestrator", updatedAt: q.requestedAt, inferred: true },
-    flow: FLOWS[q.req.flowId],
+    flow: runFlow(q.req),
     agents: [],
     giveUps: [],
     replayBase: replayBase(),
@@ -176,6 +177,7 @@ export function placeholderConfig(runId: string, req: StartRunRequest, createdAt
     runId,
     kind: "analysis",
     flowId: req.flowId,
+    ...(req.goal ? { goal: req.goal } : {}),
     // The orchestrator fills in the default window (last 28 days) and the current release.
     window: req.window ?? defaultWindowFor(createdAt),
     posthog: { source: req.source ?? "file", buildSha: req.window ? "" : "current" },
@@ -190,7 +192,7 @@ export async function getRun(runId: string, opts: { events?: boolean } = {}): Pr
   const core = await loadCore(runId);
   if (!core) return isValidRunId(runId) ? queuedRun(runId) : undefined;
   const { config, status, metrics, findings, themes, fix } = core;
-  const flow = FLOWS[config.flowId];
+  const flow = runFlow(config);
   const base = {
     runId,
     config,

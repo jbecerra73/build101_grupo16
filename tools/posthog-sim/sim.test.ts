@@ -9,6 +9,7 @@ import {
   RELEASES,
   SEGMENT_PROFILES,
   simulateSession,
+  SWARM_INTENTS,
   visitorSegment,
   type TrapId,
 } from "./sim";
@@ -27,13 +28,14 @@ function realUsers(n: number, traps: TrapId[], seed = 1) {
   });
 }
 
-function agents(persona: "rosa" | "kai" | "typical", traps: TrapId[], n = 200) {
+function agents(persona: "rosa" | "kai" | "typical", traps: TrapId[], n = 200, flowId = "buy-tshirt") {
   return Array.from({ length: n }, (_, seed) => {
     const rng = mulberry32(seed + 1);
     return simulateSession({
       rng, start: START, host: "preview", buildSha: "preview", traps, profile: PERSONA_PROFILES[persona], promoCodes: true,
       visitor: { distinctId: "", device: persona === "kai" ? "Mobile" : "Desktop", os: "Linux", browser: "Chrome", viewport: [1280, 800], fontScale: 1, prefersContrast: false },
       swarm: { run: "r1", agent: `${persona}-${seed}`, persona },
+      intent: SWARM_INTENTS[flowId],
     });
   });
 }
@@ -79,6 +81,20 @@ describe("posthog-sim", () => {
     }
     const gaveUp = rs.filter((r) => !r.completed);
     for (const r of gaveUp) expect(r.events.some((e) => e.event === "swarm_give_up")).toBe(true);
+  });
+
+  it("swarm agents follow their flow: the jeans, a promo code, or stopping at the cart", () => {
+    const viewed = (evs: { event: string; properties: Record<string, unknown> }[]) => evs.find((e) => e.event === "product_viewed")?.properties.product_id;
+    expect(agents("typical", [], 10, "buy-jeans").every((r) => viewed(r.events) === 2)).toBe(true);
+    const promo = agents("kai", [], 10, "promo-checkout");
+    expect(promo.every((r) => r.events.some((e) => e.event === "promo_applied" && e.properties.success === true))).toBe(true);
+    const cart = agents("typical", ALL, 20, "add-to-cart").filter((r) => r.completed);
+    expect(cart.length).toBeGreaterThan(0);
+    for (const r of cart) {
+      expect(r.exitStep).toBe("Cart");
+      expect(r.events.some((e) => e.event === "swarm_done")).toBe(true);
+      expect(r.events.some((e) => e.event === "checkout_clicked")).toBe(false);
+    }
   });
 
   it("fixing T1+T2 lifts Rosa and Kai by well over 20 points, Typical holds", () => {

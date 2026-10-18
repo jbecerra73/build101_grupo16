@@ -1,7 +1,7 @@
 // One session = one funnel attempt (real user) or one agent (swarm). Everything
 // downstream (metrics, history, signals) works on SessionSummary, a compact,
 // pure digest of a session's PostHog events.
-import { matchesRoute, resolveStep, segmentOf, type Flow, type PostHogEvent, type SegmentId } from "@frictionswarm/shared";
+import { attemptsFlow, completionProblems, matchesRoute, resolveStep, segmentOf, type Flow, type PostHogEvent, type SegmentId } from "@frictionswarm/shared";
 import { describeElement } from "./elements";
 
 export type MarkKind = "rage_click" | "no_size" | "promo_wipe" | "failed_submit" | "drop_off" | "give_up";
@@ -128,25 +128,19 @@ export async function* streamSessions(events: AsyncIterable<PostHogEvent>, gapMs
   for (const v of open.values()) yield sortEvents(v.evs);
 }
 
-const STEP_EVENTS = { shipping: "shipping_submitted", payment: "payment_submitted", order: "order_completed" } as const;
 
 /** SPEC completion validity: the session reaches the success step AND every required step is in
- * its $pageviews AND shipping_submitted {success:true} AND payment_submitted {success:true}
- * AND order_completed happened. (The confirmation echo is the swarm agent's done() evidence.) */
+ * its $pageviews AND every flow.completion event happened (for a checkout: shipping_submitted and
+ * payment_submitted {success:true}, order_completed). The confirmation echo is the swarm agent's
+ * done() evidence. */
 export function validateCompletion(flow: Flow, events: PostHogEvent[]): Validity {
-  const reasons: string[] = [];
-  const views = events.filter((e) => e.event === "$pageview" && urlOf(e));
-  const success = views.some((e) => isSuccessUrl(flow, urlOf(e)!));
-  if (!success) reasons.push("never reached the success step");
-  const seen = new Set(views.map((e) => stepOf(flow, urlOf(e)!)).filter(Boolean));
-  const missing = flow.required.steps.filter((s) => !seen.has(s));
-  if (missing.length) reasons.push(`skipped required step(s): ${missing.join(", ")}`);
-  const ok = (name: string) => events.some((e) => e.event === name && e.properties.success === true);
-  if (!ok(STEP_EVENTS.shipping)) reasons.push("no successful shipping_submitted");
-  if (!ok(STEP_EVENTS.payment)) reasons.push("no successful payment_submitted");
-  if (!events.some((e) => e.event === STEP_EVENTS.order)) reasons.push("no order_completed");
+  const reasons = completionProblems(flow, events, (url) => isSuccessUrl(flow, url));
   return { valid: reasons.length === 0, reasons };
 }
+
+/** Whether a session counts towards the flow: every swarm agent's does; a real user's only if it
+ * matches flow.attempt (e.g. viewed the product the flow buys). */
+export const countsForFlow = (flow: Flow, events: PostHogEvent[]) => !!events[0]?.properties.swarm_run || attemptsFlow(flow, events);
 
 export function isSuccessUrl(flow: Flow, url: string): boolean {
   let m = successMemo.get(flow);
@@ -192,6 +186,8 @@ export function summarizeSession(flow: Flow, events: PostHogEvent[]): SessionSum
   for (const e of events) {
     const t = tsOf(e);
     const url = urlOf(e);
+    // Pages outside the flow (checkout, in the add-to-cart flow) are not its friction.
+    if (url && !stepOf(flow, url) && e.event !== "swarm_give_up" && e.event !== "swarm_think_aloud") continue;
     const step = (url && stepOf(flow, url)) || current || "Unknown";
     const props = e.properties as Record<string, unknown>;
     switch (e.event) {
@@ -235,7 +231,7 @@ export function summarizeSession(flow: Flow, events: PostHogEvent[]): SessionSum
         if (e.event.endsWith("_submitted") && props.success === false) {
           const fields = Array.isArray(props.error_fields) ? (props.error_fields as string[]) : [];
           if (!fields.length) break; // e.g. a declined card: not a form problem
-          const wipe = e.event === STEP_EVENTS.shipping && props.promo_applied === true && promoOk && fields.length >= SHIPPING_WIPE_MIN_FIELDS;
+          const wipe = e.event === "shipping_submitted" && props.promo_applied === true && promoOk && fields.length >= SHIPPING_WIPE_MIN_FIELDS;
           if (wipe) mark({ key: `promo_wipe|${step}|${e.event}`, kind: "promo_wipe", step, event: e.event, fields });
           else mark({ key: `failed_submit|${step}|${e.event}`, kind: "failed_submit", step, event: e.event, fields });
         } else if (e.event === "swarm_give_up") {
@@ -282,7 +278,7 @@ export function summarizeSession(flow: Flow, events: PostHogEvent[]): SessionSum
   };
 }
 
-/** Summaries of every session in `events`, ordered by start. */
+/** Summaries of every session in `events` that counts for the flow (countsForFlow), ordered by start. */
 export function summarizeSessions(flow: Flow, events: Iterable<PostHogEvent>): SessionSummary[] {
-  return [...groupSessions(events).values()].map((evs) => summarizeSession(flow, evs)).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  return [...groupSessions(events).values()].filter((evs) => countsForFlow(flow, evs)).map((evs) => summarizeSession(flow, evs)).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
 }

@@ -4,7 +4,7 @@
 // run replays offline without its months of raw events.
 import { SEGMENTS, type Flow, type PostHogEvent, type Release, type SegmentId, type TrendPoint } from "@frictionswarm/shared";
 import { deriveReleases, KNOWN_RELEASES, type ReleaseRate } from "./releases";
-import { streamSessions, summarizeSession, type SessionSummary } from "./sessions";
+import { countsForFlow, streamSessions, summarizeSession, type SessionSummary } from "./sessions";
 
 export type ReleaseSegmentStats = {
   n: number;
@@ -98,6 +98,7 @@ export async function historyFromEvents(
 ): Promise<History> {
   const b = new HistoryBuilder();
   for await (const evs of streamSessions(events)) {
+    if (!countsForFlow(flow, evs)) continue;
     const s = summarizeSession(flow, evs);
     b.add(s);
     opts.onSession?.(s, evs);

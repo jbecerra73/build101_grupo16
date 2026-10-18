@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Database, FileJson, Lock, ScanSearch, ShieldCheck, TriangleAlert } from "lucide-react";
-import { FLOWS, PERSONAS, SEGMENTS, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
+import { describeEvent, FLOWS, MAX_GOAL_LENGTH, PERSONAS, SEGMENTS, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
 import { PersonaAvatar } from "@/components/persona/avatar";
 import { PersonaConstraints } from "@/components/persona-constraints";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -46,6 +46,7 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
   const router = useRouter();
   const flowIds = Object.keys(FLOWS);
   const [flowId, setFlowId] = useState(flowIds[0]);
+  const [goal, setGoal] = useState(FLOWS[flowIds[0]].goal);
   const options = presets(releases, today);
   const [preset, setPreset] = useState("default");
   const [from, setFrom] = useState(iso(Date.parse(`${today}T00:00:00Z`) - 27 * DAY));
@@ -67,7 +68,8 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
     e.preventDefault();
     setPending(true);
     setErrors([]);
-    const body: StartRunRequest = { flowId, ...(window ? { window } : {}), source, autoFix, ...(autoFix ? { seedsPerPersona: seeds } : {}) };
+    const custom = goal.trim() && goal.trim() !== flow.goal ? goal.trim() : undefined;
+    const body: StartRunRequest = { flowId, ...(custom ? { goal: custom } : {}), ...(window ? { window } : {}), source, autoFix, ...(autoFix ? { seedsPerPersona: seeds } : {}) };
     try {
       const { runId } = await startRun(body);
       router.push(`/runs/${runId}`);
@@ -90,7 +92,13 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="flow">Flow</FieldLabel>
-                <Select value={flowId} onValueChange={setFlowId}>
+                <Select
+                  value={flowId}
+                  onValueChange={(id) => {
+                    setFlowId(id);
+                    setGoal(FLOWS[id].goal);
+                  }}
+                >
                   <SelectTrigger id="flow" className="w-full max-w-md">
                     <SelectValue />
                   </SelectTrigger>
@@ -104,6 +112,21 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
                     </SelectGroup>
                   </SelectContent>
                 </Select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="goal">Swarm goal</FieldLabel>
+                <Input
+                  id="goal"
+                  className="max-w-md"
+                  value={goal}
+                  maxLength={MAX_GOAL_LENGTH}
+                  placeholder={flow.goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                />
+                <FieldDescription>
+                  What the re-test agents are told to do. Completion is still measured by this flow&apos;s steps and events below, so a goal
+                  that doesn&apos;t end there can&apos;t succeed. For a different item or promo code, pick that flow instead.
+                </FieldDescription>
               </Field>
             </FieldGroup>
             <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr]">
@@ -128,8 +151,23 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
               </dd>
               <dt className="text-muted-foreground">Completion</dt>
               <dd className="text-sm">
-                Reached {flow.required.steps.join(", ")}, shipping and payment submitted successfully, and <code className="font-mono">order_completed</code> fired.
+                Reached {flow.required.steps.join(", ")}, with{" "}
+                {flow.completion.map((m, i) => (
+                  <span key={i}>
+                    {i > 0 && (i === flow.completion.length - 1 ? " and " : ", ")}
+                    <code className="font-mono">{describeEvent(m).replace(/^a /, "")}</code>
+                  </span>
+                ))}
+                .
               </dd>
+              {flow.attempt && (
+                <>
+                  <dt className="text-muted-foreground">Real users</dt>
+                  <dd className="text-sm">
+                    Only sessions with {describeEvent(flow.attempt)} count as attempting this flow.
+                  </dd>
+                </>
+              )}
             </dl>
           </CardContent>
         </Card>

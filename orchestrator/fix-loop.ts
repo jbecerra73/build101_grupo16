@@ -140,6 +140,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         runId: retestRunId,
         kind: "retest",
         flowId: flow.id,
+        ...(config.goal ? { goal: config.goal } : {}),
         posthog: { source: config.posthog.source, buildSha: agent.commitSha },
         personaIds,
         seeds,

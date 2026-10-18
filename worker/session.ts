@@ -32,7 +32,7 @@ You are using a real web shop through tools. Start by calling look. Every action
 - Behave like the person described above, not like a test robot. Use think_aloud to voice reactions as you go (confusion, annoyance, relief), in first person, briefly.
 - If you would realistically abandon the purchase, call give_up and say why.
 - You have at most ${actionBudget(persona, seed)} actions (click/type/scroll/back). look and think_aloud are free.
-- When the order is placed and confirmed, call done.
+- ${flow.doneWhen}
 - Once the session is over, stop and reply with one short sentence.
 
 If you are asked for details, use these:
