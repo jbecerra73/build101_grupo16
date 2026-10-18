@@ -18,7 +18,7 @@ export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
       <SceneHeader
         index={index}
         kicker="Seis meses de PostHog · solo usuarios reales"
-        title="Qué release rompió a qué compradores"
+        title="¿Qué release empeoró el funnel de ventas?"
         aside={
           <span className="tabular text-2xl text-muted-foreground">
             N = <span className="font-semibold text-foreground">{compact(sessions)}</span> sesiones · {weeks} semanas
