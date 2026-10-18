@@ -9,8 +9,10 @@
 //
 // Env (shell or <repo>/.env.local): TENKI_API_KEY (the "tenki3" key; the SDK
 // also accepts TENKI_AUTH_TOKEN), NETLIFY_SITE_ID, NETLIFY_AUTH_TOKEN, and
-// optionally TENKI_CHROME_SNAPSHOT_ID, GITHUB_TOKEN, plus the pipeline env that
-// is forwarded into the sandbox (FORWARDED_ENV below). See docs/DEPLOY.md.
+// optionally TENKI_CHROME_SNAPSHOT_ID, TENKI_SNAPSHOT_ID, GITHUB_TOKEN, plus the
+// pipeline env that is forwarded into the sandbox (FORWARDED_ENV below). The
+// tenki key is forwarded too: tenki re-tests (Settings.swarmRunner = "tenki")
+// create the swarm's sandboxes from inside the orchestrator. See docs/DEPLOY.md.
 //
 // Status: unit-tested with a mocked SDK; untested against real tenki.
 import { execFileSync } from "node:child_process";
@@ -97,6 +99,8 @@ export const FORWARDED_ENV = [
   "DEFAULT_SEEDS_PER_PERSONA",
   "ORCHESTRATOR_MAX_CONCURRENT",
   "GITHUB_TOKEN",
+  // Tenki re-tests: the swarm's sandboxes boot from this snapshot.
+  "TENKI_SNAPSHOT_ID",
 ];
 
 export type SandboxRecord = {
@@ -280,8 +284,11 @@ export async function up(deps: Deps, opts: UpOptions = {}): Promise<SandboxRecor
         POSTHOG_DATA_DIR: `${REPO_DIR}/data/posthog`,
         SWARM_SHOTS_DIR: `${REPO_DIR}/apps/dashboard/scripts/shots`,
         PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1",
+        // Without it a tenki re-test fails with "Set TENKI_API_KEY (or TENKI_AUTH_TOKEN) to use tenki sandboxes".
+        TENKI_API_KEY: (env.TENKI_API_KEY || env.TENKI_AUTH_TOKEN)!,
       };
       for (const k of FORWARDED_ENV) if (env[k] && !(k in vars)) vars[k] = env[k]!;
+      if (!vars.TENKI_SNAPSHOT_ID) log("TENKI_SNAPSHOT_ID is not set: re-tests with the tenki swarm runner will fail (build one with `npm run swarm:snapshot`)");
       await session.writeFile(ENV_FILE, envFile(vars));
       await session.writeFile(
         START_SCRIPT,

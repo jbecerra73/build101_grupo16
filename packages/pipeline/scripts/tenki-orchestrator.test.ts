@@ -99,7 +99,7 @@ function deps(tenki: ReturnType<typeof fakeTenki>, env: Record<string, string> =
 describe("tenki orchestrator bootstrap (mocked SDK)", () => {
   it("up: creates the sandbox, clones, installs, generates data, writes the env file and starts the daemon detached", async () => {
     const tenki = fakeTenki();
-    const { d, lines, root } = deps(tenki, { TENKI_CHROME_SNAPSHOT_ID: "snap_1", ANTHROPIC_API_KEY: "sk-a", GITHUB_TOKEN: "ghp_x" });
+    const { d, lines, root } = deps(tenki, { TENKI_CHROME_SNAPSHOT_ID: "snap_1", TENKI_SNAPSHOT_ID: "snap_swarm", ANTHROPIC_API_KEY: "sk-a", GITHUB_TOKEN: "ghp_x" });
     const rec = await up(d, { hours: 2 });
 
     expect(rec).toMatchObject({ sandboxId: "sbx-1", ref: "p3/deploy-netlify", version: "abc1234", snapshotId: "snap_1" });
@@ -130,7 +130,8 @@ describe("tenki orchestrator bootstrap (mocked SDK)", () => {
     expect(env).toContain("export ORCHESTRATOR_HOST='tenki'");
     expect(env).toContain("export TENKI_SANDBOX_ID='sbx-1'");
     expect(env).toContain("export ANTHROPIC_API_KEY='sk-a'");
-    expect(env).not.toContain("TENKI_API_KEY"); // the tenki key never enters the sandbox
+    expect(env).toContain("export TENKI_API_KEY='tk_test'"); // tenki re-tests create sandboxes from inside
+    expect(env).toContain("export TENKI_SNAPSHOT_ID='snap_swarm'");
     expect(tenki.files.get(START_SCRIPT)).toContain("exec npm run orchestrator");
 
     expect(lines.join("\n")).toMatch(/heartbeat OK: host=tenki/);
