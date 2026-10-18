@@ -19,7 +19,7 @@ export const SCENES: SceneMeta[] = [
     notes: (d) => {
       const worst = d.impacts.toSorted((a, b) => a.deltaPts - b.deltaPts)[0];
       return [
-        "PMs ship checkout changes blind: nobody watches every segment after a release.",
+        "POs ship checkout changes blind: nobody watches every segment after a release.",
         worst
           ? `On this store, “${worst.release.name}” took ${segmentShort(worst.segmentId)} completion from ${pct1(worst.before)} to ${pct1(worst.after)}, and nobody noticed for weeks.`
           : "Friction shows up as drop-off in the analytics, weeks after the release that caused it.",
