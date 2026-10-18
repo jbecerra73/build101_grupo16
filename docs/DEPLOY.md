@@ -45,7 +45,8 @@ What each part does:
 | `ORCHESTRATOR` | `netlify.toml` (build) → baked | set | `queue` (Analyze only enqueues). Locally: `inline` (default) or `queue` |
 | `DASHBOARD_REQUIRE_PASSWORD` | `netlify.toml` (build) → baked | set | `1`: fail closed |
 | `NODE_VERSION` | `netlify.toml` (build) | set | `22` |
-| `TENKI_API_KEY` | root `.env.local` (laptop only) | **yes** for tenki | the **tenki3** key, `tk_...`. The SDK also reads `TENKI_AUTH_TOKEN`. Never sent into the sandbox |
+| `TENKI_API_KEY` | root `.env.local` → tenki env | **yes** for tenki | the **tenki3** key, `tk_...`. The SDK also reads `TENKI_AUTH_TOKEN`. Forwarded into the sandbox as `TENKI_API_KEY`, because tenki re-tests create the swarm's sandboxes from there |
+| `TENKI_SNAPSHOT_ID` | root `.env.local` → tenki env | **yes** for tenki re-tests | `snap_...` from `npm run swarm:snapshot`. The swarm's sandboxes boot from it |
 | `NETLIFY_SITE_ID` | root `.env.local` → tenki env | **yes** for tenki | `3f4a82b8-25c2-4073-9ab0-acfbac435e44` (this site's project ID) |
 | `NETLIFY_AUTH_TOKEN` | root `.env.local` → tenki env | **yes** for tenki | `nfp_...`, a Netlify personal access token (Blobs API) |
 | `TENKI_CHROME_SNAPSHOT_ID` | root `.env.local` | optional | `snap_...`. Boot from P2's snapshot instead of the base image |
