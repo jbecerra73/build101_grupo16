@@ -152,6 +152,23 @@ describe("BlobsStore against a local Netlify Blobs server", () => {
       delete g.netlifyBlobsContext;
     }
   });
+
+  it("rebuilds the client when the function's Blobs context changes (per-invocation token)", async () => {
+    const edge = `http://localhost:${port}`;
+    const ctx = (token: string) => Buffer.from(JSON.stringify({ siteID: "test-site", token, edgeURL: edge, uncachedEdgeURL: edge })).toString("base64");
+    const g = globalThis as { netlifyBlobsContext?: string };
+    try {
+      // One store across invocations, as in a warm function instance.
+      const s = new BlobsStore({ name: "ctx-rotate" });
+      g.netlifyBlobsContext = ctx("expired-token");
+      await expect(s.getJson("settings.json")).rejects.toThrow();
+      g.netlifyBlobsContext = ctx("test-token");
+      await s.putJson("settings.json", { ok: true });
+      expect(await s.getJson("settings.json")).toEqual({ ok: true });
+    } finally {
+      delete g.netlifyBlobsContext;
+    }
+  });
 });
 
 describe("FsStore layout", () => {

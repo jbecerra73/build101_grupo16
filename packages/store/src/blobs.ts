@@ -48,6 +48,8 @@ const LIST_TTL_MS = 5000;
 export class BlobsStore implements RunStore {
   readonly kind = "blobs" as const;
   #client?: BlobsClient;
+  /** The function Blobs context #client was built from (see `client`). */
+  #clientCtx?: string;
   #opts: BlobsStoreOptions;
   #cache = new Map<string, Cached>();
   #listed = new Map<string, { etag: string; at: number }>();
@@ -58,14 +60,18 @@ export class BlobsStore implements RunStore {
     this.#client = opts.client;
   }
 
-  /** Created lazily: getStore throws when no Netlify context or credentials exist. */
+  /** Created lazily: getStore throws when no Netlify context or credentials exist.
+   * The function's Blobs context carries a short-lived token that changes per
+   * invocation, while this store outlives them in a warm instance: the client
+   * is rebuilt whenever that context changes, or reads fail with "Token expired". */
   get client(): BlobsClient {
-    if (!this.#client) {
+    const ctx = this.#opts.client || this.#opts.edgeURL ? undefined : blobsContext();
+    if (!this.#client || ctx !== this.#clientCtx) {
       const { name = BLOBS_STORE_NAME, apiURL, edgeURL, uncachedEdgeURL } = this.#opts;
       // Inside a Netlify function the runtime's own Blobs context wins over
       // NETLIFY_SITE_ID + NETLIFY_AUTH_TOKEN: with them, every read would go
       // through the rate-limited REST API with a personal token.
-      const native = !edgeURL && !!blobsContext();
+      const native = !!ctx;
       const siteID = native ? undefined : this.#opts.siteID;
       const token = native ? undefined : this.#opts.token;
       // Strong reads go to the uncached edge, so they need its URL; through the
@@ -76,6 +82,7 @@ export class BlobsStore implements RunStore {
           ? getStore({ name, siteID, token, apiURL, edgeURL, uncachedEdgeURL, consistency })
           : getStore({ name, consistency });
       this.#client = store as unknown as BlobsClient;
+      this.#clientCtx = ctx;
     }
     return this.#client;
   }
