@@ -164,6 +164,14 @@ describe("runFixLoop", () => {
     expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["comment", "comment", "edit", "close"]);
   });
 
+  it("a re-test without agents fails the attempt instead of judging the fix", async () => {
+    const { runsDir, opts, ghCalls } = await setup([metrics("r1", 0, 0, 0)].map((m) => ({ ...m, personas: m.personas.map((p) => ({ ...p, n: 0, users: 0 })) })));
+    await expect(runFixLoop({ ...opts, maxAttempts: 2 })).rejects.toThrow("has no agents");
+    const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
+    expect(saved.attempts.map((a) => a.status)).toEqual(["failed"]);
+    expect(ghCalls.filter((c) => c[0] === "pr")).toEqual([]);
+  });
+
   it("records a failed attempt in fix.json", async () => {
     const { runsDir, opts } = await setup([]);
     await expect(
