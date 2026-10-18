@@ -134,7 +134,8 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
   const retestId = status.retestRunId ?? latestFix?.retestRunId;
   const retestLive = RETEST_PHASES.includes(phase) && !!retestId;
   const retest = usePoll(() => getRun(retestId!), POLL_MS, retestLive).data;
-  const fixedIds = new Map((fix?.attempts ?? []).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
+  // Only attempt 1 targets this run's findings; retries target their re-test's (same ids, other findings).
+  const fixedIds = new Map((fix?.attempts ?? []).filter((a) => a.attempt === 1).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
   const showFix = !!fix || FIX_PHASES.includes(phase);
   const failedAt: RunPhase | undefined = phase === "failed" ? (latestFix ? (latestFix.retestRunId ? "retesting" : "fixing") : "analyzing") : undefined;
   const release = run.releases?.find((r) => r.sha === config.posthog.buildSha);

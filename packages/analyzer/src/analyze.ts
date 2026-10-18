@@ -101,7 +101,8 @@ export async function analyzeRun(runDir: string, opts: AnalyzeOptions = {}): Pro
   const metrics = computeMetrics(config, flow, sessions, { history });
   const signals = frictionSignals(flow, sessions, { kind, history });
   const t1 = Date.now();
-  const res = await generateFindings({ runId: config.runId, kind, flow, metrics, sessions, signals, history }, opts);
+  const fix = kind === "retest" ? config.fix : undefined;
+  const res = await generateFindings({ runId: config.runId, kind, flow, metrics, sessions, signals, history, ...(fix && { fix }) }, opts);
   const findingsMs = Date.now() - t1;
 
   if (write) {

@@ -12,9 +12,9 @@ import {
   type Metrics,
   type RunConfig,
 } from "../shared";
-import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
+import { runCodingAgent, STOREFRONT_REPO, type CodingAgentInput } from "./coding-agent";
 import { topFindings } from "./fix-prompt";
-import { finalizePr, gh, uploadEvidence, type Gh } from "./pr";
+import { finalizePr, gh, renderRetryComment, uploadEvidence, type Gh, type PrContext } from "./pr";
 import { waitForBuildSha } from "./preview";
 import { tenkiShell, type Shell } from "./shell";
 import { compareRuns } from "./verdict";
@@ -61,7 +61,7 @@ export type FixLoopOptions = {
   shell?: (attempt: number) => Promise<Shell>;
   /** Findings handed to the coding agent per attempt (SPEC: top 1–3). */
   maxFindings?: number;
-  /** 1 normally; 2 retries once with the re-test's findings (stretch). */
+  /** Attempts before giving up: each retry builds on the same PR with the re-test's findings. Default 1. */
   maxAttempts?: number;
   /** Agents per persona on the re-test (SPEC: 10). */
   seedsPerPersona?: number;
@@ -75,7 +75,10 @@ export type FixLoopOptions = {
 };
 
 /** Analysis findings → coding agent → draft PR → preview → re-test → verdict → PR ready or closed.
- * Progress is written to runs/<baseline>/fix.json after every stage for the dashboard. */
+ * Not proven with attempts left: the PR stays open, and the next attempt pushes onto the same branch,
+ * told what the previous change was, how the swarm did and what it struggled with (the re-test's
+ * findings, linked to the targets they show unresolved). Progress is written to
+ * runs/<baseline>/fix.json after every stage for the dashboard. */
 export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const { baselineRunId, maxFindings = 3, maxAttempts = 1, seedsPerPersona = 10, repo = STOREFRONT_REPO, runsDir = RUNS_DIR } = opts;
   const log = opts.log ?? console.log;
@@ -97,15 +100,19 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
 
   const result: FixResult = { baselineRunId, repo, attempts: [] };
   const save = () => writeJson(join(baseDir, "fix.json"), result);
-  let findings = await readJson<Finding[]>(join(baseDir, "findings.json"));
+  let targets = topFindings(await readJson<Finding[]>(join(baseDir, "findings.json")), maxFindings);
+  /** Attempt 1's targets: the real users' problems, which the PR reports on whatever the attempt. */
+  const original = targets;
+  let retry: CodingAgentInput["retry"];
+  /** The last verdict's PR context, to close the PR with if a retry fails. */
+  let lastCtx: PrContext | undefined;
 
   for (let n = 1; n <= maxAttempts; n++) {
-    const targets = topFindings(findings, maxFindings);
     if (targets.length === 0) {
       log("no findings left to fix");
       break;
     }
-    const attempt: FixAttempt = { attempt: n, findingIds: targets.map((f) => f.id), status: "running" };
+    const attempt: FixAttempt = { attempt: n, findingIds: targets.map((f) => f.id), targets, status: "running" };
     result.attempts.push(attempt);
     await save();
 
@@ -113,7 +120,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       const shell = await openShell(n);
       let agent;
       try {
-        agent = await codingAgent(shell, { runId: baselineRunId, attempt: n, flow, findings: targets, repo, log });
+        agent = await codingAgent(shell, { runId: baselineRunId, attempt: n, flow, findings: targets, repo, log, ...(retry && { retry }) });
       } finally {
         await shell.close();
       }
@@ -146,6 +153,11 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         seeds,
         targetUrl: attempt.previewUrl!,
         baselineRunId,
+        fix: {
+          attempt: n,
+          targets: targets.map(({ id, title, step, page, selector, suggestedFix }) => ({ id, title, step, page, ...(selector ? { selector } : {}), suggestedFix })),
+          ...(agent.summary ? { summary: agent.summary } : {}),
+        },
         createdAt: new Date().toISOString(),
       };
       await mkdir(join(runsDir, retestRunId), { recursive: true });
@@ -158,40 +170,62 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       await opts.collect?.(retestConfig);
       const retest = await opts.analyze(retestRunId);
 
-      const targeted = [...new Set(targets.flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
+      // The real users' problems stay the goal; a retry also targets whoever the swarm still saw struggle.
+      const targeted = [...new Set([...original, ...targets].flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
       const verdict = compare(baseline, retest.metrics, targeted);
       attempt.verdict = verdict;
       log(`verdict: ${verdict.improved ? "improved" : "not proven"}\n  ${verdict.reasons.join("\n  ")}`);
 
-      const lastChance = verdict.improved || n === maxAttempts;
-      const screenshotUrls = await uploadEvidence(repo, baseDir, baselineRunId, targets, ghImpl).catch((e) => {
+      const ctx: PrContext = {
+        repo,
+        prNumber: agent.prNumber,
+        baselineRunId,
+        retestRunId,
+        baselineSha: baseline.buildSha,
+        retestSha: agent.commitSha,
+        verdict,
+        findings: original,
+        screenshotUrls: {},
+        reportUrl: opts.reportUrl?.(baselineRunId),
+        attempt: n,
+      };
+      const next = topFindings(retest.findings, maxFindings);
+      if (!verdict.improved && n < maxAttempts) {
+        // No friction the analyzer could name: the same targets again, with the verdict as the feedback.
+        const nextTargets = next.length ? next : targets;
+        await ghImpl(["pr", "comment", String(agent.prNumber), "--repo", repo, "--body", renderRetryComment(ctx, next)]);
+        lastCtx = ctx;
+        attempt.status = "not-proven";
+        await save();
+        const persisting = next.filter((f) => f.persistsFrom).length;
+        log(`retrying on PR #${agent.prNumber} with ${nextTargets.length} finding(s) from the re-test (${persisting} still unresolved from this attempt)`);
+        retry = {
+          attempt: n + 1,
+          original,
+          previousTargets: targets,
+          previousSummary: agent.summary,
+          previousVerdict: verdict,
+          branch: agent.branch,
+          prNumber: agent.prNumber,
+          prUrl: agent.prUrl,
+        };
+        targets = nextTargets;
+        continue;
+      }
+
+      ctx.screenshotUrls = await uploadEvidence(repo, baseDir, baselineRunId, original, ghImpl).catch((e) => {
         log(`could not upload evidence screenshots: ${e.message}`);
         return {};
       });
-      attempt.status = await finalizePr(
-        {
-          repo,
-          prNumber: agent.prNumber,
-          baselineRunId,
-          retestRunId,
-          baselineSha: baseline.buildSha,
-          retestSha: agent.commitSha,
-          verdict,
-          findings: targets,
-          screenshotUrls,
-          reportUrl: opts.reportUrl?.(baselineRunId),
-        },
-        agent.summary,
-        ghImpl,
-      );
+      attempt.status = await finalizePr(ctx, agent.summary, ghImpl);
       await save();
-      if (lastChance) break;
-      log("retrying once with the re-test's findings");
-      findings = retest.findings;
+      break;
     } catch (e) {
       attempt.status = "failed";
       attempt.error = e instanceof Error ? e.message : String(e);
       await save();
+      // A failed retry leaves the PR open: close it on the last verdict we have.
+      if (lastCtx) await finalizePr(lastCtx, retry?.previousSummary, ghImpl).catch((err) => log(`could not close PR #${lastCtx!.prNumber}: ${err.message}`));
       throw e;
     }
   }
