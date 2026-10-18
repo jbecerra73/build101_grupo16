@@ -91,7 +91,7 @@ export const SCENES: SceneMeta[] = [
     id: "vision",
     title: "Visión",
     seconds: 10,
-    notes: () => ["CI para UX: cada PR del storefront se verifica con evidencia de usuarios reales más un persona swarm, antes de que lo vea cualquier cliente.", "Gracias."],
+    notes: () => ["CI para UX: cada actualización del ecommerce se verifica con evidencia de personas reales más usuarios sintéticos, antes de que la vea cualquier cliente.", "Gracias."],
   },
 ];
 

@@ -17,9 +17,9 @@ export function SceneVision({ d }: { d: PitchData }) {
   const agents = d.retest?.agents.length ?? 0;
   const checks: Check[] = [
     { name: "Deploy preview", detail: "storefront construido para este commit", state: d.attempt?.previewUrl ? "pass" : "pending" },
-    { name: "FrictionSwarm / evidencia de usuarios reales", detail: `${d.findings.length} findings de ${compact(sessions)} sesiones de PostHog`, state: d.findings.length ? "pass" : "pending" },
+    { name: "FrictionSwarm / evidencia de personas reales", detail: `${d.findings.length} findings de ${compact(sessions)} sesiones de PostHog`, state: d.findings.length ? "pass" : "pending" },
     {
-      name: "FrictionSwarm / persona swarm",
+      name: "FrictionSwarm / usuarios sintéticos",
       detail: v ? `${agents} agents · ${targeted.map((c) => `${personaEs(c.personaId)} ${signedPts(c.completionDeltaPts)}`).join(", ")}` : "swarm corriendo en el preview",
       state: v ? (v.improved ? "pass" : "fail") : "pending",
     },
@@ -41,7 +41,7 @@ export function SceneVision({ d }: { d: PitchData }) {
         </Reveal>
         <Reveal delay={0.5}>
           <p className="max-w-[900px] text-5xl leading-tight text-muted-foreground">
-            Cada PR del storefront, verificado con <span className="text-foreground">evidencia de usuarios reales</span> más un <span className="text-foreground">persona swarm</span>.
+            Cada actualización del ecommerce, verificada con <span className="text-foreground">evidencia de personas reales</span> más <span className="text-foreground">usuarios sintéticos</span>.
           </p>
         </Reveal>
       </div>
