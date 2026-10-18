@@ -152,6 +152,18 @@ export type Finding = {
     screenshots?: string[];
   };
   suggestedFix: string;
+  /** Retest only: the id of the fix target (RunConfig.fix) the swarm still hits here, i.e. the
+   * fix didn't solve it. Absent for a problem the target list doesn't name (possibly new). */
+  persistsFrom?: string;
+};
+
+/** What a retest's analyzer is told about the fix under test. */
+export type FixUnderTest = {
+  attempt: number;
+  /** The findings the coding agent was asked to fix (ids as in their own run). */
+  targets: Pick<Finding, "id" | "title" | "step" | "page" | "selector" | "suggestedFix">[];
+  /** The coding agent's summary of its change. */
+  summary?: string;
 };
 
 export type FunnelStep = {
@@ -235,6 +247,8 @@ export type RunConfig = {
   flow?: Flow;
   /** Fix runs: the findings to fix, overriding the default top-N. */
   fixFindingIds?: string[];
+  /** For a retest, the fix it checks: the analyzer links what the swarm hit to these targets. */
+  fix?: FixUnderTest;
   createdAt: string;
 };
 
@@ -276,6 +290,9 @@ export const unavailableDiff = (prNumber: number, reason: string) => `${DIFF_UNA
 export type FixAttempt = {
   attempt: number;
   findingIds: string[];
+  /** The findings handed to the coding agent. Retries take them from the previous re-test, so
+   * their ids are that run's, not the analysis's. */
+  targets?: Finding[];
   branch?: string;
   commitSha?: string;
   prNumber?: number;

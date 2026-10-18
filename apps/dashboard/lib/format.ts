@@ -44,13 +44,29 @@ export function relativeTime(iso: string, now = Date.now()): string {
   const d = (now - Date.parse(iso)) / 1000;
   if (!Number.isFinite(d)) return "";
   if (d < 60) return "just now";
-  if (d < 3600) return `${Math.round(d / 60)} min ago`;
-  if (d < 86400) return `${Math.round(d / 3600)} h ago`;
-  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
+  const unit = (n: number, u: string) => `${n} ${u}${n === 1 ? "" : "s"} ago`;
+  if (d < 3600) return unit(Math.round(d / 60), "min");
+  if (d < 86400) return unit(Math.round(d / 3600), "hour");
+  if (d < 30 * 86400) return unit(Math.round(d / 86400), "day");
+  if (d < 365 * 86400) return unit(Math.round(d / (30 * 86400)), "month");
+  return unit(Math.round(d / (365 * 86400)), "year");
 }
+
+/** Retest attempt from a `<baseline>-retestN` id, if it is one. */
+export const retestAttempt = (runId: string) => {
+  const m = /-retest(\d+)$/.exec(runId);
+  return m ? Number(m[1]) : undefined;
+};
+
+/** Last 4 characters of the run id, without the retest suffix: "2026-10-17T21-05-00-ab12" → "ab12". */
+export const runIdShort = (runId: string) => runId.replace(/-retest\d+$/, "").slice(-4);
 
 export const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** "Oct 17, 2026, 09:05 PM" for tooltips. */
+export const formatFullDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("en", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 /** "Sep 19" (UTC, so a YYYY-MM-DD never shifts a day). */
 export const shortDate = (iso: string) => new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "UTC" });

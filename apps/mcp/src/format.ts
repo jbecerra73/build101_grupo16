@@ -135,8 +135,17 @@ export function story(run: RunDetail, swarm?: SwarmTopology): string[] {
 
   // The attempt's milestones, each right after the last entry of the phase that produced it (else at the end).
   const milestones: { after?: RunPhase; line: string }[] = [];
+  // A retry pushes onto attempt 1's branch, so its PR is the same one, updated.
+  const retried = (attempt?.attempt ?? 1) > 1;
   if (attempt?.prNumber !== undefined)
-    milestones.push({ after: "fixing", line: isRehearsal(attempt) ? "✓ change committed (rehearsal — no PR opened)" : `✓ PR #${attempt.prNumber} opened (draft)` });
+    milestones.push({
+      after: "fixing",
+      line: isRehearsal(attempt)
+        ? `✓ change committed${retried ? ` (attempt ${attempt.attempt})` : ""} (rehearsal — no PR opened)`
+        : retried
+          ? `✓ PR #${attempt.prNumber} updated (attempt ${attempt.attempt}, same PR)`
+          : `✓ PR #${attempt.prNumber} opened (draft)`,
+    });
   if (attempt?.previewUrl) milestones.push({ after: "waiting-preview", line: `✓ preview live (${sha7(attempt.commitSha)})` });
   if (attempt?.status === "failed") milestones.push({ line: `✗ fix failed${attempt.error ? `: ${attempt.error}` : ""}` });
   const anchorOf = (phase?: RunPhase) => (phase ? entries.findLastIndex((h) => h.phase === phase) : -1);
@@ -212,12 +221,24 @@ export function decisionPackage(run: RunDetail, diff: string | undefined, links:
   else out.push("None.");
 
   out.push("", "### 4. Findings addressed");
-  for (const id of a.findingIds) {
+  // Retries build on the same PR: attempt 1's findings (the analysis's) are what it fixes; a retry's
+  // targets come from the previous re-test, whose ids are that run's, not the analysis's.
+  const first = run.fix?.attempts[0] ?? a;
+  for (const id of first.findingIds) {
     const f = run.findings?.find((x) => x.id === id);
     out.push(f ? findingLine(f, run.replayBase) : `- **${id}**`);
   }
+  if (a.attempt > 1 && a.targets?.length) {
+    out.push("", `Attempt ${a.attempt} also targeted what the swarm hit on the previous re-test:`);
+    for (const t of a.targets) out.push(`- [${t.severity}] at ${t.step}: ${t.title}`);
+  }
 
-  out.push("", "### 5. The change", a.summary ? `Coding agent: ${a.summary}` : "No summary from the coding agent.");
+  out.push(
+    "",
+    "### 5. The change",
+    a.summary ? `Coding agent${a.attempt > 1 ? ` (attempt ${a.attempt})` : ""}: ${a.summary}` : "No summary from the coding agent.",
+    ...(a.attempt > 1 && !rehearsal ? [`The diff is the whole PR: attempts 1–${a.attempt} pushed onto the same branch.`] : []),
+  );
   if (diff === undefined) out.push("", "Diff not available.");
   else if (diff.startsWith(DIFF_UNAVAILABLE)) out.push("", diff.split("\n")[0].slice(2).replace(/\.?$/, "."));
   else {

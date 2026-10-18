@@ -6,6 +6,7 @@ import { ArrowRight, CircleX, Cpu, Database, LayoutGrid, Map as MapIcon, Play, P
 import type { RunPhase } from "@frictionswarm/shared";
 import { FixStatusBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
+import { RunId, TimeAgo } from "@/components/run-meta";
 import { SwarmMap } from "@/components/swarm/swarm-map";
 import { SwarmMonitor } from "@/components/swarm/swarm-monitor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -19,7 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getRun } from "@/lib/client/api";
 import { deriveAgents, deriveMetrics, giveUpGroups } from "@/lib/derive";
-import { compact, FIX_PHASES, formatDateTime, isTerminal, personaShort, RETEST_PHASES, shortSha, windowLabel } from "@/lib/format";
+import { compact, FIX_PHASES, isTerminal, personaShort, RETEST_PHASES, shortSha, windowLabel } from "@/lib/format";
 import { usePoll } from "@/lib/hooks/use-poll";
 import { useReplay } from "@/lib/hooks/use-replay";
 import type { AgentState, RunDetail } from "@/lib/types";
@@ -36,7 +37,7 @@ function Section({ id, title, aside, children }: { id: string; title: string; as
   return (
     <section id={id} className="flex scroll-mt-20 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-xl font-bold tracking-tight">{title}</h2>
         {aside}
       </div>
       {children}
@@ -77,7 +78,7 @@ function SwarmTabs({ run, agents, live, derived }: { run: RunDetail; agents: Age
   const metrics = run.metrics ?? run.provisionalMetrics;
   return (
     <Tabs defaultValue="grid" className="gap-4">
-      <TabsList className="h-10">
+      <TabsList variant="line" className="h-10">
         <TabsTrigger value="grid" className="px-3 text-base">
           <LayoutGrid data-icon="inline-start" />
           Agent screens
@@ -134,7 +135,8 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
   const retestId = status.retestRunId ?? latestFix?.retestRunId;
   const retestLive = RETEST_PHASES.includes(phase) && !!retestId;
   const retest = usePoll(() => getRun(retestId!), POLL_MS, retestLive).data;
-  const fixedIds = new Map((fix?.attempts ?? []).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
+  // Only attempt 1 targets this run's findings; retries target their re-test's (same ids, other findings).
+  const fixedIds = new Map((fix?.attempts ?? []).filter((a) => a.attempt === 1).flatMap((a) => a.findingIds.map((id) => [id, `attempt ${a.attempt}`] as const)));
   const showFix = !!fix || FIX_PHASES.includes(phase);
   const failedAt: RunPhase | undefined = phase === "failed" ? (latestFix ? (latestFix.retestRunId ? "retesting" : "fixing") : "analyzing") : undefined;
   const release = run.releases?.find((r) => r.sha === config.posthog.buildSha);
@@ -291,15 +293,16 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <nav className="text-sm text-muted-foreground">
-              <Link href="/" className="hover:underline">
+            <nav className="flex items-center gap-1.5 text-sm text-muted-foreground" aria-label="Breadcrumb">
+              <Link href="/" className="hover:text-foreground hover:underline">
                 Runs
-              </Link>{" "}
-              / <span className="font-mono">{config.runId}</span>
+              </Link>
+              <span aria-hidden>/</span>
+              <RunId runId={config.runId} className="text-foreground" />
             </nav>
-            <h1 className="text-3xl font-semibold tracking-tight">{flow?.goal ?? config.flowId}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{flow?.goal ?? config.flowId}</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <Badge variant="outline">analysis</Badge>
+              <Badge variant="outline">Analysis</Badge>
               <span>
                 Window <span className="text-foreground">{windowLabel(config.window)}</span>
               </span>
@@ -317,7 +320,7 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
                   N=<span className="text-foreground">{compact(sessions)}</span> sessions · {compact(users ?? 0)} users
                 </span>
               )}
-              <span>{formatDateTime(config.createdAt)}</span>
+              <TimeAgo iso={config.createdAt} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -375,7 +378,7 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
           </Alert>
         )}
 
-        <nav className="flex gap-1 text-sm" aria-label="Sections">
+        <nav className="flex gap-1 border-b pb-1 text-sm" aria-label="Sections">
           {navItems.map(([id, label]) => (
             <Button key={id} variant="ghost" size="sm" asChild>
               <a href={`#${id}`}>{label}</a>
@@ -414,23 +417,21 @@ function RetestView({ initial, replay }: { initial: RunDetail; replay: boolean }
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <nav className="text-sm text-muted-foreground">
-              <Link href="/" className="hover:underline">
+            <nav className="flex items-center gap-1.5 text-sm text-muted-foreground" aria-label="Breadcrumb">
+              <Link href="/" className="hover:text-foreground hover:underline">
                 Runs
-              </Link>{" "}
+              </Link>
+              <span aria-hidden>/</span>
               {config.baselineRunId && (
                 <>
-                  /{" "}
-                  <Link href={`/runs/${config.baselineRunId}`} className="font-mono hover:underline">
-                    {config.baselineRunId}
-                  </Link>{" "}
+                  <RunId runId={config.baselineRunId} href={`/runs/${config.baselineRunId}`} />
+                  <span aria-hidden>/</span>
                 </>
               )}
-              / <span className="font-mono">{config.runId}</span>
+              <RunId runId={config.runId} retest className="text-foreground" />
             </nav>
-            <h1 className="text-3xl font-semibold tracking-tight">Re-test swarm on the preview</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Re-test swarm on the preview</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <Badge variant="secondary">retest</Badge>
               <span>
                 Build <code className="font-mono text-foreground">{shortSha(config.posthog.buildSha)}</code>
               </span>
@@ -448,7 +449,7 @@ function RetestView({ initial, replay }: { initial: RunDetail; replay: boolean }
                   </span>
                 ))}
               </span>
-              <span>{formatDateTime(config.createdAt)}</span>
+              <TimeAgo iso={config.createdAt} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">

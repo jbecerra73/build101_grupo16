@@ -35,7 +35,7 @@ export type FixLoopOptions = {
    * re-ranking, on attempt 1 only (a retry fixes the re-test's findings). Unknown
    * ids throw `Unknown finding "<id>"`. Default: the loop picks. */
   findingIds?: string[];
-  /** Fix attempts per loop: 2 retries once with the re-test's findings (#16). */
+  /** Fix attempts per loop: each retry builds on the same PR with the re-test's findings (#16). */
   maxAttempts?: number;
 };
 
@@ -103,9 +103,9 @@ async function loadP1(modulePath: string): Promise<P1Module> {
 /** P1's real fix loop (coding agent in a tenki sandbox, draft PR, preview
  * polling, PR finalization), imported at call time from FIX_LOOP_MODULE or
  * <repo>/orchestrator/fix-loop.ts. When it is missing the run fails with
- * "P1 fix loop not available". maxAttempts defaults to 2: one retry when the
- * first fix isn't proven (#16). */
-export function realFixLoop(modulePath = defaultModule(), { maxAttempts = 2 }: { maxAttempts?: number } = {}): FixLoop {
+ * "P1 fix loop not available". maxAttempts defaults to 3: up to two retries on
+ * the same PR while the fix isn't proven (#16). */
+export function realFixLoop(modulePath = defaultModule(), { maxAttempts = 3 }: { maxAttempts?: number } = {}): FixLoop {
   return async (o) => {
     const mod = await loadP1(modulePath);
     if (typeof mod.runFixLoop !== "function") throw new Error(`P1 fix loop not available: ${modulePath} does not export runFixLoop`);

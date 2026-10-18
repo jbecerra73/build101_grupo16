@@ -132,6 +132,38 @@ describe("startPipeline", () => {
     expect(swarms[0].posthog.buildSha).toBe(fix.attempts[0].commitSha);
   });
 
+  it("a retry goes back to fixing, then through the retest phases again", async () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const retryingLoop: FixLoop = async (o) => {
+      const result: FixResult = { baselineRunId: o.baselineRunId, repo: "r", attempts: [] };
+      const save = () => writeFile(join(o.runsDir, o.baselineRunId, "fix.json"), JSON.stringify(result));
+      const analysis = await json<RunConfig>(join(o.runsDir, o.baselineRunId, "config.json"));
+      for (const attempt of [1, 2]) {
+        result.attempts.push({ attempt, findingIds: ["F1"], status: "running", prNumber: 7, commitSha: `sha${attempt}` });
+        await save();
+        await sleep(30);
+        result.attempts.at(-1)!.status = "draft";
+        await save();
+        await sleep(30);
+        const c = retestConfig(analysis, { attempt, commitSha: `sha${attempt}`, previewUrl: "https://p", seeds: o.retestSeeds });
+        await mkdir(join(o.runsDir, c.runId), { recursive: true });
+        await writeFile(join(o.runsDir, c.runId, "config.json"), JSON.stringify(c));
+        await o.runSwarm(c);
+        await o.collect(c);
+        await o.analyze(c.runId);
+        result.attempts.at(-1)!.status = attempt === 2 ? "ready" : "not-proven";
+        await save();
+      }
+      return result;
+    };
+    const { phases, opts } = await setup({ fixLoop: retryingLoop });
+    const final = await (await startPipeline(req, opts)).done;
+    // The decision gate: the last attempt parks the run for the Product Owner (main ended at done).
+    expect(final.phase).toBe("awaiting-decision");
+    const retest = ["waiting-preview", "retesting", "collecting", "comparing"];
+    expect(phases).toEqual(["analyzing", "fixing", ...retest, "fixing", ...retest, "awaiting-decision"]);
+  });
+
   it("without autoFix stops after the report", async () => {
     const { phases, opts } = await setup();
     const final = await (await startPipeline({ ...req, autoFix: false }, opts)).done;
@@ -378,12 +410,12 @@ describe("realFixLoop", () => {
     await expect(realApplyDecision("/nonexistent/orchestrator/fix-loop.ts")({} as never)).rejects.toThrow(/P1 fix loop not available/);
   });
 
-  it("passes maxAttempts to P1's fix loop (2 by default: one retry, #16)", async () => {
+  it("passes maxAttempts to P1's fix loop (3 by default: two retries, #16)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "fs-p1-"));
     const mod = join(dir, "fix-loop.mjs");
     await writeFile(mod, "export const runFixLoop = async (o) => ({ baselineRunId: o.baselineRunId, repo: String(o.maxAttempts), attempts: [] });");
     const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
-    expect((await realFixLoop(mod)(opts)).repo).toBe("2");
+    expect((await realFixLoop(mod)(opts)).repo).toBe("3");
     expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
   });
 });

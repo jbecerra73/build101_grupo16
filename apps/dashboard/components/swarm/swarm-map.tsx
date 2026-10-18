@@ -286,6 +286,7 @@ export function SwarmMap({
   size = "md",
   live,
   caption,
+  minimal,
 }: {
   agents: AgentState[];
   metrics?: Metrics;
@@ -294,6 +295,8 @@ export function SwarmMap({
   /** Shows the live pulse in the stats row. */
   live?: boolean;
   caption?: React.ReactNode;
+  /** Headline counters only (the pitch). */
+  minimal?: boolean;
 }) {
   const n = agents.length;
   const dims = dimsFor(size, n);
@@ -329,7 +332,7 @@ export function SwarmMap({
 
   return (
     <div className="flex flex-col gap-5">
-      <SwarmStatsRow agents={agents} live={live} size={size} />
+      <SwarmStatsRow agents={agents} live={live} size={size} minimal={minimal} />
       {caption}
       <LayoutGroup>
         <div className="-mx-1 overflow-x-auto px-1 pt-10 pb-1" role="region" aria-label="Swarm map: where each agent is in the funnel">

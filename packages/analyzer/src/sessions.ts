@@ -1,7 +1,7 @@
 // One session = one funnel attempt (real user) or one agent (swarm). Everything
 // downstream (metrics, history, signals) works on SessionSummary, a compact,
 // pure digest of a session's PostHog events.
-import { attemptsFlow, completionProblems, matchesRoute, resolveStep, segmentOf, type Flow, type PostHogEvent, type SegmentId } from "@frictionswarm/shared";
+import { attemptsFlow, completionProblems, matchesRoute, resolveStep, segmentOf, stepEntries, type Flow, type PostHogEvent, type SegmentId } from "@frictionswarm/shared";
 import { describeElement } from "./elements";
 
 export type MarkKind = "rage_click" | "no_size" | "promo_wipe" | "failed_submit" | "drop_off" | "give_up";
@@ -177,6 +177,22 @@ export function summarizeSession(flow: Flow, events: PostHogEvent[]): SessionSum
   let deliveryFee: number | undefined;
   let openView: { step: string; t: number } | undefined;
 
+  // $pageviews, plus query-only step changes posthog-js sends no $pageview for (see stepEntries).
+  const entries = new Map(stepEntries(flow, events).map((x) => [x.event, x.step]));
+  const enter = (s: string, t: number, url: string) => {
+    pageviews++;
+    if (openView) dwell.push({ step: openView.step, ms: t - openView.t, last: false });
+    openView = { step: s, t };
+    if (current && s !== current && lastClick) transitions.push({ from: current, to: s, chain: lastClick });
+    if (s !== steps.at(-1)) steps.push(s);
+    current = s;
+    lastClick = undefined;
+    if (isSuccessUrl(flow, url) && !success) {
+      success = true;
+      timeToCompleteMs = t - start;
+    }
+  };
+
   const mark = (m: Omit<Mark, "count">, n = 1) => {
     const prev = marks.get(m.key);
     if (prev) prev.count += n;
@@ -190,23 +206,11 @@ export function summarizeSession(flow: Flow, events: PostHogEvent[]): SessionSum
     if (url && !stepOf(flow, url) && e.event !== "swarm_give_up" && e.event !== "swarm_think_aloud") continue;
     const step = (url && stepOf(flow, url)) || current || "Unknown";
     const props = e.properties as Record<string, unknown>;
+    const entered = entries.get(e);
+    if (entered && url) enter(entered, t, url);
     switch (e.event) {
-      case "$pageview": {
-        const s = url && stepOf(flow, url);
-        if (!s) break;
-        pageviews++;
-        if (openView) dwell.push({ step: openView.step, ms: t - openView.t, last: false });
-        openView = { step: s, t };
-        if (current && s !== current && lastClick) transitions.push({ from: current, to: s, chain: lastClick });
-        if (s !== steps.at(-1)) steps.push(s);
-        current = s;
-        lastClick = undefined;
-        if (url && isSuccessUrl(flow, url) && !success) {
-          success = true;
-          timeToCompleteMs = t - start;
-        }
+      case "$pageview":
         break;
-      }
       case "$autocapture":
         actions++;
         if (typeof props.$elements_chain === "string") lastClick = props.$elements_chain;

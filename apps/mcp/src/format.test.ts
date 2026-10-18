@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buyJeans, buyTshirt, unavailableDiff, type FixAttempt, type PersonaComparison, type RunPhase, type SegmentMetrics } from "@frictionswarm/shared";
+import { buyJeans, buyTshirt, unavailableDiff, type Finding, type FixAttempt, type PersonaComparison, type RunPhase, type SegmentMetrics } from "@frictionswarm/shared";
 import type { RunDetail } from "../../dashboard/lib/types";
 import { analysisReport, decisionPackage, flowCard, story, type Links } from "./format";
 
@@ -143,6 +143,16 @@ describe("story", () => {
     expect(awaiting).toBeGreaterThan(preview);
   });
 
+  it("a retry updates the same PR rather than opening one", () => {
+    const r = run("awaiting-decision", {
+      status: { runId: "run-1", phase: "awaiting-decision", updatedAt: "x", history },
+      fix: { baselineRunId: "run-1", repo: "r", attempts: [attempt({ status: "not-proven" }), attempt({ attempt: 2 })] },
+    });
+    const text = story(r).join("\n");
+    expect(text).toContain("PR #12 updated (attempt 2, same PR)");
+    expect(text).not.toContain("opened (draft)");
+  });
+
   it("collapses consecutive duplicate history entries", () => {
     const dup = [history[0], { ...history[0], at: "2026-10-17T21:00:05.000Z" }];
     const r = run("analyzing", { status: { runId: "run-1", phase: "analyzing", updatedAt: "x", history: dup } });
@@ -214,6 +224,28 @@ describe("decisionPackage", () => {
     const body = pkg.split("````diff\n")[1].split("\n````")[0];
     expect(body.split("\n").length).toBeLessThanOrEqual(300);
     expect(pkg).toContain("… 100 more lines; files: a.ts, b.ts");
+  });
+
+  it("a retry on the same PR: attempt 1's findings, the retry's targets (re-test ids), the whole-PR diff", () => {
+    // The retry's target reuses id F1 from its re-test run: it must not be looked up in the analysis.
+    const target = { id: "F1", severity: "high", step: "Product", title: "Sizes hidden behind hover" } as Finding;
+    const retried = run("awaiting-decision", {
+      fix: {
+        baselineRunId: "run-1",
+        repo: "r",
+        attempts: [
+          attempt({ status: "not-proven" }),
+          attempt({ attempt: 2, findingIds: ["F1"], targets: [target], commitSha: "def5678aa", retestRunId: "run-1-retest2" }),
+        ],
+      },
+    });
+    const pkg = decisionPackage(retried, "diff --git a/x.tsx b/x.tsx\n+ok", links);
+    expect(pkg).toContain("fix attempt 2");
+    expect(pkg).toContain("Mobile shoppers can't pick a size");
+    expect(pkg).toContain("Attempt 2 also targeted what the swarm hit on the previous re-test:");
+    expect(pkg).toContain("- [high] at Product: Sizes hidden behind hover");
+    expect(pkg).toContain("attempts 1–2 pushed onto the same branch");
+    expect(pkg).toContain("- PR: https://github.com/FrissA/demo-ecommerce/pull/12");
   });
 
   it("says when the fix is a rehearsal", () => {

@@ -31,6 +31,8 @@ export type PrContext = {
   screenshotUrls: Record<string, string>;
   /** Where the full report can be opened; omitted when there is none. */
   reportUrl?: string;
+  /** Which fix attempt this re-test checked (default 1). */
+  attempt?: number;
 };
 
 const pct = (m: SegmentMetrics | PersonaMetrics) => `${Math.round(m.completionRate * 100)}%`;
@@ -71,8 +73,10 @@ function renderFinding(f: Finding, urls: Record<string, string>): string {
     .join("\n\n");
 }
 
+const attemptNote = (ctx: PrContext) => ((ctx.attempt ?? 1) > 1 ? ` (attempt ${ctx.attempt})` : "");
+
 export function renderReadyBody(ctx: PrContext, agentSummary = ""): string {
-  return `## ✅ FrictionSwarm: improvement proven
+  return `## ✅ FrictionSwarm: improvement proven${attemptNote(ctx)}
 
 ${ctx.verdict.reasons.map((r) => `- ${r}`).join("\n")}
 
@@ -87,7 +91,7 @@ ${agentSummary ? `\n## What changed\n\n${agentSummary}\n` : ""}`;
 }
 
 export function renderNotProvenComment(ctx: PrContext): string {
-  return `## ❌ FrictionSwarm: fix attempted, not proven
+  return `## ❌ FrictionSwarm: fix attempted, not proven${attemptNote(ctx)}
 
 The re-test did not meet the bar (a targeted persona ≥20 pts above its segment's real users, and no persona below its segment), so this PR is labelled \`${NOT_PROVEN_LABEL}\` and left open for the Product Owner to accept or reject.
 
@@ -95,6 +99,21 @@ ${ctx.verdict.reasons.map((r) => `- ${r}`).join("\n")}
 
 ${renderComparisonTable(ctx.verdict)}
 
+${runsLine(ctx)}${reportLine(ctx)}`;
+}
+
+/** Not proven yet, with attempts left: the PR stays open as a draft and the next attempt builds on
+ * this branch with what the swarm hit (\`retestFindings\`). */
+export function renderRetryComment(ctx: PrContext, retestFindings: Finding[]): string {
+  const n = ctx.attempt ?? 1;
+  return `## 🔁 FrictionSwarm: attempt ${n} not proven yet, retrying
+
+The re-test did not meet the bar (a targeted persona ≥20 pts above its segment's real users, and no persona below its segment). Attempt ${n + 1} builds on this branch with what the swarm struggled with on this preview.
+
+${ctx.verdict.reasons.map((r) => `- ${r}`).join("\n")}
+
+${renderComparisonTable(ctx.verdict)}
+${retestFindings.length ? `\n### What the swarm hit on \`${short(ctx.retestSha)}\`\n\n${retestFindings.map((f) => `- **${f.title}** (${f.severity}; step ${f.step})${f.persistsFrom ? " · still unresolved" : ""}${f.evidence.quotes[0] ? `: "${f.evidence.quotes[0]}"` : ""}`).join("\n")}\n` : ""}
 ${runsLine(ctx)}${reportLine(ctx)}`;
 }
 
@@ -167,14 +186,6 @@ export async function mergePr(repo: string, prNumber: number, ghImpl: Gh = gh): 
 export async function closePr(repo: string, prNumber: number, reason?: string, ghImpl: Gh = gh): Promise<void> {
   const pr = String(prNumber);
   if (reason) await ghImpl(["pr", "comment", pr, "--repo", repo, "--body", `Rejected by the Product Owner: ${reason}`]);
-  await ghImpl(["pr", "close", pr, "--repo", repo]);
-}
-
-/** A not-proven attempt the fix loop retries: not the Product Owner's decision target (the
- * retry's PR is), so it is closed with a comment pointing at the next attempt. */
-export async function closeSupersededPr(repo: string, prNumber: number, nextAttempt: number, ghImpl: Gh = gh): Promise<void> {
-  const pr = String(prNumber);
-  await ghImpl(["pr", "comment", pr, "--repo", repo, "--body", `Not proven; FrictionSwarm is retrying (attempt ${nextAttempt}) with a new PR. Closing this one.`]);
   await ghImpl(["pr", "close", pr, "--repo", repo]);
 }
 

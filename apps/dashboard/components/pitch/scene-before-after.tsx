@@ -146,15 +146,11 @@ export function SceneBeforeAfter({ d, index }: { d: PitchData; index: number }) 
         ))}
       </ul>
       <div className="mt-auto flex items-center gap-10 pt-2 pr-4">
-        <Reveal delay={stampAt - 0.6} className="flex flex-1 items-start gap-4 rounded-2xl border p-5 text-lg">
-          <Info className="mt-1 size-6 shrink-0 text-muted-foreground" aria-hidden />
+        <Reveal delay={stampAt - 0.6} className="flex flex-1 items-center gap-4 rounded-2xl border p-5 text-2xl">
+          <Info className="size-7 shrink-0 text-muted-foreground" aria-hidden />
           <p className="leading-snug">
             <span className="font-semibold">Different populations.</span>{" "}
-            <span className="text-muted-foreground">
-              Before is the segment&apos;s real users on production; after is the persona swarm on the preview, with that segment&apos;s limits
-              enforced. A directional pre-merge check, not an A/B test: N on both sides, no significance claimed. Proven means a targeted persona
-              gains ≥ 20 pts and no persona regresses, control included.
-            </span>
+            <span className="text-muted-foreground">A directional pre-merge check, not an A/B test.</span>
           </p>
         </Reveal>
         <Stamp improved={v.improved} rehearsal={isRehearsal(a)} delay={stampAt} />

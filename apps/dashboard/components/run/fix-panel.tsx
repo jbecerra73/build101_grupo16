@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeftRight, ArrowRight, CircleCheck, CircleSlash, CircleX, ExternalLink, Bot, Info, Target, TriangleAlert } from "lucide-react";
 import { PERSONAS, type Finding, type PersonaComparison } from "@frictionswarm/shared";
 import { FixStatusBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
+import { RunId } from "@/components/run-meta";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -230,7 +230,8 @@ function DecisionNote({ d }: { d: NonNullable<FixAttemptView["decision"]> }) {
 }
 
 function AttemptCard({ a, runId, deciding, findings, total }: { a: FixAttemptView; runId: string; deciding: boolean; findings: Finding[]; total: number }) {
-  const fixed = a.findingIds.map((id) => findings.find((f) => f.id === id) ?? ({ id, title: id } as Pick<Finding, "id" | "title">));
+  // Retries target the previous re-test's findings (a.targets), whose ids aren't the analysis's.
+  const fixed = a.targets ?? a.findingIds.map((id) => findings.find((f) => f.id === id) ?? ({ id, title: id } as Pick<Finding, "id" | "title">));
   const v = a.verdict;
   return (
     <Card>
@@ -252,9 +253,9 @@ function AttemptCard({ a, runId, deciding, findings, total }: { a: FixAttemptVie
             </span>
           )}
           {a.retestRunId && (
-            <Link className="underline underline-offset-4" href={`/runs/${a.retestRunId}`}>
-              Re-test run {a.retestRunId}
-            </Link>
+            <span className="inline-flex items-center gap-1.5">
+              Re-test run <RunId runId={a.retestRunId} href={`/runs/${a.retestRunId}`} retest className="text-foreground" />
+            </span>
           )}
         </CardDescription>
         <CardAction className="flex flex-wrap gap-2">

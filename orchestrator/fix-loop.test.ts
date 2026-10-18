@@ -32,7 +32,8 @@ async function setup(retests: Metrics[], retestFindings: Finding[] = []) {
     shell: async () => ({ home: "/x", exec: async () => ({ exitCode: 0, stdout: "", stderr: "" }), writeFile: async () => {}, close: async () => {} }),
     codingAgent: async (_shell, input) => {
       agentCalls.push({ attempt: input.attempt, findingIds: input.findings.map((f) => f.id) });
-      return { branch: `b${input.attempt}`, commitSha: `sha${input.attempt}`, prNumber: 40 + input.attempt, prUrl: "u", summary: "s" };
+      const pr = input.retry ?? { branch: `b${input.attempt}`, prNumber: 40 + input.attempt, prUrl: "u" };
+      return { branch: pr.branch, commitSha: `sha${input.attempt}`, prNumber: pr.prNumber, prUrl: pr.prUrl, summary: "s" };
     },
     waitForBuild: async () => {},
     runSwarm: async (c) => void swarmConfigs.push(c),
@@ -131,67 +132,123 @@ describe("runFixLoop", () => {
     expect(logs.some((l) => l.includes("could not save the PR diff") && l.includes("boom"))).toBe(true);
   });
 
-  it("retry (stretch): a second attempt uses the re-test's findings, never a third", async () => {
+  it("retries on the same PR with the re-test's findings, never past maxAttempts", async () => {
     const newFinding: Finding = {
-      id: "R1", severity: "high", segments: ["mobile"], personas: ["kai"], step: "Product", page: "/shop/product/*",
-      title: "Sizes hidden behind hover", suggestedFix: "Show size buttons",
+      id: "F1", severity: "high", segments: ["mobile"], personas: ["kai"], step: "Product", page: "/shop/product/*",
+      title: "Sizes hidden behind hover", suggestedFix: "Show size buttons", persistsFrom: "F2",
       evidence: { sessions: 4, users: 4, exampleSessions: [], quotes: ["where are the sizes"] },
     };
-    const { opts, agentCalls, swarmConfigs } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [newFinding]);
-    const result = await runFixLoop({ ...opts, maxAttempts: 2 });
-    expect(agentCalls.map((c) => c.findingIds)).toEqual([["F1", "F2", "F3"], ["R1"]]);
+    const { runsDir, opts, agentCalls, swarmConfigs, ghCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [newFinding]);
+    const retries: unknown[] = [];
+    const result = await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      codingAgent: async (shell, input) => {
+        retries.push(input.retry);
+        return opts.codingAgent!(shell, input);
+      },
+    });
+    expect(agentCalls.map((c) => c.findingIds)).toEqual([["F1", "F2", "F3"], ["F1"]]);
     expect(result.attempts.map((a) => a.status)).toEqual(["not-proven", "not-proven"]);
+    expect(result.attempts[1].targets?.[0].title).toBe("Sizes hidden behind hover");
     expect(swarmConfigs[0].seeds.kai).not.toEqual(swarmConfigs[1].seeds.kai);
+
+    // The retry continues attempt 1's branch and PR, with its change, verdict and the original findings.
+    expect(retries[0]).toBeUndefined();
+    expect(retries[1]).toMatchObject({
+      attempt: 2, branch: "b1", prNumber: 41, previousSummary: "s",
+      previousTargets: [{ id: "F1" }, { id: "F2" }, { id: "F3" }], original: [{ id: "F1" }, { id: "F2" }, { id: "F3" }],
+      previousVerdict: { improved: false },
+    });
+    // The re-test's analyzer is told which fix it checks.
+    expect(swarmConfigs[0].fix).toMatchObject({ attempt: 1, summary: "s", targets: [{ id: "F1" }, { id: "F2" }, { id: "F3" }] });
+    expect(swarmConfigs[1].fix?.targets.map((t) => t.title)).toEqual(["Sizes hidden behind hover"]);
+    const saved = await readJson<RunConfig>(join(runsDir, "fixture-analysis-retest1", "config.json"));
+    expect(saved.fix?.attempt).toBe(1);
+
+    // Attempt 1: a retry comment, the PR stays open. Attempt 2 (the last): labelled not-proven and
+    // still open for the Product Owner's decision. The diff is re-fetched after each push.
+    const prCalls = ghCalls.filter((c) => c[0] === "pr");
+    expect(prCalls.map((c) => c[1])).toEqual(["diff", "comment", "diff", "comment", "edit"]);
+    const comments = prCalls.filter((c) => c[1] === "comment");
+    expect(comments[0][6]).toContain("attempt 1 not proven yet, retrying");
+    expect(comments[0][6]).toContain("Sizes hidden behind hover");
+    expect(comments[1][6]).toContain("not proven (attempt 2)");
+    expect(prCalls.every((c) => c[2] === "41")).toBe(true);
+    expect(result.attempts.map((a) => a.branch)).toEqual(["b1", "b1"]);
   });
 
-  it("retry: the superseded PR is closed with a comment, the last one stays open for the decision", async () => {
+  it("a retry keeps the targets when the re-test names no friction", async () => {
+    const { opts, agentCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 6, 7, 10)]);
+    const result = await runFixLoop({ ...opts, maxAttempts: 3 });
+    expect(agentCalls.map((c) => c.findingIds)).toEqual([["F1", "F2", "F3"], ["F1", "F2", "F3"]]);
+    expect(result.attempts.map((a) => a.status)).toEqual(["not-proven", "ready"]);
+  });
+
+  // Main closed the PR here; this branch's decision gate never auto-closes, so the PR is labelled
+  // not-proven on the last verdict and left open.
+  it("a failed retry labels the PR not-proven on the last verdict and leaves it open", async () => {
+    const { opts, ghCalls } = await setup([metrics("r1", 0, 0, 1)]);
+    const agent = opts.codingAgent!;
+    await expect(
+      runFixLoop({
+        ...opts,
+        maxAttempts: 2,
+        codingAgent: async (shell, input) => {
+          if (input.retry) throw new Error("build fails after the fix");
+          return agent(shell, input);
+        },
+      }),
+    ).rejects.toThrow("build fails");
+    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["diff", "comment", "comment", "edit"]);
+    expect(ghCalls.some((c) => c[0] === "label" && c[1] === "create")).toBe(true);
+  });
+
+  it("retry: the chosen findings apply to attempt 1 only, and the PR is never closed", async () => {
     const newFinding: Finding = {
       id: "R1", severity: "high", segments: ["mobile"], personas: ["kai"], step: "Product", page: "/shop/product/*",
       title: "Sizes hidden behind hover", suggestedFix: "Show size buttons",
       evidence: { sessions: 4, users: 4, exampleSessions: [], quotes: [] },
     };
     const { opts, agentCalls, ghCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [newFinding]);
-    await runFixLoop({ ...opts, maxAttempts: 2, findingIds: ["F3"] });
+    const result = await runFixLoop({ ...opts, maxAttempts: 2, findingIds: ["F3"] });
     // The PO's chosen findings apply to attempt 1 only; the retry takes the re-test's.
     expect(agentCalls.map((c) => c.findingIds)).toEqual([["F3"], ["R1"]]);
-    const closes = ghCalls.filter((a) => a[0] === "pr" && a[1] === "close").map((a) => a[2]);
-    expect(closes).toEqual(["41"]);
-    expect(ghCalls.some((a) => a[1] === "comment" && a[2] === "41" && a.some((x) => x.includes("superseded") || x.includes("retrying")))).toBe(true);
+    expect(result.attempts.map((a) => a.prNumber)).toEqual([41, 41]);
+    expect(ghCalls.some((a) => a[0] === "pr" && a[1] === "close")).toBe(false);
+    expect(ghCalls.some((a) => a[1] === "comment" && a[2] === "41" && a.some((x) => x.includes("retrying")))).toBe(true);
   });
 
-  it("retry: a diff that can't be fetched replaces the previous attempt's with a placeholder naming the new PR", async () => {
+  it("retry: the saved diff is re-fetched after each push, so it shows the PR's latest commit", async () => {
     const { runsDir, opts } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [retryFinding]);
     const ghImpl = opts.ghImpl!;
+    let diffs = 0;
+    await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      ghImpl: async (args) => (args[1] === "diff" ? `diff --git a/v${++diffs} b/v${diffs}` : ghImpl(args)),
+    });
+    expect(diffs).toBe(2);
+    const diff = await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8");
+    expect(diff).toBe("diff --git a/v2 b/v2\n");
+  });
+
+  it("retry: a diff that can't be fetched after the retry's push replaces attempt 1's with a placeholder", async () => {
+    const { runsDir, opts } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [retryFinding]);
+    const ghImpl = opts.ghImpl!;
+    let diffs = 0;
     await runFixLoop({
       ...opts,
       maxAttempts: 2,
       ghImpl: async (args) => {
-        if (args[1] === "diff" && args[2] === "42") throw new Error("gh pr diff failed: boom");
+        if (args[1] === "diff" && ++diffs === 2) throw new Error("gh pr diff failed: boom");
         return ghImpl(args);
       },
     });
     const diff = await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8");
-    expect(diff).toBe(unavailableDiff(42, "gh pr diff failed: boom"));
+    expect(diff).toBe(unavailableDiff(41, "gh pr diff failed: boom"));
     expect(diff.startsWith(DIFF_UNAVAILABLE)).toBe(true);
     expect(diff).not.toContain("diff --git");
-  });
-
-  it("retry: a superseded PR that won't close is logged, and the retry still runs", async () => {
-    const { opts, agentCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [retryFinding]);
-    const ghImpl = opts.ghImpl!;
-    const logs: string[] = [];
-    const result = await runFixLoop({
-      ...opts,
-      maxAttempts: 2,
-      log: (l) => void logs.push(l),
-      ghImpl: async (args) => {
-        if (args[1] === "close") throw new Error("gh pr close failed: nope");
-        return ghImpl(args);
-      },
-    });
-    expect(agentCalls.map((c) => c.attempt)).toEqual([1, 2]);
-    expect(result.attempts.map((a) => a.status)).toEqual(["not-proven", "not-proven"]);
-    expect(logs.some((l) => l.includes("could not close superseded PR #41") && l.includes("nope"))).toBe(true);
   });
 
   it("records a failed attempt in fix.json", async () => {
