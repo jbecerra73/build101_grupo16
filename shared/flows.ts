@@ -48,16 +48,16 @@ export const buyTshirt: Flow = {
   completion: ORDER_PLACED,
 };
 
-/** The store's jeans: Skinny Fit (2) and Faded Skinny (8). Neither comes in green. */
+/** The store's jeans: Skinny Fit (2) and Faded Skinny (8). */
 const JEANS = [2, 8];
 
-/** A broad goal: the agent picks the jeans itself (there are no green ones), so any pair counts.
+/** A broad goal: the agent picks the blue jeans itself, so any pair counts.
  * Rosa only: it is her judgment under a vague goal we want to see. Real users count only if they
  * viewed a pair of jeans. */
 export const buyJeans: Flow = {
   ...checkout,
   id: "buy-jeans",
-  goal: "Buy a pair of jeans as a gift for your grandchild, who loves the color green, and check out.",
+  goal: "Buy a pair of jeans as a gift for your grandchild, who loves the color blue, and check out.",
   completion: [...ORDER_PLACED, { event: "product_added", where: { product_id: JEANS } }],
   attempt: { event: "product_viewed", where: { product_id: JEANS } },
   personas: ["rosa"],
