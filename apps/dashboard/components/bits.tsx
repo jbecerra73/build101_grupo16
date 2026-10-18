@@ -88,6 +88,7 @@ export function OutcomeBadge({ state, className }: { state: AgentOutcome; classN
 export function PhaseBadge({ phase }: { phase: RunPhase }) {
   if (phase === "done") return <StatusBadge icon={CircleCheck} tone="good">Done</StatusBadge>;
   if (phase === "failed") return <StatusBadge icon={CircleX} tone="bad">Failed</StatusBadge>;
+  if (phase === "awaiting-decision") return <StatusBadge icon={CirclePause} tone="warn">{phaseLabel(phase)}</StatusBadge>;
   return (
     <StatusBadge icon={LoaderCircle} tone="run" spin>
       {phaseLabel(phase)}
@@ -102,13 +103,19 @@ export const FIX_STATUS: Record<FixStatus, { label: string; icon: LucideIcon; to
   ready: { label: "Proven: ready for review", icon: CircleCheck, tone: "good" },
   "not-proven": { label: "Fix attempted, not proven", icon: CircleSlash, tone: "warn" },
   failed: { label: "Fix failed", icon: CircleX, tone: "bad" },
+  merged: { label: "Merged", icon: CircleCheck, tone: "good" },
+  rejected: { label: "Rejected", icon: CircleX, tone: "muted" },
 };
 
-export function FixStatusBadge({ status, className }: { status: FixStatus; className?: string }) {
+/** Merged and rejected say when they were a rehearsal (no real PR was touched). */
+export const fixStatusLabel = (status: FixStatus, rehearsal?: boolean) =>
+  FIX_STATUS[status].label + (rehearsal && (status === "merged" || status === "rejected") ? " (rehearsal)" : "");
+
+export function FixStatusBadge({ status, rehearsal, className }: { status: FixStatus; rehearsal?: boolean; className?: string }) {
   const s = FIX_STATUS[status];
   return (
     <StatusBadge icon={s.icon} tone={s.tone} spin={status === "running" || status === "retesting"} className={className}>
-      {s.label}
+      {fixStatusLabel(status, rehearsal)}
     </StatusBadge>
   );
 }

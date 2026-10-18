@@ -74,7 +74,7 @@ export function compareSegmentsToPersonas(
   targetedPersonas: PersonaId[],
   opts: VerdictOptions = {},
 ): Verdict {
-  const flow = opts.flow ?? FLOWS[analysis.flowId];
+  const flow = opts.flow ?? (Object.hasOwn(FLOWS, analysis.flowId) ? FLOWS[analysis.flowId] : undefined);
   const tolerance = (opts.stepTolerancePts ?? STEP_TOLERANCE_PTS) / 100;
   const confidence = opts.confidence ?? STEP_CONFIDENCE;
   const comparisons: PersonaComparison[] = [];

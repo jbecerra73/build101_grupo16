@@ -15,12 +15,12 @@ import type {
   StartRunRequest,
   Verdict,
 } from "@frictionswarm/shared";
-import { runFlow } from "@frictionswarm/shared";
+import { buyTshirt, runFlow } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
-import { fakeFixLoop, pickTargets } from "./fakeFix";
-import { realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { fakeApplyDecision, fakeFixLoop, pickTargets } from "./fakeFix";
+import { realApplyDecision, realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { analysisConfig, defaultWindow, seedsFor, startPipeline, validateRequest, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, fixAttemptsFrom, runPipeline, seedsFor, startPipeline, validateRequest, type PipelineDeps, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -103,14 +103,16 @@ describe("seedsFor", () => {
 });
 
 describe("startPipeline", () => {
-  it("happy path: analysis, fix, preview, retest, collecting, comparing, done", async () => {
+  it("happy path: analysis, fix, preview, retest, collecting, comparing, awaiting-decision", async () => {
     const { runsDir, phases, analyzed, waited, swarms, opts } = await setup();
     const { runId, done } = await startPipeline(req, opts);
     expect(runId).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-[0-9a-f]{4}$/);
     const final = await done;
 
-    expect(final).toMatchObject({ phase: "done", retestRunId: `${runId}-retest1`, message: expect.stringMatching(/rehearsal/) });
-    expect(phases).toEqual(["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "done"]);
+    expect(final).toMatchObject({
+      phase: "awaiting-decision", retestRunId: `${runId}-retest1`, message: "Improved: (rehearsal) ready, awaiting your decision",
+    });
+    expect(phases).toEqual(["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "awaiting-decision"]);
     expect(analyzed).toEqual([runId, `${runId}-retest1`]);
     expect(waited).toEqual([`${runId}-retest1`]);
 
@@ -156,9 +158,10 @@ describe("startPipeline", () => {
     };
     const { phases, opts } = await setup({ fixLoop: retryingLoop });
     const final = await (await startPipeline(req, opts)).done;
-    expect(final.phase).toBe("done");
+    // The decision gate: the last attempt parks the run for the Product Owner (main ended at done).
+    expect(final.phase).toBe("awaiting-decision");
     const retest = ["waiting-preview", "retesting", "collecting", "comparing"];
-    expect(phases).toEqual(["analyzing", "fixing", ...retest, "fixing", ...retest, "done"]);
+    expect(phases).toEqual(["analyzing", "fixing", ...retest, "fixing", ...retest, "awaiting-decision"]);
   });
 
   it("without autoFix stops after the report", async () => {
@@ -168,10 +171,47 @@ describe("startPipeline", () => {
     expect(phases).toEqual(["analyzing", "done"]);
   });
 
-  it("not proven still ends done, with the honest message", async () => {
+  it("not proven parks in awaiting-decision, with the honest message", async () => {
     const { opts } = await setup({ compare: (a, r, t) => ({ ...compare(a, r, t), improved: false }) });
     const final = await (await startPipeline(req, opts)).done;
-    expect(final).toMatchObject({ phase: "done", message: expect.stringMatching(/not proven/) });
+    expect(final).toMatchObject({ phase: "awaiting-decision", message: expect.stringContaining("not-proven") });
+  });
+
+  it("a retry that crashed before its re-test (not-proven, with its error) parks too, so the PR can be rejected", async () => {
+    const crashedRetry: FixLoop = async (o) => {
+      const result: FixResult = {
+        baselineRunId: o.baselineRunId,
+        repo: "r",
+        attempts: [
+          { attempt: 1, findingIds: ["F1"], status: "not-proven", prNumber: 7 },
+          { attempt: 2, findingIds: ["R1"], status: "not-proven", prNumber: 7, error: "build fails after the fix" },
+        ],
+      };
+      await writeFile(join(o.runsDir, o.baselineRunId, "fix.json"), JSON.stringify(result));
+      return result;
+    };
+    const { opts } = await setup({ fixLoop: crashedRetry });
+    const final = await (await startPipeline(req, opts)).done;
+    expect(final.phase).toBe("awaiting-decision");
+  });
+
+  it("records phase history, ending in awaiting-decision", async () => {
+    const { runsDir, opts } = await setup();
+    const { runId, done } = await startPipeline(req, opts);
+    const final = await done;
+    const seen = final.history!.map((h) => h.phase);
+    expect(seen).toEqual(expect.arrayContaining(["analyzing", "fixing", "retesting", "collecting", "comparing", "awaiting-decision"]));
+    const order = ["analyzing", "fixing", "retesting", "collecting", "comparing", "awaiting-decision"].map((p) => seen.indexOf(p as RunPhase));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(final.history!.at(-1)).toMatchObject({ phase: "awaiting-decision", message: final.message });
+    expect((await json<RunStatus>(join(runsDir, runId, "status.json"))).history).toEqual(final.history);
+  });
+
+  it("autoFix false ends done with history analyzing, done", async () => {
+    const { opts } = await setup();
+    const final = await (await startPipeline({ ...req, autoFix: false }, opts)).done;
+    expect(final.phase).toBe("done");
+    expect(final.history!.map((h) => h.phase)).toEqual(["analyzing", "done"]);
   });
 
   it("analysis failure ends failed with the error", async () => {
@@ -213,21 +253,75 @@ describe("startPipeline", () => {
     await expect(startPipeline({ ...req, flowId: "nope" }, opts)).rejects.toThrow(/Unknown flow/);
     await expect(startPipeline({ ...req, seedsPerPersona: 11 }, opts)).rejects.toThrow(/1 to 10/);
     await expect(startPipeline({ ...req, window: { from: "2026-10-17", to: "2026-10-01" } }, opts)).rejects.toThrow(/before/);
-    expect(() => validateRequest({ ...req, source: "s3" as never })).toThrow(/Unknown source/);
-    expect(() => validateRequest({ ...req, goal: " " })).toThrow(/goal/);
+    expect(() => validateRequest({ ...req, source: "s3" as never }, buyTshirt)).toThrow(/Unknown source/);
+    expect(() => validateRequest({ ...req, goal: " " }, buyTshirt)).toThrow(/goal/);
   });
 
   it("carries a custom goal from the request to the analysis and its retests", async () => {
-    const config = await analysisConfig("r1", { ...req, goal: "Buy black sneakers and check out." });
+    const config = await analysisConfig("r1", { ...req, goal: "Buy black sneakers and check out." }, new Date(), buyTshirt);
     expect(config.goal).toBe("Buy black sneakers and check out.");
+    // The flow snapshot carries the edited goal; steps and success stay the flow's.
+    expect(config.flow).toEqual({ ...buyTshirt, goal: "Buy black sneakers and check out." });
     const retest = retestConfig(config, { attempt: 1, commitSha: "abc", previewUrl: "https://p.example", seeds: { rosa: [1] } });
     expect(retest.goal).toBe("Buy black sneakers and check out.");
+    expect(retest.flow).toEqual(config.flow);
     expect(runFlow(retest)).toMatchObject({ id: "buy-tshirt", goal: "Buy black sneakers and check out." });
     expect(runFlow({ flowId: "buy-tshirt" })!.goal).toBe("Find a blue polo shirt, buy it in size M and check out.");
   });
 
   it("defaults to the last 28 days, today included", () => {
     expect(defaultWindow(new Date("2026-10-17T15:00:00Z"))).toEqual({ from: "2026-09-20", to: "2026-10-18" });
+  });
+});
+
+describe("chosen findings and the decision (rehearsal)", () => {
+  /** The analysis also reports the low-severity T5 finding, which the rehearsal would never pick. */
+  const withLow = (runsDir: string): Analyzer => async (runId) => {
+    const r = await fakeAnalyzer(runsDir, [])(runId);
+    if (!r.findings.length) return r;
+    const findings = [...r.findings, F_T5];
+    await writeFile(join(runsDir, runId, "findings.json"), JSON.stringify(findings));
+    return { ...r, findings };
+  };
+  const run = async (findingIds: string[]) => {
+    const { runsDir, opts } = await setup();
+    await mkdir(join(runsDir, "r1"));
+    await writeFile(join(runsDir, "r1", "config.json"), JSON.stringify(await analysisConfig("r1", req, new Date(), buyTshirt)));
+    const final = await runPipeline("r1", { autoFix: true, retestSeeds: seedsFor([1]), findingIds }, { ...opts, analyze: withLow(runsDir) } as PipelineDeps);
+    return { runsDir, final };
+  };
+
+  it("fixes exactly the chosen findings and writes a fixture PR diff", async () => {
+    const { runsDir, final } = await run(["F5"]);
+    expect(final.phase).toBe("awaiting-decision");
+    const fix = await json<FixResult>(join(runsDir, "r1", "fix.json"));
+    expect(fix.attempts[0].findingIds).toEqual(["F5"]);
+    const diff = await readFile(join(runsDir, "r1", "fix", "pr.diff"), "utf8");
+    expect(diff).toContain("src/app/checkout/page.tsx");
+    expect(diff).toContain("F5");
+  });
+
+  it("an unknown chosen finding fails the run", async () => {
+    const { final } = await run(["nope"]);
+    expect(final).toMatchObject({ phase: "failed", error: 'Unknown finding "nope"' });
+  });
+
+  const decided = async (decision: "accept" | "reject", reason?: string) => {
+    const runsDir = await mkdtemp(join(tmpdir(), "fs-decision-"));
+    await mkdir(join(runsDir, "r1"));
+    const fix: FixResult = { baselineRunId: "r1", repo: "r (rehearsal)", attempts: [{ attempt: 1, findingIds: ["F1"], prNumber: 0, status: "ready" }] };
+    await writeFile(join(runsDir, "r1", "fix.json"), JSON.stringify(fix));
+    const attempt = await fakeApplyDecision({ runsDir, runId: "r1", request: { runId: "r1", decision, reason, requestedAt: "" }, log: () => {} });
+    expect((await json<FixResult>(join(runsDir, "r1", "fix.json"))).attempts[0]).toEqual(attempt);
+    return attempt;
+  };
+
+  it("accept marks the attempt merged, as a rehearsal", async () => {
+    expect(await decided("accept")).toMatchObject({ status: "merged", decision: { decision: "accept", rehearsal: true, decidedAt: expect.any(String) } });
+  });
+
+  it("reject marks the attempt rejected and keeps the reason", async () => {
+    expect(await decided("reject", "too risky")).toMatchObject({ status: "rejected", decision: { decision: "reject", reason: "too risky", rehearsal: true } });
   });
 });
 
@@ -331,6 +425,7 @@ describe("realFixLoop", () => {
   it("fails clearly when P1's fix loop is not there", async () => {
     const loop: FixLoop = realFixLoop("/nonexistent/orchestrator/fix-loop.ts");
     await expect(loop({} as Parameters<FixLoop>[0])).rejects.toThrow(/P1 fix loop not available/);
+    await expect(realApplyDecision("/nonexistent/orchestrator/fix-loop.ts")({} as never)).rejects.toThrow(/P1 fix loop not available/);
   });
 
   it("passes maxAttempts to P1's fix loop (3 by default: two retries, #16)", async () => {
@@ -340,5 +435,11 @@ describe("realFixLoop", () => {
     const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
     expect((await realFixLoop(mod)(opts)).repo).toBe("3");
     expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
+  });
+
+  it("FIX_ATTEMPTS: a whole number ≥ 1, else the default", () => {
+    expect(fixAttemptsFrom("2")).toBe(2);
+    expect(fixAttemptsFrom(" 1 ")).toBe(1);
+    for (const bad of [undefined, "", " ", "abc", "0", "-1", "1.5", "NaN"]) expect(fixAttemptsFrom(bad)).toBeUndefined();
   });
 });

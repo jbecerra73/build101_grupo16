@@ -49,6 +49,48 @@ describe("gate", () => {
   });
 });
 
+describe("bearer token", () => {
+  const tokenEnv = { ...env, DASHBOARD_API_TOKEN: "t0k" };
+  it("opens /api/* only, with the exact token", async () => {
+    expect(await gate("/api/runs", undefined, tokenEnv, "Bearer t0k")).toBe("allow");
+    expect(await gate("/api/runs", undefined, tokenEnv, "Bearer nope")).toBe("unauthorized");
+    expect(await gate("/api/runs", undefined, tokenEnv)).toBe("unauthorized");
+    expect(await gate("/runs/x", undefined, tokenEnv, "Bearer t0k")).toBe("login");
+  });
+  it("is ignored when no token is configured", async () => {
+    expect(await gate("/api/runs", undefined, env, "Bearer t0k")).toBe("unauthorized");
+    expect(await gate("/api/runs", undefined, { ...env, DASHBOARD_API_TOKEN: "" }, "Bearer ")).toBe("unauthorized");
+  });
+  it("a token alone gates /api/* and leaves pages open", async () => {
+    const only = { DASHBOARD_API_TOKEN: "t0k" };
+    expect(await gate("/api/runs", undefined, only)).toBe("unauthorized");
+    expect(await gate("/api/runs", undefined, only, "Bearer t0k")).toBe("allow");
+    expect(await gate("/runs/x", undefined, only)).toBe("allow");
+    expect(await gate("/api/runs", undefined, {})).toBe("allow");
+  });
+  it("still opens /api/* where a password is required but none is set (setup otherwise)", async () => {
+    const setup = { DASHBOARD_REQUIRE_PASSWORD: "1", DASHBOARD_API_TOKEN: "t0k" };
+    expect(await gate("/api/runs", undefined, setup, "Bearer t0k")).toBe("allow");
+    expect(await gate("/api/runs", undefined, setup, "Bearer nope")).toBe("setup");
+    expect(await gate("/runs/x", undefined, setup, "Bearer t0k")).toBe("setup");
+  });
+  it("proxy.ts reads the Authorization header", async () => {
+    const saved = { p: process.env.DASHBOARD_PASSWORD, t: process.env.DASHBOARD_API_TOKEN };
+    process.env.DASHBOARD_PASSWORD = "hunter2";
+    process.env.DASHBOARD_API_TOKEN = "t0k";
+    try {
+      const ok = await proxy(new NextRequest("https://fs.example/api/runs", { headers: { authorization: "Bearer t0k" } }));
+      expect(ok.headers.get("x-middleware-next")).toBe("1");
+      expect((await proxy(new NextRequest("https://fs.example/api/runs", { headers: { authorization: "Bearer x" } }))).status).toBe(401);
+    } finally {
+      if (saved.t === undefined) delete process.env.DASHBOARD_API_TOKEN;
+      else process.env.DASHBOARD_API_TOKEN = saved.t;
+      if (saved.p === undefined) delete process.env.DASHBOARD_PASSWORD;
+      else process.env.DASHBOARD_PASSWORD = saved.p;
+    }
+  });
+});
+
 describe("proxy.ts", () => {
   const saved = process.env.DASHBOARD_PASSWORD;
   afterEach(() => {

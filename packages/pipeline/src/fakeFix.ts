@@ -2,11 +2,13 @@
 // transitions (running → draft → retesting → ready | not-proven), a real
 // retest through the injected swarm runner, PostHog collection and analyzer,
 // and the analyzer's own verdict (compareSegmentsToPersonas). No coding agent,
-// no git, no PR: every PR field says "rehearsal".
+// no git, no PR: every PR field says "rehearsal", the PR diff is a fixture and
+// fakeApplyDecision records the decision without touching GitHub.
 import { randomBytes } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { PERSONAS, type FixAttempt, type FixResult, type Finding, type Metrics, type RunConfig } from "@frictionswarm/shared";
-import { rankFindings, retestConfig, type FixLoop } from "./fixLoop";
+import { flowOf, PERSONAS, type FixAttempt, type FixResult, type Finding, type Metrics, type RunConfig } from "@frictionswarm/shared";
+import { chosenFindings, rankFindings, retestConfig, type ApplyDecision, type FixLoop } from "./fixLoop";
 import { readJson, writeJson } from "./runs";
 import { trapOf, type TrapId } from "./traps";
 
@@ -38,13 +40,29 @@ export function pickTargets(findings: Finding[], traps: TrapId[] | undefined, ma
   return (byTrap.length ? byTrap : ranked).slice(0, max);
 }
 
+/** A stand-in for `gh pr diff`: a short unified diff naming the targeted findings. */
+export function rehearsalDiff(targets: Finding[]): string {
+  return [
+    "diff --git a/src/app/checkout/page.tsx b/src/app/checkout/page.tsx",
+    "--- a/src/app/checkout/page.tsx",
+    "+++ b/src/app/checkout/page.tsx",
+    "@@ -1,3 +1,4 @@",
+    `+// [rehearsal, no PR opened] fixes ${targets.map((f) => `${f.id} (${f.title})`).join("; ")}`,
+    ' "use client";',
+    " ",
+    ' import { useState } from "react";',
+    "",
+  ].join("\n");
+}
+
 export const fakeFixLoop =
   ({ stageDelayMs = 1500, maxFindings = 3, traps = ["T1", "T2"] }: FakeFixOptions = {}): FixLoop =>
-  async ({ baselineRunId, runsDir, log, retestSeeds, runSwarm, collect, analyze, compare }) => {
+  async ({ baselineRunId, runsDir, log, retestSeeds, runSwarm, collect, analyze, compare, findingIds }) => {
     const baseDir = join(runsDir, baselineRunId);
     const config = (await readJson<RunConfig>(join(baseDir, "config.json")))!;
     const analysis = (await readJson<Metrics>(join(baseDir, "metrics.json")))!;
-    const targets = pickTargets((await readJson<Finding[]>(join(baseDir, "findings.json"))) ?? [], traps, maxFindings);
+    const findings = (await readJson<Finding[]>(join(baseDir, "findings.json"))) ?? [];
+    const targets = findingIds ? chosenFindings(findings, findingIds) : pickTargets(findings, traps, maxFindings);
     const result: FixResult = { baselineRunId, repo: `${STOREFRONT_REPO} (rehearsal)`, attempts: [] };
     if (!targets.length) return result;
     const attempt: FixAttempt = { attempt: 1, findingIds: targets.map((f) => f.id), status: "running" };
@@ -67,6 +85,8 @@ export const fakeFixLoop =
         status: "draft",
       } satisfies Partial<FixAttempt>);
       await save();
+      await mkdir(join(baseDir, "fix"), { recursive: true });
+      await writeFile(join(baseDir, "fix", "pr.diff"), rehearsalDiff(targets));
       log("[rehearsal] waiting for the preview (simulated)");
       await sleep(stageDelayMs);
 
@@ -79,7 +99,7 @@ export const fakeFixLoop =
       const after = await analyze(retest.runId);
 
       const targeted = [...new Set(targets.flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);
-      attempt.verdict = compare(analysis, after.metrics, targeted);
+      attempt.verdict = compare(analysis, after.metrics, targeted, flowOf(config));
       attempt.status = attempt.verdict.improved ? "ready" : "not-proven";
       log(`[rehearsal] verdict: ${attempt.status}\n  ${attempt.verdict.reasons.join("\n  ")}`);
       await save();
@@ -91,3 +111,23 @@ export const fakeFixLoop =
       throw e;
     }
   };
+
+/** The rehearsal's decision: recorded in fix.json, no PR merged or closed. */
+export const fakeApplyDecision: ApplyDecision = async ({ runsDir, runId, request, log }) => {
+  const file = join(runsDir, runId, "fix.json");
+  const result = await readJson<FixResult>(file);
+  const attempt = result?.attempts.at(-1);
+  if (!result || !attempt) throw new Error(`No fix attempt to decide on for run ${runId}`);
+  const accept = request.decision === "accept";
+  attempt.status = accept ? "merged" : "rejected";
+  attempt.decision = {
+    decision: request.decision,
+    ...(request.reason ? { reason: request.reason } : {}),
+    ...(request.override ? { override: true } : {}),
+    decidedAt: new Date().toISOString(),
+    rehearsal: true,
+  };
+  await writeJson(file, result);
+  log(accept ? "[rehearsal] accepted (rehearsal — no PR merged)" : "[rehearsal] rejected (rehearsal — no PR closed)");
+  return attempt;
+};

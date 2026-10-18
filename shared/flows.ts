@@ -1,5 +1,5 @@
 import { SEGMENTS } from "./analytics";
-import type { EventMatch, Flow, FlowStep, PersonaId } from "./contracts";
+import type { EventMatch, Flow, FlowStep, PersonaId, RunConfig } from "./contracts";
 
 export const PRODUCTION_URL = "https://swarm-ecommerce.netlify.app";
 
@@ -91,9 +91,29 @@ export const MAX_GOAL_LENGTH = 300;
 /** The personas that swarm a flow: its own list, else every segment's persona. */
 export const flowPersonas = (flow: Flow): PersonaId[] => flow.personas ?? SEGMENTS.map((s) => s.personaId);
 
-/** A run's flow with the goal the PM typed (if any) in place of the preset's. Steps, success and
- * required stay the preset's: they are what the run is measured against. */
-export function runFlow(c: { flowId: string; goal?: string }): Flow | undefined {
-  const flow = FLOWS[c.flowId];
+/** The swarm's done instruction for a flow that names none (custom flows drafted before
+ * Flow.doneWhen existed): the success rule in words. */
+export const defaultDoneWhen = (success: Flow["success"]): string => {
+  const at = [success.urlPattern && `the page URL matches ${success.urlPattern}`, success.visibleText && `you can see "${success.visibleText}"`].filter(Boolean);
+  return `When ${at.join(" and ") || "the goal is done"}, call done.`;
+};
+
+/** A stored flow or run snapshot from before Flow.completion / Flow.doneWhen existed, filled in:
+ * no extra completion events (the success step and required steps still count) and a
+ * doneWhen derived from the success rule. */
+export const withFlowDefaults = (flow: Omit<Flow, "completion" | "doneWhen"> & Partial<Pick<Flow, "completion" | "doneWhen">>): Flow =>
+  flow.completion && flow.doneWhen
+    ? (flow as Flow)
+    : { ...flow, completion: flow.completion ?? [], doneWhen: flow.doneWhen ?? defaultDoneWhen(flow.success) };
+
+/** A run's flow: the snapshot in its config.json, else the built-in one (runs
+ * from before snapshots existed; own keys only: "constructor" is not a flow),
+ * with the goal the PM typed (if any) in place of the flow's. Steps, success and
+ * required stay the flow's: they are what the run is measured against. */
+export function flowOf(c: Pick<RunConfig, "flowId"> & Partial<Pick<RunConfig, "flow" | "goal">>): Flow | undefined {
+  const flow = c.flow ? withFlowDefaults(c.flow) : Object.hasOwn(FLOWS, c.flowId) ? FLOWS[c.flowId] : undefined;
   return flow && c.goal ? { ...flow, goal: c.goal } : flow;
 }
+
+/** Same as flowOf (main's name for it). */
+export const runFlow = flowOf;

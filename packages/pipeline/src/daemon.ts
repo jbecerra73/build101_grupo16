@@ -8,13 +8,14 @@
 // apps/dashboard/lib/orchestrator.ts).
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { RunStatus } from "@frictionswarm/shared";
+import { flowOf, type DecisionRequest, type FixAttempt, type FixRequest, type FixResult, type RunConfig, type RunStatus } from "@frictionswarm/shared";
 import {
   createStore,
   FsStore,
+  getFlow,
   HEARTBEAT_EVERY_MS,
   isValidRunId,
   KEYS,
@@ -33,12 +34,15 @@ import {
   buildDeps,
   CANCELLED,
   DEFAULT_SEEDS_PER_PERSONA,
+  fixAttemptsFrom,
+  PARKED,
+  resumeFix,
   runPipeline,
   seedsFor,
   validateRequest,
   type PipelineDeps,
 } from "./pipeline";
-import { REPO_ROOT, writeJson } from "./runs";
+import { readJson, REPO_ROOT, writeJson } from "./runs";
 
 type Env = Record<string, string | undefined>;
 type Log = (line: string) => void;
@@ -66,6 +70,11 @@ export type DaemonOptions = {
 };
 
 type Active = { runId: string; controller: AbortController; done: Promise<RunStatus> };
+/** Queued work, oldest first: a new run, or a fix of a finished analysis. */
+type Work = { requestedAt: string } & ({ kind: "run"; item: QueuedRun } | { kind: "fix"; request: FixRequest });
+
+/** The run files a fix or a decision reads, pulled from the store when mirroring. */
+const RUN_FILES = ["config.json", "request.json", "status.json", "metrics.json", "findings.json", "fix.json"];
 
 const TERMINAL = new Set(["done", "failed"]);
 export const RESTARTED = "orchestrator restarted";
@@ -82,13 +91,15 @@ export const settingsDeps =
       fixLoop: settings.fixLoop,
       swarmSpeed: settings.swarmSpeed,
       fixStageDelayMs: Number(env.FIX_STAGE_DELAY_MS ?? 1500),
-      fixAttempts: env.FIX_ATTEMPTS ? Number(env.FIX_ATTEMPTS) : undefined,
+      fixAttempts: fixAttemptsFrom(env.FIX_ATTEMPTS),
     });
 
 export class Orchestrator {
   readonly store: RunStore;
   readonly workDir: string;
   readonly active = new Map<string, Active>();
+  /** Decisions being applied. Short jobs: they do not count against maxConcurrent. */
+  readonly deciding = new Map<string, Promise<void>>();
   readonly mirror?: RunMirror;
   #o: DaemonOptions;
   #log: Log;
@@ -126,10 +137,11 @@ export class Orchestrator {
     this.#timers = [];
     await this.#ticking;
     if (abort) for (const a of this.active.values()) a.controller.abort();
-    if (wait) await Promise.all([...this.active.values()].map((a) => a.done));
+    if (wait) await Promise.all([...[...this.active.values()].map((a) => a.done), ...this.deciding.values()]);
   }
 
-  /** Runs that were mid-flight when the orchestrator went away end failed. */
+  /** Runs that were mid-flight when the orchestrator went away end failed.
+   * Parked runs (awaiting a decision) were not mid-flight and stay parked. */
   async recover() {
     const prev = await this.store.getJson<OrchestratorHeartbeat>(KEYS.heartbeat);
     const ids = new Set((prev?.activeRunIds ?? []).filter(isValidRunId));
@@ -138,7 +150,7 @@ export class Orchestrator {
     for (const runId of ids) {
       if (this.active.has(runId)) continue;
       const status = await this.store.getJson<RunStatus>(KEYS.runFile(runId, "status.json"));
-      if (!status || TERMINAL.has(status.phase)) continue;
+      if (!status || TERMINAL.has(status.phase) || PARKED.has(status.phase)) continue;
       const failed: RunStatus = { ...status, phase: "failed", message: `Interrupted during ${status.phase}`, error: RESTARTED, updatedAt: this.#now().toISOString() };
       await this.store.putJson(KEYS.runFile(runId, "status.json"), failed);
       // Keep the local copy in step so the mirror does not resurrect the old phase.
@@ -160,7 +172,8 @@ export class Orchestrator {
     await this.store.putJson(KEYS.heartbeat, hb);
   }
 
-  /** One poll: mirror + cancel checks for active runs, then take queued work. */
+  /** One poll: mirror + cancel checks for active runs, then take queued work
+   * (new runs and fix requests) and apply decisions on parked runs. */
   tick(): Promise<void> {
     if (this.#ticking) return this.#ticking;
     this.#ticking = this.#tick()
@@ -178,14 +191,46 @@ export class Orchestrator {
       }
     }
     if (this.#stopped) return;
-    const queued = await this.queue();
-    this.#queueDepth = queued.length;
+    const { fixes, decisions } = await this.#requests();
+    const work: Work[] = [
+      ...(await this.queue()).map((item): Work => ({ kind: "run", item, requestedAt: item.requestedAt })),
+      ...fixes.map((request): Work => ({ kind: "fix", request, requestedAt: request.requestedAt ?? "" })),
+    ].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+    this.#queueDepth = work.length;
     const max = this.#o.maxConcurrent ?? 1;
-    for (const item of queued) {
+    for (const w of work) {
       if (this.active.size >= max || this.#stopped) break;
-      await this.take(item);
+      if (w.kind === "run") await this.take(w.item);
+      else await this.takeFix(w.request);
       this.#queueDepth--;
     }
+    for (const runId of decisions) {
+      if (this.#stopped) break;
+      if (this.active.has(runId) || this.deciding.has(runId)) continue;
+      const p = this.applyDecisionRequest(runId)
+        .catch((e) => this.#log(`${runId}: decision failed: ${errMsg(e)}`))
+        .finally(() => this.deciding.delete(runId));
+      this.deciding.set(runId, p);
+    }
+  }
+
+  /** Fix requests (unreadable ones dropped) and run ids with a decision.json, from one store listing. */
+  async #requests(): Promise<{ fixes: FixRequest[]; decisions: string[] }> {
+    const fixes: FixRequest[] = [];
+    const decisions: string[] = [];
+    for (const key of await this.store.list("runs/")) {
+      const [, runId, file, extra] = key.split("/");
+      if (extra !== undefined || !isValidRunId(runId)) continue;
+      if (file === "decision.json") decisions.push(runId);
+      if (file !== "fix-request.json" || this.active.has(runId)) continue;
+      const r = await this.store.getJson<FixRequest>(key);
+      if (r) fixes.push({ ...r, runId });
+      else {
+        this.#log(`dropping unreadable fix request ${key}`);
+        await this.store.delete(key);
+      }
+    }
+    return { fixes, decisions };
   }
 
   /** Queued runs, oldest first. Unreadable entries are dropped. */
@@ -217,12 +262,13 @@ export class Orchestrator {
     const n = Math.max(1, Math.min(10, Math.floor(req.seedsPerPersona ?? settings.defaultSeedsPerPersona ?? DEFAULT_SEEDS_PER_PERSONA) || 1));
     const seeds = Array.from({ length: n }, (_, i) => nextSeed + i);
     let refusal: string | undefined;
+    const flow = await getFlow(this.store, req.flowId);
     try {
-      validateRequest(req);
+      validateRequest(req, flow);
     } catch (e) {
       refusal = errMsg(e);
     }
-    const config = await analysisConfig(runId, refusal ? { flowId: req.flowId, autoFix: false } : req, this.#now());
+    const config = await analysisConfig(runId, refusal ? { flowId: req.flowId, autoFix: false } : req, this.#now(), flow);
     const dir = join(this.workDir, runId);
     const writeStatus = (s: Partial<RunStatus>) =>
       writeJson(join(dir, "status.json"), { runId, phase: "analyzing", updatedAt: this.#now().toISOString(), ...s });
@@ -244,11 +290,53 @@ export class Orchestrator {
     await this.#sync(runId);
     await this.store.delete(queueKey);
 
+    this.#log(`${runId}: starting (${settings.swarmRunner} swarm, ${settings.fixLoop} fix loop, ${config.posthog.source} source, retest x${n} per persona)`);
+    await this.#launch(runId, settings, (deps) => runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, flow) }, deps));
+  }
+
+  /** Starts the fix of a finished analysis run (or drops the request when the
+   * run is not one). Seeds are allocated like take(); the analysis already
+   * counted against the daily cap. */
+  async takeFix(request: FixRequest) {
+    const { runId } = request;
+    const requestKey = KEYS.fixRequest(runId);
+    if (this.active.has(runId)) return;
+    await this.#pull(runId);
+    const status = await readJson<RunStatus>(join(this.workDir, runId, "status.json"));
+    const config = await readJson<RunConfig>(join(this.workDir, runId, "config.json"));
+    const fixed = await readJson<FixResult>(join(this.workDir, runId, "fix.json"));
+    if (status?.phase !== "done" || config?.kind !== "analysis" || fixed?.attempts.length) {
+      this.#log(`dropping fix request for ${runId}: not a finished analysis without a fix (${status?.phase ?? "no status"})`);
+      await this.store.delete(requestKey);
+      return;
+    }
+    const settings = await readSettings(this.store, this.#o.env);
+    const usage = await readUsage(this.store, this.#now());
+    const nextSeed = usage.nextSeed ?? 1;
+    const n = Math.max(1, Math.min(10, Math.floor(request.seedsPerPersona ?? settings.defaultSeedsPerPersona ?? DEFAULT_SEEDS_PER_PERSONA) || 1));
+    const seeds = Array.from({ length: n }, (_, i) => nextSeed + i);
+    await this.store.putJson(KEYS.usage, { ...usage, nextSeed: nextSeed + n });
+    const findingIds = request.findingIds?.length ? request.findingIds : undefined;
+
+    this.#log(`${runId}: fixing ${findingIds?.join(", ") ?? "the top findings"} (${settings.fixLoop} fix loop, retest x${n} per persona)`);
+    let started!: () => void;
+    const firstStatus = new Promise<void>((r) => (started = r));
+    await this.#launch(runId, settings, (deps) =>
+      resumeFix(runId, { autoFix: true, retestSeeds: seedsFor(seeds, flowOf(config)), findingIds }, { ...deps, onStatus: (s) => (deps.onStatus?.(s), started()) }),
+    );
+    // Remove the request once the store shows the run reopened, so it is never seen done without a request.
+    await Promise.race([firstStatus, this.active.get(runId)?.done]);
+    await new Promise((r) => setTimeout(r, 50));
+    await this.#sync(runId);
+    await this.store.delete(requestKey);
+  }
+
+  /** Runs the pipeline (or its fix half) as an active run: mirrored and cancellable. */
+  async #launch(runId: string, settings: Settings, run: (deps: PipelineDeps) => Promise<RunStatus>) {
     const controller = new AbortController();
     const log: Log = (l) => this.#log(`${runId} ${l}`);
     const deps = (this.#o.makeDeps ?? settingsDeps(this.#o.env))(settings, { runId, signal: controller.signal, workDir: this.workDir, log });
-    this.#log(`${runId}: starting (${settings.swarmRunner} swarm, ${settings.fixLoop} fix loop, ${config.posthog.source} source, retest x${n} per persona)`);
-    const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, req.flowId) }, {
+    const done = run({
       ...deps,
       runsDir: this.workDir,
       signal: controller.signal,
@@ -267,6 +355,89 @@ export class Orchestrator {
     await this.heartbeat();
   }
 
+  /** Applies decision.json to a run parked in awaiting-decision: merged or
+   * rejected → done; refused or failed → stays parked with status.error. The
+   * request is deleted either way (the Product Owner retries with a new one).
+   * A decision on a run that is not parked is dropped. */
+  async applyDecisionRequest(runId: string) {
+    const key = KEYS.decision(runId);
+    const request = await this.store.getJson<DecisionRequest>(key);
+    const current = await this.store.getJson<RunStatus>(KEYS.runFile(runId, "status.json"));
+    if (!request || current?.phase !== "awaiting-decision") {
+      this.#log(`${runId}: dropping decision (run is ${current?.phase ?? "unknown"})`);
+      await this.store.delete(key);
+      return;
+    }
+    await this.#pull(runId);
+    const dir = join(this.workDir, runId);
+    const status = (await readJson<RunStatus>(join(dir, "status.json")))!;
+    const fix = await readJson<FixResult>(join(dir, "fix.json"));
+    const last = fix?.attempts.at(-1);
+    const save = async (s: RunStatus) => {
+      await writeJson(join(dir, "status.json"), s);
+      await this.#sync(runId);
+      await this.store.delete(key);
+    };
+    const parked = (error: string) => {
+      this.#log(`${runId}: decision ${request.decision} not applied (${error})`);
+      return save({ ...status, error, updatedAt: this.#now().toISOString() });
+    };
+    const finish = (attempt: FixAttempt & { decision: NonNullable<FixAttempt["decision"]> }) => {
+      const message = decisionMessage(attempt.decision.decision, attempt);
+      const at = this.#now().toISOString();
+      const { error: _error, ...rest } = status;
+      this.#log(`${runId} done: ${message}`);
+      return save({ ...rest, phase: "done", message, updatedAt: at, history: [...(status.history ?? []), { phase: "done", at, message }] });
+    };
+    // Already applied (the daemon stopped before the run reached done): finish, never merge or close twice.
+    if (isDecided(last)) return finish(last);
+    const refusal = decisionRefusal(request, last);
+    if (refusal) return parked(refusal);
+
+    const settings = await readSettings(this.store, this.#o.env);
+    const log: Log = (l) => this.#log(`${runId} ${l}`);
+    const deps = (this.#o.makeDeps ?? settingsDeps(this.#o.env))(settings, { runId, signal: new AbortController().signal, workDir: this.workDir, log });
+    let attempt: FixAttempt;
+    try {
+      attempt = await deps.applyDecision({ runsDir: this.workDir, runId, request, log });
+    } catch (e) {
+      return parked(errMsg(e));
+    }
+    // Get the decided fix.json to the store before anything else can fail.
+    await this.#sync(runId);
+    await finish({ ...attempt, decision: attempt.decision ?? { decision: request.decision, decidedAt: this.#now().toISOString() } });
+  }
+
+  /** Copies the run's files from the store over the work dir (mirroring only):
+   * the run is not active, so the store normally has its latest state, and
+   * after a restart elsewhere the work dir may not have them at all. A local
+   * copy the mirror never uploaded wins: a status.json with a later updatedAt,
+   * or a fix.json whose last attempt is decided while the store's is not. */
+  async #pull(runId: string) {
+    if (!this.mirror) return;
+    for (const f of RUN_FILES) {
+      const bytes = await this.store.getBytes(KEYS.runFile(runId, f));
+      if (!bytes) continue;
+      if (await this.#localIsNewer(join(this.workDir, runId, f), f, bytes)) continue;
+      await mkdir(join(this.workDir, runId), { recursive: true });
+      await writeFile(join(this.workDir, runId, f), bytes);
+    }
+  }
+
+  async #localIsNewer(file: string, name: string, remoteBytes: Uint8Array): Promise<boolean> {
+    if (name !== "status.json" && name !== "fix.json") return false;
+    const local = await readJson<RunStatus & FixResult>(file).catch(() => undefined);
+    if (!local) return false;
+    let remote: (RunStatus & FixResult) | undefined;
+    try {
+      remote = JSON.parse(new TextDecoder().decode(remoteBytes));
+    } catch {
+      return true;
+    }
+    if (name === "status.json") return (local.updatedAt ?? "") > (remote?.updatedAt ?? "");
+    return isDecided(local.attempts?.at(-1)) && !isDecided(remote?.attempts?.at(-1));
+  }
+
   /** Mirrors a run and its retest folders (<runId>-retestN) to the store. */
   async #sync(runId: string) {
     if (!this.mirror) return;
@@ -281,6 +452,25 @@ export class Orchestrator {
 }
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The attempt's PR was already merged or closed on the Product Owner's decision. */
+const isDecided = (a: FixAttempt | undefined): a is FixAttempt & { decision: NonNullable<FixAttempt["decision"]> } =>
+  !!a?.decision && (a.status === "merged" || a.status === "rejected");
+
+/** Why a decision cannot be applied to this attempt, if it cannot. */
+function decisionRefusal(r: DecisionRequest, last: FixAttempt | undefined): string | undefined {
+  if (r.decision !== "accept" && r.decision !== "reject") return `Unknown decision "${String(r.decision)}" (accept|reject)`;
+  if (last?.status !== "ready" && last?.status !== "not-proven") return `No fix awaiting a decision (last attempt: ${last?.status ?? "none"})`;
+  if (r.decision === "accept" && last.status === "not-proven" && !r.override) return "Fix not proven: pass override to accept anyway";
+  return undefined;
+}
+
+function decisionMessage(decision: DecisionRequest["decision"], a: FixAttempt): string {
+  if (a.decision?.rehearsal) return decision === "accept" ? "Merged (rehearsal — no PR merged)" : "Rejected (rehearsal — no PR closed)";
+  if (decision === "reject") return `Rejected: PR #${a.prNumber} closed`;
+  const sha = a.decision?.mergeSha?.slice(0, 7);
+  return `Merged PR #${a.prNumber}${sha ? ` (${sha})` : ""}`;
+}
 
 function gitVersion(): string {
   try {

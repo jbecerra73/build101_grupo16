@@ -55,11 +55,27 @@ export const isPublicPath = (path: string) =>
 
 export type GateDecision = "allow" | "unauthorized" | "login" | "setup";
 
-/** What proxy.ts does with a request. "setup": this deploy requires a password
- * (Netlify) but none is configured, so nothing is served. */
-export async function gate(path: string, cookie: string | undefined, env: Env = process.env): Promise<GateDecision> {
-  if (!authEnabled(env)) return passwordRequired(env) ? "setup" : "allow";
+/** What proxy.ts does with a request. A bearer DASHBOARD_API_TOKEN (for the MCP
+ * server) opens /api/* only; pages still need the cookie. A token alone (no
+ * password) gates /api/* and leaves pages open. "setup": this deploy requires a
+ * password (Netlify) but none is configured, so nothing is served except /api/*
+ * with a valid bearer token. */
+export async function gate(path: string, cookie: string | undefined, env: Env = process.env, authorization?: string): Promise<GateDecision> {
+  const token = env.DASHBOARD_API_TOKEN;
+  const isApi = path.startsWith("/api/");
+  const bearerOk = async () => {
+    if (!token || !isApi || authorization === undefined) return false;
+    // Compare digests so the comparison does not depend on the token length.
+    const [a, b] = await Promise.all([hmacHex("api", authorization), hmacHex("api", `Bearer ${token}`)]);
+    return safeEqual(a, b);
+  };
+  if (!authEnabled(env)) {
+    if (passwordRequired(env)) return (await bearerOk()) ? "allow" : "setup";
+    if (!token || !isApi || isPublicPath(path)) return "allow";
+    return (await bearerOk()) ? "allow" : "unauthorized";
+  }
   if (isPublicPath(path)) return "allow";
   if (await verifySession(cookie, env)) return "allow";
-  return path.startsWith("/api/") ? "unauthorized" : "login";
+  if (await bearerOk()) return "allow";
+  return isApi ? "unauthorized" : "login";
 }

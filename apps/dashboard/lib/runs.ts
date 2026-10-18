@@ -11,7 +11,7 @@
 import "server-only";
 import {
   FLOWS,
-  runFlow,
+  flowOf,
   PRODUCTION_URL,
   type Finding,
   type Metrics,
@@ -157,7 +157,7 @@ async function queuedRun(runId: string): Promise<RunDetail | undefined> {
     runId,
     config: placeholderConfig(runId, q.req, q.requestedAt),
     status: { runId, phase: "analyzing", message: "Queued: waiting for the orchestrator", updatedAt: q.requestedAt, inferred: true },
-    flow: runFlow(q.req),
+    flow: flowOf(q.req),
     agents: [],
     giveUps: [],
     replayBase: replayBase(),
@@ -192,7 +192,7 @@ export async function getRun(runId: string, opts: { events?: boolean } = {}): Pr
   const core = await loadCore(runId);
   if (!core) return isValidRunId(runId) ? queuedRun(runId) : undefined;
   const { config, status, metrics, findings, themes, fix } = core;
-  const flow = runFlow(config);
+  const flow = flowOf(config);
   const base = {
     runId,
     config,
@@ -244,7 +244,7 @@ export async function getRunSummary(runId: string): Promise<RunSummary | undefin
   let agents = 0;
   if (config.kind === "retest" && !metrics) {
     const { events } = await readSwarmEvents(config, { live: true });
-    provisional = deriveMetrics(config, events, FLOWS[config.flowId]);
+    provisional = deriveMetrics(config, events, flowOf(config));
     agents = groupByAgent(events).size;
   }
   const groups = groupsOf(config, metrics, provisional);
@@ -301,7 +301,7 @@ export function runFileKey(runId: string, parts: string[]): { key: string; conte
   if (parts.some((p) => !p || p === "." || p === ".." || p.includes("\0") || p.includes("/") || p.includes("\\"))) return undefined;
   const rel = parts.join("/");
   const ext = rel.slice(rel.lastIndexOf(".")).toLowerCase();
-  const contentType = MIME[ext];
+  const contentType = rel === "fix/pr.diff" ? "text/x-diff" : MIME[ext];
   if (!contentType) return undefined;
   return { key: runKey(runId, rel), contentType };
 }

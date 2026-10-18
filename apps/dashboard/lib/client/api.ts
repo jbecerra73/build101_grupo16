@@ -1,5 +1,5 @@
 // Typed browser client for the dashboard API (see lib/control-types.ts).
-import type { StartRunRequest } from "@frictionswarm/shared";
+import type { Flow, StartRunRequest } from "@frictionswarm/shared";
 import type { ControlOverview, Settings, SwarmTopology } from "@/lib/control-types";
 import type { RunDetail, RunSummary } from "@/lib/types";
 
@@ -38,6 +38,9 @@ export const getRun = async (runId: string): Promise<RunDetail> => ok(await call
 export const startRun = async (req: StartRunRequest): Promise<{ runId: string }> =>
   ok(await call("/api/runs", { method: "POST", body: JSON.stringify(req) }));
 
+/** GET /api/flows: seed flows overlaid with the custom flows in the store. */
+export const listFlows = async (): Promise<Flow[]> => ok(await call("/api/flows"));
+
 export const getControl = async (): Promise<ControlOverview> => ok(await call("/api/control"));
 
 /** GET /api/runs/[id]/swarm; undefined until the swarm runner writes swarm.json. */
@@ -54,6 +57,11 @@ export async function cancelRun(runId: string, reason?: string): Promise<void> {
 /** POST /api/runs/[id]/retry → { runId } (same request, fresh seeds). */
 export const retryRun = async (runId: string): Promise<{ runId: string }> =>
   ok(await call(`/api/runs/${encodeURIComponent(runId)}/retry`, { method: "POST" }));
+
+/** POST /api/runs/[id]/decision → 202; a 409 (not proven without override, decision pending) is an ApiError. */
+export async function decideRun(runId: string, body: { decision: "accept" | "reject"; reason?: string; override?: boolean }): Promise<void> {
+  await ok(await call(`/api/runs/${encodeURIComponent(runId)}/decision`, { method: "POST", body: JSON.stringify(body) }));
+}
 
 export const getSettings = async (): Promise<Settings> => ok(await call("/api/settings"));
 

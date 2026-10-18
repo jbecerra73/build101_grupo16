@@ -10,7 +10,7 @@ Product managers ship e-commerce flows (product → cart → checkout) without k
 
 ## Solution
 
-A "CI loop for UX" on top of the analytics the store already has. FrictionSwarm reads the storefront's **PostHog** events, slices them into **segments** (mobile, large-text / high-contrast, desktop), and finds where each segment drops off, rage-clicks, or fails forms — tied to the release that introduced it. The top findings go to a coding agent that fixes them and opens a draft PR on the storefront repo; Netlify deploys a preview. Instead of waiting weeks for real traffic, a swarm of AI browser agents that embody each segment as a **persona** — with **enforced perception and action constraints** — shops the preview. They are tracked by the same PostHog snippet as real users, so the analyzer reads their tracks with the same code. If the personas' funnel on the preview beats their segment's real funnel by the threshold and nothing regressed, the PR is marked ready for review with a before/after table. Otherwise it is closed and labelled `not-proven`.
+A "CI loop for UX" on top of the analytics the store already has. FrictionSwarm reads the storefront's **PostHog** events, slices them into **segments** (mobile, large-text / high-contrast, desktop), and finds where each segment drops off, rage-clicks, or fails forms — tied to the release that introduced it. The top findings go to a coding agent that fixes them and opens a draft PR on the storefront repo; Netlify deploys a preview. Instead of waiting weeks for real traffic, a swarm of AI browser agents that embody each segment as a **persona** — with **enforced perception and action constraints** — shops the preview. They are tracked by the same PostHog snippet as real users, so the analyzer reads their tracks with the same code. If the personas' funnel on the preview beats their segment's real funnel by the threshold and nothing regressed, the PR is marked ready for review with a before/after table. Otherwise it is labelled `not-proven`. Either way the PR stays open for the Product Owner's decision: accept merges it, reject closes it.
 
 Positioning: turns the analytics you already collect into fixes, and gives each fix a fast, directional pre-merge check instead of waiting on an A/B test. Not a replacement for real user research or A/B tests.
 
@@ -22,7 +22,7 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 4. Coding agent pushes a branch and opens a **draft PR**. Netlify builds a deploy preview.
 5. Orchestrator polls the preview URL until its `build-sha` meta matches the pushed commit, then launches the swarm (3 personas × 10 seeds) against the preview, tagged `?swarm=<runId>&agent=<agentId>&persona=<personaId>`. The dashboard shows the live grid.
 6. Orchestrator waits until every agent's final event is visible in PostHog, then the analyzer reads the swarm's tracks (`swarm_run = <runId>`, `build_sha = <preview sha>`), computes the persona funnels, and compares each persona to its segment's real-user funnel.
-7. If improved per threshold → PR body rewritten with metrics table + fixed findings + evidence, marked ready for review. Else → metrics comment, label `not-proven`, close.
+7. If improved per threshold → PR body rewritten with metrics table + fixed findings + evidence, marked ready for review. Else → metrics comment, label `not-proven`, left open. Either way it waits for the Product Owner's decision (merge on accept, close on reject).
 
 ## User Stories
 
@@ -41,8 +41,8 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 13. As a PM, I want a live grid of agent browser views during the re-test, so that I can watch personas use the fixed flow.
 14. As a PM, I want a before/after comparison per segment (real users before, persona swarm after), so that I can see whether the fix helped.
 15. As a PM, I want failed fix attempts shown honestly ("fix attempted, not proven"), so that I trust the tool.
-16. As an engineer, I want a PR containing the diff, before/after metrics table, fixed findings with their evidence, and a link to the report, so that I can review with evidence.
-17. As an engineer, I want PRs that don't meet the threshold to be closed and labelled `not-proven`, so that my queue only has proven improvements.
+16. As an engineer, I want a PR containing the diff, before/after metrics table, fixed findings with their evidence, and a link to the report, so that I can review with evidence. A human then accepts (merge to production `main`) or rejects (close the PR), from the dashboard or from Claude Code.
+17. As an engineer, I want PRs that don't meet the threshold labelled `not-proven` and left open for a human decision, so that nothing is merged or closed without a person saying so.
 18. As an engineer, I want the coding agent to only touch the storefront repo, so that it can't tamper with personas, tests or analytics.
 19. As a PM, I want a control segment/persona whose metrics must not regress, so that a fix for one group doesn't hurt everyone else.
 20. As a PM, I want re-tests to use fresh seeds, so that fixes don't overfit to specific agent runs.
@@ -160,13 +160,15 @@ type Flow = {
 // A list in `where` matches any of its values.
 type EventMatch = { event: string; where?: Record<string, EventValue | EventValue[]> };
 ```
-Flows (`shared/flows.ts`), all on the same store and the same PostHog events:
+Flows are stored at `flows/<id>.json` in the run store (seeded from `shared/flows.ts`) and can be drafted and saved from Claude Code. Each run snapshots the flow it used in `RunConfig.flow`, so a run stays runnable after the stored flow changes.
+
+Seed flows (`shared/flows.ts`), all on the same store and the same PostHog events:
 - `buy-tshirt`: find a blue polo shirt and buy it in size M (the id stays `buy-tshirt` for stored runs); completion = a placed order.
 - `buy-jeans`: a broad goal, "buy jeans as a gift for your grandchild, who loves green" (no jeans come in green, so the agent has to judge); placed order + `product_added {product_id: 2|8}`; real users who viewed either pair; swarmed by Rosa only (`Flow.personas`).
 - `promo-checkout`: buy with WELCOME10; placed order + `promo_applied {success: true}`; real users who tried a code (T5).
 - `add-to-cart`: pick a size and add to cart; success at `/cart`, `product_added`; steps Home → Cart (T4).
 
-A run can override the goal text (`goal`) for the swarm; steps and completion stay the flow's.
+A run can override the goal text (`goal`) for the swarm; steps and completion stay the flow's. The run's `RunConfig.flow` snapshot carries the overridden goal.
 
 ### Analyzer
 - Input is PostHog events, grouped by `$session_id`. One session = one funnel attempt (real user) or one agent (swarm).
@@ -200,17 +202,21 @@ type Finding = {
 - Input: storefront repo clone, top 1–3 findings (with selectors and release attribution), flow's required steps/fields as a hard constraint. **Protected:** `src/lib/analytics.ts`, the `build-sha` meta and `data-echo` markers — a fix that changes tracking can't be measured.
 - Output: branch pushed + **draft PR** opened. Single focused diff.
 - Orchestrator waits for the preview: polls until `build-sha` meta == pushed commit SHA.
-- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment, `not-proven` label, close; dashboard shows "fix attempted, not proven".
+- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment and `not-proven` label; the PR is **not** closed. Either way the run moves to `awaiting-decision`: a human accepts (`gh pr merge --squash --delete-branch`, `FixStatus` `merged`) or rejects (PR closed with a comment, `rejected`). Accepting a `not-proven` fix needs an explicit `override`. Dashboard shows "fix attempted, not proven" until then. One fix per analysis run. With retries (`FIX_ATTEMPTS`, default 3), a not-proven attempt with attempts left gets a retry comment and the next attempt pushes onto the **same** branch and PR (told what the swarm hit); `fix/pr.diff` is re-fetched after each push, so it shows the PR's latest commit. Only the last attempt's verdict finalizes the PR, which then waits for the decision. Chosen `findingIds` apply to attempt 1; retries fix the re-test's findings. A retry that fails before its re-test ends `not-proven` with its `error` (the PR labelled on the last verdict, the diff re-fetched; its push was not re-tested) and still waits for the decision. An attempt-1 crash after the PR opened, or a daemon restart mid-fix, leaves the PR open on a `failed` run: close it by hand.
 
 ### Orchestrator & dashboard
-- Run state on disk, no DB: analysis run `runs/<id>/{config.json, status.json, posthog.jsonl, metrics.json, findings.json, fix.json}`; re-test run `runs/<id>/{config.json, status.json, screenshots/, posthog.jsonl, metrics.json, findings.json}`.
-- Phases: `analyzing` → (autoFix: `fixing` → `waiting-preview` → `retesting` → `collecting` (waiting for PostHog ingestion) → `comparing`) → `done` | `failed`.
+- Run state on disk, no DB: analysis run `runs/<id>/{config.json, status.json, posthog.jsonl, metrics.json, findings.json, fix.json, fix-request.json, decision.json, fix/pr.diff}`; re-test run `runs/<id>/{config.json, status.json, screenshots/, posthog.jsonl, metrics.json, findings.json}`.
+- Phases: `analyzing` → (autoFix: `fixing` → `waiting-preview` → `retesting` → `collecting` (waiting for PostHog ingestion) → `comparing` → `awaiting-decision`) → `done` | `failed`. In `awaiting-decision` the pipeline has ended and freed its concurrency slot; `done` is reached only after the decision, which the daemon applies. `fix-request.json` is a "fix it" request for the findings of a finished analysis, `decision.json` the accept/reject, `fix/pr.diff` the PR diff saved so the dashboard can serve it without GitHub access. `RunConfig` gains `flow` (the flow snapshot).
 - Orchestrator: read PostHog → analyze → invoke coding agent → wait for preview → swarm on preview → wait for tracks → analyze tracks → compare → finalize PR.
+- Dashboard API (`/api/*`) is gated by a bearer token (`DASHBOARD_API_TOKEN`, even without `DASHBOARD_PASSWORD`). Routes: `/api/flows*`, `/api/personas`, `/api/runs/:id/fix`, `/api/runs/:id/decision`.
 - Caps: max actions per agent (40), max runs per day.
 - Dashboard pages: define flow / pick window; report (segment funnels + trend with releases, hotspots, evidence); live re-test grid; before/after + PR status; replay a past run.
 
+### Claude Code MCP (`apps/mcp`)
+A stdio MCP server that is a thin client of the dashboard API (`FS_API_URL`, `FS_API_TOKEN`). Tools: `list_flows`, `get_flow`, `draft_flow`, `save_flow`, `list_personas`, `analyze_flow`, `start_fix`, `get_run`, `get_decision`, `accept_fix`, `reject_fix`, `cancel_run`. The `watch-run` skill (`.claude/skills/watch-run`) follows a run until `awaiting-decision`. Accept and reject are asynchronous: the request is recorded, the daemon applies it.
+
 ### Work split (contracts to lock first: tracking plan, PostHogSource, Finding, Metrics)
-- **P1 — storefront + coding agent**: PostHog tracking + swarm tagging (FrissA/demo-ecommerce#7), traps T1–T5, build-sha meta, confirmation echo, Claude Code headless fix flow (analytics files protected), draft PR → ready/close lifecycle, preview-SHA polling, verdict against segment baselines.
+- **P1 — storefront + coding agent**: PostHog tracking + swarm tagging (FrissA/demo-ecommerce#7), traps T1–T5, build-sha meta, confirmation echo, Claude Code headless fix flow (analytics files protected), draft PR → ready / `not-proven` (left open for the Product Owner's decision; merge or close on accept/reject), preview-SHA polling, verdict against segment baselines.
 - **P2 — swarm runtime**: tenki sandbox snapshot, worker with 6 contexts, Playwright tool loop, persona filters + patience, swarm tagging on the start URL, `swarm_*` events via `window.posthog`, live-grid screenshots, `waitForSwarm`.
 - **P3 — analyzer + dashboard**: PostHogSource (file + HogQL), metrics/signals/findings over PostHog events, release attribution, fake dataset generator, PM UI (flow, window, report, live re-test grid, before/after, replay).
 

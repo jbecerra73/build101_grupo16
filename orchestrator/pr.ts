@@ -93,7 +93,7 @@ ${agentSummary ? `\n## What changed\n\n${agentSummary}\n` : ""}`;
 export function renderNotProvenComment(ctx: PrContext): string {
   return `## ❌ FrictionSwarm: fix attempted, not proven${attemptNote(ctx)}
 
-The re-test did not meet the bar (a targeted persona ≥20 pts above its segment's real users, and no persona below its segment), so this PR is closed and labelled \`${NOT_PROVEN_LABEL}\`.
+The re-test did not meet the bar (a targeted persona ≥20 pts above its segment's real users, and no persona below its segment), so this PR is labelled \`${NOT_PROVEN_LABEL}\` and left open for the Product Owner to accept or reject.
 
 ${ctx.verdict.reasons.map((r) => `- ${r}`).join("\n")}
 
@@ -152,7 +152,8 @@ export async function uploadEvidence(
 }
 
 /** Improved → rewrite the body and mark ready for review. Otherwise comment
- * the metrics, label not-proven and close. */
+ * the metrics and label not-proven. Either way the PR stays open: the Product
+ * Owner merges (mergePr) or closes (closePr) it. */
 export async function finalizePr(ctx: PrContext, agentSummary = "", ghImpl: Gh = gh): Promise<"ready" | "not-proven"> {
   const pr = String(ctx.prNumber);
   if (ctx.verdict.improved) {
@@ -166,6 +167,28 @@ export async function finalizePr(ctx: PrContext, agentSummary = "", ghImpl: Gh =
     "--color", "B60205", "--description", "FrictionSwarm could not prove this fix helps",
   ]);
   await ghImpl(["pr", "edit", pr, "--repo", ctx.repo, "--add-label", NOT_PROVEN_LABEL]);
-  await ghImpl(["pr", "close", pr, "--repo", ctx.repo]);
   return "not-proven";
 }
+
+/** The Product Owner accepted: squash-merge into main and delete the branch.
+ * A not-proven PR is still a draft (only the improved path marks it ready) and
+ * gh refuses to merge drafts, so it is marked ready first. Returns the merge
+ * commit's sha. */
+export async function mergePr(repo: string, prNumber: number, ghImpl: Gh = gh): Promise<string> {
+  const pr = String(prNumber);
+  const isDraft = await ghImpl(["pr", "view", pr, "--repo", repo, "--json", "isDraft", "-q", ".isDraft"]);
+  if (isDraft === "true") await ghImpl(["pr", "ready", pr, "--repo", repo]);
+  await ghImpl(["pr", "merge", pr, "--repo", repo, "--squash", "--delete-branch"]);
+  return ghImpl(["pr", "view", pr, "--repo", repo, "--json", "mergeCommit", "-q", ".mergeCommit.oid"]);
+}
+
+/** The Product Owner rejected: comment the reason (if any) and close. */
+export async function closePr(repo: string, prNumber: number, reason?: string, ghImpl: Gh = gh): Promise<void> {
+  const pr = String(prNumber);
+  if (reason) await ghImpl(["pr", "comment", pr, "--repo", repo, "--body", `Rejected by the Product Owner: ${reason}`]);
+  await ghImpl(["pr", "close", pr, "--repo", repo]);
+}
+
+/** The PR's unified diff (gh pr diff). */
+export const prDiff = (repo: string, prNumber: number, ghImpl: Gh = gh): Promise<string> =>
+  ghImpl(["pr", "diff", String(prNumber), "--repo", repo]);

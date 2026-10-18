@@ -45,6 +45,35 @@ only) and `fixture-live` (re-test caught mid-swarm), each with its `-retest1` fo
 
 Screenshots: [`docs/dashboard/posthog/`](docs/dashboard/posthog/).
 
+## Claude Code MCP
+
+Drive FrictionSwarm from Claude Code: list and draft flows, analyze, fix, and accept or reject the PR.
+
+```bash
+claude mcp add frictionswarm -e FS_API_URL=http://localhost:3000 -e FS_API_TOKEN=<token> -- npx tsx apps/mcp/src/index.ts
+```
+
+| Variable | Where | Meaning |
+|---|---|---|
+| `DASHBOARD_API_TOKEN` | dashboard | bearer token that gates `/api/*` (works without `DASHBOARD_PASSWORD`) |
+| `FS_API_URL` | MCP server | dashboard base URL, default `http://localhost:3000` |
+| `FS_API_TOKEN` | MCP server | the same token as `DASHBOARD_API_TOKEN` |
+
+These three should also be added to `.env.example` at the repo root and to `apps/dashboard/.env.example`.
+
+Example conversation (numbers are illustrative):
+
+```
+You:    Which flows do we have? Analyze checkout for the last 28 days.
+Claude: (list_flows, analyze_flow) Run 2026-... started. /watch-run 2026-...
+You:    Fix the top two findings.
+Claude: (start_fix) ... awaiting-decision: verdict ready, +34 pts for Rosa. Accept?
+You:    Yes, accept.   (accept_fix merges the PR to production main)
+```
+
+`/watch-run <runId>` (`.claude/skills/watch-run`) polls the run, posts a line per change,
+and stops at `awaiting-decision` to show the decision package. It never accepts without your yes.
+
 ## Deploy
 
 Dashboard on Netlify, orchestrator in a tenki sandbox, linked only by Netlify Blobs:

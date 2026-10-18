@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Database, FileJson, Lock, ScanSearch, ShieldCheck, TriangleAlert } from "lucide-react";
-import { describeEvent, flowPersonas, FLOWS, MAX_GOAL_LENGTH, PERSONAS, SEGMENTS, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
+import { describeEvent, flowPersonas, FLOWS, MAX_GOAL_LENGTH, PERSONAS, SEGMENTS, type Flow, type PostHogSourceKind, type Release, type StartRunRequest } from "@frictionswarm/shared";
 import { PersonaAvatar } from "@/components/persona/avatar";
 import { PersonaConstraints } from "@/components/persona-constraints";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,7 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { startRun } from "@/lib/client/api";
+import { listFlows, startRun } from "@/lib/client/api";
 import { segmentColor, segmentShort, shortDate } from "@/lib/format";
 
 const AGENTS_PER_SANDBOX = 6;
@@ -44,9 +44,15 @@ function presets(releases: Release[], today: string): Preset[] {
 
 export function NewRunForm({ releases, today, defaultSource }: { releases: Release[]; today: string; defaultSource: PostHogSourceKind }) {
   const router = useRouter();
-  const flowIds = Object.keys(FLOWS);
-  const [flowId, setFlowId] = useState(flowIds[0]);
-  const [goal, setGoal] = useState(FLOWS[flowIds[0]].goal);
+  // The seed flows until GET /api/flows answers with the store's (custom flows included).
+  const [flows, setFlows] = useState<Flow[]>(Object.values(FLOWS));
+  const [flowId, setFlowId] = useState(flows[0].id);
+  const [goal, setGoal] = useState(flows[0].goal);
+  useEffect(() => {
+    listFlows()
+      .then((all) => all.length && setFlows(all))
+      .catch(() => {});
+  }, []);
   const options = presets(releases, today);
   const [preset, setPreset] = useState("default");
   const [from, setFrom] = useState(iso(Date.parse(`${today}T00:00:00Z`) - 27 * DAY));
@@ -57,7 +63,7 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const flow = FLOWS[flowId];
+  const flow = flows.find((f) => f.id === flowId) ?? flows[0];
   const personas = flowPersonas(flow).map((id) => PERSONAS[id]).filter(Boolean);
   const total = seeds * personas.length;
   const chosen = options.find((o) => o.id === preset)!;
@@ -96,7 +102,7 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
                   value={flowId}
                   onValueChange={(id) => {
                     setFlowId(id);
-                    setGoal(FLOWS[id].goal);
+                    setGoal(flows.find((f) => f.id === id)?.goal ?? "");
                   }}
                 >
                   <SelectTrigger id="flow" className="w-full max-w-md">
@@ -104,9 +110,9 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {flowIds.map((id) => (
-                        <SelectItem key={id} value={id}>
-                          {FLOWS[id].goal}
+                      {flows.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.goal}
                         </SelectItem>
                       ))}
                     </SelectGroup>

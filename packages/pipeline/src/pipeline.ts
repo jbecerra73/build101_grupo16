@@ -6,6 +6,7 @@
 //   collecting       waiting for PostHog to ingest the swarm's events
 //   comparing        analyzer on the swarm's tracks, persona vs segment verdict
 //                    not proven with attempts left → fixing again, on the same PR
+//   awaiting-decision  fix retested; parked until the Product Owner accepts or rejects the PR
 //   done | failed
 // There is no baseline swarm: "before" is real users, "after" is the swarm.
 import { existsSync } from "node:fs";
@@ -17,7 +18,10 @@ import {
   MAX_GOAL_LENGTH,
   PERSONAS,
   PRODUCTION_URL,
+  type Finding,
+  type Flow,
   type FixResult,
+  type Metrics,
   type PersonaId,
   type PostHogSourceKind,
   type RunConfig,
@@ -26,13 +30,13 @@ import {
   type StartRunRequest,
 } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
-import { fakeFixLoop } from "./fakeFix";
-import { realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { fakeApplyDecision, fakeFixLoop } from "./fakeFix";
+import { realApplyDecision, realFixLoop, type Analyzer, type ApplyDecision, type Compare, type FixLoop } from "./fixLoop";
 import { defaultDataDir, offlineSwarmRunner } from "./offline";
 import { allocateSeeds, newRunId, readJson, reserveRun, runsDir as defaultRunsDir, writeJson } from "./runs";
 import { tenkiSwarmRunner, type SwarmRunner } from "./swarm";
 
-export type { Analyzer, Compare, FixLoop, SwarmRunner };
+export type { Analyzer, ApplyDecision, Compare, FixLoop, SwarmRunner };
 
 /** The three personas of the re-test: Rosa and Kai stand in for the hurt
  * segments, Typical for the control. */
@@ -48,6 +52,8 @@ export type PipelineDeps = {
   compare: Compare;
   runSwarm: SwarmRunner;
   fixLoop: FixLoop;
+  /** Merges or closes the fix's PR once the Product Owner decides. */
+  applyDecision: ApplyDecision;
   /** How long collecting waits for PostHog ingestion. Default 5 min. */
   collectTimeoutMs?: number;
   onStatus?: (s: RunStatus) => void;
@@ -63,11 +69,15 @@ export type RunOptions = {
   autoFix: boolean;
   /** Fresh seeds per persona for the re-test swarm. */
   retestSeeds: Record<PersonaId, number[]>;
+  /** The findings the Product Owner chose to fix (default: the fix loop picks). */
+  findingIds?: string[];
 };
 
 export type StartOptions = Partial<PipelineDeps> & { maxRunsPerDay?: number };
 
-const ORDER: RunPhase[] = ["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "done"];
+const ORDER: RunPhase[] = ["analyzing", "fixing", "waiting-preview", "retesting", "collecting", "comparing", "awaiting-decision", "done"];
+/** Phases where a run is parked, not progressing: it waits for a person. */
+export const PARKED = new Set<RunPhase>(["awaiting-decision"]);
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export const CANCELLED = "cancelled";
 const DAY = 86_400_000;
@@ -103,8 +113,8 @@ export async function currentReleaseSha(kind: PostHogSourceKind, dataDir = defau
 
 const DATE = /^\d{4}-\d\d-\d\d(T[\d:.]+Z?)?$/;
 
-export function validateRequest(req: StartRunRequest): void {
-  if (!FLOWS[req.flowId]) throw new Error(`Unknown flow "${req.flowId}"`);
+export function validateRequest(req: StartRunRequest, flow: Flow | undefined): void {
+  if (!flow) throw new Error(`Unknown flow "${req.flowId}"`);
   if (req.goal !== undefined && (typeof req.goal !== "string" || !req.goal.trim() || req.goal.length > MAX_GOAL_LENGTH))
     throw new Error(`goal must be a non-empty string of at most ${MAX_GOAL_LENGTH} characters`);
   if (typeof req.autoFix !== "boolean") throw new Error("autoFix must be a boolean");
@@ -122,12 +132,14 @@ export function validateRequest(req: StartRunRequest): void {
 /** The analysis run's config for a request. The default window (no
  * req.window) is the current production release over the last 28 days; an
  * explicit window covers every release in it. */
-export async function analysisConfig(runId: string, req: StartRunRequest, now = new Date()): Promise<RunConfig> {
+export async function analysisConfig(runId: string, req: StartRunRequest, now = new Date(), flow?: Flow): Promise<RunConfig> {
   const source = req.source ?? (process.env.POSTHOG_SOURCE === "api" ? "api" : "file");
   return {
     runId,
     kind: "analysis",
     flowId: req.flowId,
+    // The snapshot carries the goal the PM typed, so the run reads the same without config.goal.
+    ...(flow ? { flow: req.goal ? { ...flow, goal: req.goal } : flow } : {}),
     ...(req.goal ? { goal: req.goal } : {}),
     window: req.window ?? defaultWindow(now),
     posthog: { source, buildSha: req.window ? "" : await currentReleaseSha(source) },
@@ -138,10 +150,10 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
   };
 }
 
-/** The same fresh seeds for every re-test persona. */
-/** The same seeds for each persona that re-tests: the flow's (Flow.personas), else RETEST_PERSONAS. */
-export const seedsFor = (seeds: number[], flowId?: string): Record<PersonaId, number[]> => {
-  const flow = flowId ? FLOWS[flowId] : undefined;
+/** The same seeds for each persona that re-tests: the flow's (Flow.personas), else RETEST_PERSONAS.
+ * Takes the run's flow (store-backed flows included) or a built-in flow's id. */
+export const seedsFor = (seeds: number[], flowOrId?: Flow | string): Record<PersonaId, number[]> => {
+  const flow = typeof flowOrId === "string" ? (Object.hasOwn(FLOWS, flowOrId) ? FLOWS[flowOrId] : undefined) : flowOrId;
   return Object.fromEntries((flow ? flowPersonas(flow) : RETEST_PERSONAS).map((p) => [p, seeds]));
 };
 
@@ -151,104 +163,157 @@ export async function startPipeline(
   req: StartRunRequest,
   opts: StartOptions = {},
 ): Promise<{ runId: string; done: Promise<RunStatus> }> {
-  validateRequest(req);
+  const flow = Object.hasOwn(FLOWS, req.flowId) ? FLOWS[req.flowId] : undefined;
+  validateRequest(req, flow);
   const deps = { ...defaultDeps(opts.runsDir, opts.log), ...opts };
   await reserveRun(deps.runsDir, opts.maxRunsPerDay ?? Number(process.env.MAX_RUNS_PER_DAY ?? 10));
   const runId = newRunId();
   const seeds = await allocateSeeds(deps.runsDir, req.seedsPerPersona ?? DEFAULT_SEEDS_PER_PERSONA);
-  await writeJson(join(deps.runsDir, runId, "config.json"), await analysisConfig(runId, req));
+  await writeJson(join(deps.runsDir, runId, "config.json"), await analysisConfig(runId, req, new Date(), flow));
   await writeJson(join(deps.runsDir, runId, "request.json"), req);
   const status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString(), message: "Starting" };
   await writeJson(join(deps.runsDir, runId, "status.json"), status);
-  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, req.flowId) }, deps);
+  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, flow) }, deps);
   done.catch(() => {}); // runPipeline never rejects; belt and braces
   return { runId, done };
 }
 
 const range = (w?: { from: string; to: string }) => (w ? `${w.from} → ${w.to}` : "all time");
 
+/** status.json of one run: phases only move forward, every change is appended
+ * to history, writes land in order. */
+type Tracker = {
+  status: RunStatus;
+  /** `restart`: a fix retry starts over at "fixing", the one allowed move backwards. */
+  set: (phase: RunPhase, message: string, extra?: Partial<RunStatus>, opts?: { restart?: boolean }) => Promise<void>;
+};
+
+function tracker(dir: string, deps: PipelineDeps, initial: RunStatus): Tracker {
+  let writes = Promise.resolve();
+  const t: Tracker = {
+    status: initial,
+    set: (phase, message, extra = {}, opts = {}) => {
+      if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
+      // Phases only move forward within an attempt (the fix.json watcher may lag behind).
+      if (phase !== "failed" && !opts.restart && ORDER.indexOf(phase) < ORDER.indexOf(t.status.phase)) return writes;
+      if (phase === t.status.phase && message === t.status.message && !Object.keys(extra).length) return writes;
+      const at = new Date().toISOString();
+      t.status = { ...t.status, ...extra, phase, message, updatedAt: at, history: [...(t.status.history ?? []), { phase, at, message }] };
+      const snap = t.status;
+      deps.onStatus?.(snap);
+      return (writes = writes.catch(() => {}).then(() => writeJson(join(dir, "status.json"), snap)));
+    },
+  };
+  return t;
+}
+
+/** Ends the run failed (or cancelled) during its current phase. */
+async function fail(t: Tracker, deps: PipelineDeps, e: unknown): Promise<RunStatus> {
+  const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;
+  await t.set("failed", cancelled ? `Cancelled during ${t.status.phase}` : `Failed during ${t.status.phase}`, { error: cancelled ? CANCELLED : errMsg(e) }).catch(() => {});
+  return t.status;
+}
+
+const fixingMessage = (opts: RunOptions) =>
+  opts.findingIds ? `Coding agent is fixing ${opts.findingIds.join(", ")}` : "Coding agent is fixing the top findings";
+
+/** fixing → … → awaiting-decision (or done when the loop ends without a verdict). */
+async function fixAndRetest(runId: string, opts: RunOptions, deps: PipelineDeps, t: Tracker): Promise<RunStatus> {
+  const dir = join(deps.runsDir, runId);
+  const log = deps.log ?? (() => {});
+  const { set } = t;
+  /** The fix attempt the phases belong to: a retry starts over at "fixing". */
+  let attemptSeen = 1;
+  await set("fixing", fixingMessage(opts));
+  const watcher = setInterval(async () => {
+    const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
+    const a = fix?.attempts.at(-1);
+    if (a && a.attempt > attemptSeen) {
+      attemptSeen = a.attempt;
+      void set("fixing", `Not proven yet: coding agent retrying (attempt ${a.attempt}) on the same PR with what the swarm hit`, {}, { restart: true }).catch(() => {});
+    }
+    if (a?.status === "draft" && a.attempt === attemptSeen)
+      void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
+  }, deps.fixWatchMs ?? 500);
+  let result: FixResult;
+  try {
+    result = await abortable(
+      deps.fixLoop({
+        baselineRunId: runId,
+        runsDir: deps.runsDir,
+        log,
+        retestSeeds: opts.retestSeeds,
+        findingIds: opts.findingIds,
+        compare: deps.compare,
+        runSwarm: async (c) => {
+          const n = Object.values(c.seeds).flat().length;
+          await set("retesting", `Swarm re-testing the preview: ${n} agents (${c.personaIds.join(", ")}), fresh seeds`, { retestRunId: c.runId });
+          await deps.runSwarm(c);
+        },
+        collect: async (c) => {
+          // The swarm's browsers recorded its events (runs/<retest>/posthog.jsonl): nothing to wait for.
+          if (existsSync(join(deps.runsDir, c.runId, "posthog.jsonl"))) return void (await set("collecting", "Swarm events recorded by the agents' browsers"));
+          await set("collecting", "Waiting for PostHog to ingest the swarm's events");
+          const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
+          await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
+        },
+        analyze: async (id) => {
+          await set("comparing", "Analyzing the swarm's tracks and comparing each persona to its segment");
+          return deps.analyze(id);
+        },
+      }),
+      deps.signal,
+    );
+  } finally {
+    clearInterval(watcher);
+  }
+  const last = result.attempts.at(-1);
+  const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
+  const where = pr ?? "(rehearsal)";
+  if (last?.status === "ready") return await set("awaiting-decision", `Improved: ${where} ready, awaiting your decision`).then(() => t.status);
+  if (last?.status === "not-proven")
+    return await set("awaiting-decision", `Not proven: ${where} labelled not-proven, awaiting your decision`).then(() => t.status);
+  const msg = `Fix loop ended (${last?.status ?? "no attempt"})`;
+  return await set("done", msg).then(() => t.status);
+}
+
 /** The demo loop for an analysis run whose config.json exists. Never rejects:
  * failures end in status.json phase "failed" (fix.json is kept by the fix loop). */
 export async function runPipeline(runId: string, opts: RunOptions, deps: PipelineDeps): Promise<RunStatus> {
   const dir = join(deps.runsDir, runId);
-  const log = deps.log ?? (() => {});
-  let status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString() };
-  let writes = Promise.resolve();
-  /** The fix attempt the phases belong to: a retry starts over at "fixing". */
-  let attemptSeen = 1;
-  const set = (phase: RunPhase, message: string, extra: Partial<RunStatus> = {}, opts: { restart?: boolean } = {}) => {
-    if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
-    // Phases only move forward within an attempt (the fix.json watcher may lag behind).
-    if (phase !== "failed" && !opts.restart && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
-    if (phase === status.phase && message === status.message && !Object.keys(extra).length) return writes;
-    status = { ...status, ...extra, phase, message, updatedAt: new Date().toISOString() };
-    const snap = status;
-    deps.onStatus?.(snap);
-    return (writes = writes.catch(() => {}).then(() => writeJson(join(dir, "status.json"), snap)));
-  };
-
+  const t = tracker(dir, deps, { runId, phase: "analyzing", updatedAt: new Date().toISOString() });
   try {
     const config = (await readJson<RunConfig>(join(dir, "config.json")))!;
     const release = config.posthog.buildSha ? ` on ${config.posthog.buildSha.slice(0, 7)}` : "";
-    await set("analyzing", `Reading real-user events from PostHog (${config.posthog.source}, ${range(config.window)}${release})`);
+    await t.set("analyzing", `Reading real-user events from PostHog (${config.posthog.source}, ${range(config.window)}${release})`);
     const { findings } = await abortable(deps.analyze(runId), deps.signal);
 
-    if (!opts.autoFix) return await set("done", `Report ready: ${findings.length} findings`).then(() => status);
-    if (!findings.length) return await set("done", "No findings to fix").then(() => status);
-
-    await set("fixing", "Coding agent is fixing the top findings");
-    const watcher = setInterval(async () => {
-      const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
-      const a = fix?.attempts.at(-1);
-      if (a && a.attempt > attemptSeen) {
-        attemptSeen = a.attempt;
-        void set("fixing", `Not proven yet: coding agent retrying (attempt ${a.attempt}) with what the swarm hit`, {}, { restart: true }).catch(() => {});
-      }
-      if (a?.status === "draft" && a.attempt === attemptSeen)
-        void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
-    }, deps.fixWatchMs ?? 500);
-    let result: FixResult;
-    try {
-      result = await abortable(
-        deps.fixLoop({
-          baselineRunId: runId,
-          runsDir: deps.runsDir,
-          log,
-          retestSeeds: opts.retestSeeds,
-          compare: deps.compare,
-          runSwarm: async (c) => {
-            const n = Object.values(c.seeds).flat().length;
-            await set("retesting", `Swarm re-testing the preview: ${n} agents (${c.personaIds.join(", ")}), fresh seeds`, { retestRunId: c.runId });
-            await deps.runSwarm(c);
-          },
-          collect: async (c) => {
-            // The swarm's browsers recorded its events (runs/<retest>/posthog.jsonl): nothing to wait for.
-            if (existsSync(join(deps.runsDir, c.runId, "posthog.jsonl"))) return void (await set("collecting", "Swarm events recorded by the agents' browsers"));
-            await set("collecting", "Waiting for PostHog to ingest the swarm's events");
-            const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
-            await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
-          },
-          analyze: async (id) => {
-            await set("comparing", "Analyzing the swarm's tracks and comparing each persona to its segment");
-            return deps.analyze(id);
-          },
-        }),
-        deps.signal,
-      );
-    } finally {
-      clearInterval(watcher);
-    }
-    const last = result.attempts.at(-1);
-    const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
-    const msg =
-      last?.status === "ready" ? `Improved: ${pr ? `${pr} marked ready for review` : "fix proven (rehearsal, no PR opened)"}`
-      : last?.status === "not-proven" ? `Fix attempted, not proven: ${pr ? `${pr} closed` : "rehearsal, no PR opened"}`
-      : `Fix loop ended (${last?.status ?? "no attempt"})`;
-    return await set("done", msg).then(() => status);
+    if (!opts.autoFix) return await t.set("done", `Report ready: ${findings.length} findings`).then(() => t.status);
+    if (!findings.length) return await t.set("done", "No findings to fix").then(() => t.status);
+    return await fixAndRetest(runId, opts, deps, t);
   } catch (e) {
-    const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;
-    await set("failed", cancelled ? `Cancelled during ${status.phase}` : `Failed during ${status.phase}`, { error: cancelled ? CANCELLED : errMsg(e) }).catch(() => {});
-    return status;
+    return fail(t, deps, e);
+  }
+}
+
+/** The fix half of runPipeline on an analysis run that already ended done
+ * (its metrics.json and findings.json exist): reopens it at fixing, keeping
+ * its history. Never rejects, like runPipeline. */
+export async function resumeFix(runId: string, opts: RunOptions, deps: PipelineDeps): Promise<RunStatus> {
+  const dir = join(deps.runsDir, runId);
+  const prev = await readJson<RunStatus>(join(dir, "status.json")).catch(() => undefined);
+  const { error: _error, ...rest } = prev ?? { runId, updatedAt: "" };
+  // "analyzing" as the base so the move to fixing counts as forward.
+  const t = tracker(dir, deps, { ...rest, runId, phase: "analyzing", updatedAt: new Date().toISOString() });
+  try {
+    await t.set("fixing", fixingMessage(opts));
+    const metrics = await readJson<Metrics>(join(dir, "metrics.json"));
+    const findings = await readJson<Finding[]>(join(dir, "findings.json"));
+    if (!metrics || !findings) throw new Error(`Run ${runId} has no analysis to fix (metrics.json/findings.json missing)`);
+    if (!findings.length) return await t.set("done", "No findings to fix").then(() => t.status);
+    return await fixAndRetest(runId, opts, deps, t);
+  } catch (e) {
+    return fail(t, deps, e);
   }
 }
 
@@ -318,11 +383,11 @@ export async function ensureSnapshot(runsDir: string, runId: string, source: Pos
 /** The analyzer's compareSegmentsToPersonas, loaded with the analyzer. Sync
  * callers (the fix loop) get it after the first analysis has loaded the module. */
 export function moduleCompare(): Compare {
-  let compare: Compare | undefined;
+  let compare: Awaited<ReturnType<typeof loadAnalyzer>>["compareSegmentsToPersonas"] | undefined;
   void loadAnalyzer().then((m) => (compare = m.compareSegmentsToPersonas), () => {});
-  return (a, r, t) => {
+  return (a, r, t, flow) => {
     if (!compare) throw new Error("Analyzer not loaded yet: compareSegmentsToPersonas unavailable");
-    return compare(a, r, t);
+    return compare(a, r, t, { flow });
   };
 }
 
@@ -363,7 +428,14 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
     signal: c.signal,
     log: c.log,
     fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(undefined, { maxAttempts: c.fixAttempts }),
+    applyDecision: c.fixLoop === "fake" ? fakeApplyDecision : realApplyDecision(),
   };
+}
+
+/** FIX_ATTEMPTS as a whole number ≥ 1; unset or invalid (non-numeric, < 1) → undefined, the loop's default. */
+export function fixAttemptsFrom(value: string | undefined): number | undefined {
+  const n = Number(value);
+  return value?.trim() && Number.isInteger(n) && n >= 1 ? n : undefined;
 }
 
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
@@ -382,7 +454,7 @@ export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => 
     fixLoop: fixMode,
     swarmSpeed: Number(process.env.SWARM_SPEED ?? process.env.REPLAY_SPEED ?? 1),
     fixStageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500),
-    fixAttempts: process.env.FIX_ATTEMPTS ? Number(process.env.FIX_ATTEMPTS) : undefined,
+    fixAttempts: fixAttemptsFrom(process.env.FIX_ATTEMPTS),
   });
 }
 

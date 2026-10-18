@@ -11,7 +11,7 @@
 // recording). With a recording, waitForSwarm is skipped.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
+import type { Flow, PersonaId, RunConfig, SwarmAgentResult } from "../../shared";
 import type { SwarmWorkerInput } from "../../worker/swarm";
 import { reserveSeeds } from "./ledger";
 import { mergeRecorded } from "./recorded";
@@ -22,6 +22,8 @@ import type { SwarmWaiter } from "./wait";
 export type RunSwarmOptions = {
   runId: string;
   flowId: string;
+  /** The run's flow snapshot; the worker uses it instead of looking flowId up. */
+  flow?: Flow;
   /** Overrides the flow's goal for the agents. */
   goal?: string;
   /** Deploy preview URL; agents open it with their swarm tag. */
@@ -232,6 +234,7 @@ export async function runSwarm(o: RunSwarmOptions): Promise<SwarmRunResult> {
     const input: SwarmWorkerInput = {
       runId: o.runId,
       flowId: o.flowId,
+      flow: o.flow,
       ...(o.goal ? { goal: o.goal } : {}),
       targetUrl: o.previewUrl,
       agents: plan.sandboxes[i].map(({ personaId, seed }) => ({ personaId, seed })),

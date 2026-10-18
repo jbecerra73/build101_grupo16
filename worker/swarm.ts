@@ -4,7 +4,7 @@
 // single-agent CLI (see claude.ts). Entry point: swarm-cli.ts.
 import { join } from "node:path";
 import { chromium } from "playwright";
-import { PERSONAS, runFlow, type PersonaId, type SwarmAgentResult } from "../shared";
+import { flowOf, PERSONAS, type Flow, type PersonaId, type SwarmAgentResult } from "../shared";
 import { runClaudeAgent, type ClaudeAgentOptions } from "./claude";
 
 export const AGENTS_PER_WORKER = 6;
@@ -13,6 +13,8 @@ export const AGENTS_PER_WORKER = 6;
 export type SwarmWorkerInput = {
   runId: string;
   flowId: string;
+  /** The run's flow snapshot (stored flows are not in FLOWS); wins over flowId. */
+  flow?: Flow;
   /** Overrides the flow's goal for the agents. */
   goal?: string;
   /** The deploy preview; each agent opens it with its swarm tag. */
@@ -54,8 +56,11 @@ export async function pool<T, R>(items: T[], limit: number, fn: (item: T) => Pro
 /** Chromium keeps its sandbox (SPEC: no --no-sandbox); Playwright disables it unless asked. */
 const launchBrowserServer = () => chromium.launchServer({ headless: true, chromiumSandbox: process.env.SWARM_CHROMIUM_SANDBOX !== "0" });
 
+/** The input's own flow, else the built-in one (own keys only). */
+export const workerFlow = (input: Pick<SwarmWorkerInput, "flow" | "flowId" | "goal">): Flow | undefined => flowOf(input);
+
 export async function runSwarmWorker(input: SwarmWorkerInput, o: SwarmWorkerOptions): Promise<SwarmAgentResult[]> {
-  const flow = runFlow(input);
+  const flow = workerFlow(input);
   if (!flow) throw new Error(`Unknown flow ${input.flowId}`);
   const unknown = input.agents.filter((a) => !PERSONAS[a.personaId]).map((a) => a.personaId);
   if (unknown.length) throw new Error(`Unknown personas: ${[...new Set(unknown)].join(", ")}`);

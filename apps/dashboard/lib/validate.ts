@@ -1,4 +1,6 @@
-import { FLOWS, MAX_GOAL_LENGTH, type StartRunRequest } from "@frictionswarm/shared";
+import { MAX_GOAL_LENGTH, type StartRunRequest } from "@frictionswarm/shared";
+import { getFlow, listFlows } from "@frictionswarm/store";
+import { runStore } from "./store";
 
 export const MAX_SEEDS_PER_PERSONA = 10;
 
@@ -6,12 +8,14 @@ const DATE = /^\d{4}-\d\d-\d\d$/;
 const validDate = (s: unknown): s is string => typeof s === "string" && DATE.test(s) && !Number.isNaN(Date.parse(s));
 
 /** Validates an untrusted body as a StartRunRequest ("Analyze"). Returns the cleaned request or a list of errors. */
-export function parseStartRunRequest(body: unknown): { ok: true; value: StartRunRequest } | { ok: false; errors: string[] } {
+export async function parseStartRunRequest(body: unknown): Promise<{ ok: true; value: StartRunRequest } | { ok: false; errors: string[] }> {
   const errors: string[] = [];
   if (!body || typeof body !== "object" || Array.isArray(body)) return { ok: false, errors: ["Body must be a JSON object"] };
   const b = body as Record<string, unknown>;
 
-  if (typeof b.flowId !== "string" || !FLOWS[b.flowId]) errors.push(`flowId must be one of: ${Object.keys(FLOWS).join(", ")}`);
+  const flow = typeof b.flowId === "string" ? await getFlow(runStore(), b.flowId) : undefined;
+  if (!flow)
+    errors.push(`flowId must be one of: ${(await listFlows(runStore())).map((f) => f.id).join(", ")}`);
 
   const goal = typeof b.goal === "string" ? b.goal.trim() : undefined;
   if (b.goal !== undefined && b.goal !== null && (goal === undefined || goal.length > MAX_GOAL_LENGTH))
@@ -39,7 +43,7 @@ export function parseStartRunRequest(body: unknown): { ok: true; value: StartRun
     value: {
       flowId: b.flowId as string,
       // An empty goal or the preset's own means "use the flow's goal".
-      ...(goal && goal !== FLOWS[b.flowId as string].goal ? { goal } : {}),
+      ...(goal && goal !== flow!.goal ? { goal } : {}),
       ...(window ? { window } : {}),
       ...(b.source ? { source: b.source as "file" | "api" } : {}),
       ...(seeds !== undefined ? { seedsPerPersona: seeds as number } : {}),

@@ -4,6 +4,7 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "dependencies": {
+    "@frictionswarm/shared": "*",
     "@netlify/blobs": "11.1.3"
   }
 }

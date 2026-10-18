@@ -16,7 +16,7 @@ code{background:#f2f2f2;padding:.1rem .3rem;border-radius:4px}
 
 export async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  const decision = await gate(path, req.cookies.get(AUTH_COOKIE)?.value);
+  const decision = await gate(path, req.cookies.get(AUTH_COOKIE)?.value, process.env, req.headers.get("authorization") ?? undefined);
   if (decision === "allow") return NextResponse.next();
   if (decision === "setup")
     return path.startsWith("/api/")

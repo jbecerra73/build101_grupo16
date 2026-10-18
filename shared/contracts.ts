@@ -86,14 +86,16 @@ export type Flow = {
   personas?: PersonaId[];
 };
 
-export type RequiredField =
-  | "email"
-  | "fullName"
-  | "address"
-  | "city"
-  | "postalCode"
-  | "country"
-  | "cardNumber";
+export const REQUIRED_FIELDS = [
+  "email",
+  "fullName",
+  "address",
+  "city",
+  "postalCode",
+  "country",
+  "cardNumber",
+] as const;
+export type RequiredField = (typeof REQUIRED_FIELDS)[number];
 
 /** @deprecated Agent event log, retired by the PostHog pivot: agents leave
  * PostHog tracks instead (see SwarmEvent in analytics.ts). Kept so open PRs
@@ -241,6 +243,8 @@ export type RunConfig = {
   targetUrl: string;
   /** For a retest, the analysis run it is compared against. */
   baselineRunId?: string;
+  /** Snapshot of the flow this run was started with (custom flows live in the store). */
+  flow?: Flow;
   /** For a retest, the fix it checks: the analyzer links what the swarm hit to these targets. */
   fix?: FixUnderTest;
   createdAt: string;
@@ -270,7 +274,16 @@ export type FixStatus =
   | "retesting"
   | "ready"
   | "not-proven"
-  | "failed";
+  | "failed"
+  /** The human accepted the fix and its PR was merged. */
+  | "merged"
+  /** The human rejected the fix. */
+  | "rejected";
+
+/** First line of fix/pr.diff when `gh pr diff` failed, so a retry never leaves an earlier
+ * attempt's diff showing under its own PR. */
+export const DIFF_UNAVAILABLE = "# Diff not available";
+export const unavailableDiff = (prNumber: number, reason: string) => `${DIFF_UNAVAILABLE} for PR #${prNumber}: ${reason}\n`;
 
 export type FixAttempt = {
   attempt: number;
@@ -289,6 +302,15 @@ export type FixAttempt = {
   verdict?: Verdict;
   status: FixStatus;
   error?: string;
+  /** The human's accept/reject of this attempt. */
+  decision?: {
+    decision: "accept" | "reject";
+    reason?: string;
+    override?: boolean;
+    decidedAt: string;
+    mergeSha?: string;
+    rehearsal?: boolean;
+  };
 };
 
 export type FixResult = {
@@ -307,6 +329,8 @@ export type RunPhase =
   /** Waiting for the swarm's events to be ingested by PostHog (waitForSwarm). */
   | "collecting"
   | "comparing"
+  /** The retest is compared; waiting for the human to accept or reject the fix. */
+  | "awaiting-decision"
   | "done"
   | "failed";
 
@@ -319,7 +343,15 @@ export type RunStatus = {
   /** Set once the retest swarm has started. */
   retestRunId?: string;
   error?: string;
+  /** Phase transitions, oldest first. */
+  history?: { phase: RunPhase; at: string; message?: string }[];
 };
+
+/** Fix the findings of an analysis run (written by the dashboard or MCP). */
+export type FixRequest = { runId: string; findingIds?: string[]; seedsPerPersona?: number; requestedAt: string };
+
+/** Accept or reject the proven fix of a run awaiting a decision. */
+export type DecisionRequest = { runId: string; decision: "accept" | "reject"; reason?: string; override?: boolean; requestedAt: string };
 
 /** What the dashboard sends to start a pipeline ("Analyze"). */
 export type StartRunRequest = {

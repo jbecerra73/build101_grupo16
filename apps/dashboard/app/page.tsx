@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FlaskConical, Play, ScanSearch } from "lucide-react";
-import { runFlow } from "@frictionswarm/shared";
+import { flowOf } from "@frictionswarm/shared";
 import { FixStatusBadge, PhaseBadge } from "@/components/bits";
 import { RunId, TimeAgo } from "@/components/run-meta";
 import { PersonaAvatar } from "@/components/persona/avatar";
@@ -88,7 +88,7 @@ export default async function RunsPage() {
                     <TableCell className="max-w-80 min-w-56 whitespace-normal">
                       <div className="flex flex-col">
                         <Link href={`/runs/${r.runId}`} className="line-clamp-2 font-medium hover:underline hover:decoration-primary hover:underline-offset-4">
-                          {runFlow(r.config)?.goal ?? r.config.flowId}
+                          {flowOf(r.config)?.goal ?? r.config.flowId}
                         </Link>
                         <span className="text-sm text-muted-foreground">
                           {r.config.kind === "retest" ? `preview ${shortSha(r.config.posthog.buildSha)}` : windowLabel(r.config.window)}

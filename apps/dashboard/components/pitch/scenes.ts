@@ -71,7 +71,7 @@ export const SCENES: SceneMeta[] = [
         "Before: the segment's real users on production. After: the persona swarm on the preview. N on both sides.",
         ...v.comparisons.map((c) => `${segmentShort(c.segmentId)} ↔ ${personaShort(c.personaId)}: ${signedPts(c.completionDeltaPts)}${c.regressions.length ? ` (regressions: ${c.regressions.length})` : ""}.`),
         "Different populations: a directional pre-merge check, not an A/B test.",
-        v.improved ? "Proven against the threshold: the PR is marked ready for review." : "Not proven: the PR gets a metrics comment, the not-proven label and is closed. We show failures honestly.",
+        v.improved ? "Proven against the threshold: the PR is marked ready for review." : "Not proven: the PR gets a metrics comment, the not-proven label and waits for your decision. We show failures honestly.",
       ];
     },
   },

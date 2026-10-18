@@ -22,8 +22,19 @@ export {
   type RunOptions,
   type StartOptions,
 } from "./pipeline";
-export { rankFindings, realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop, type FixLoopOptions } from "./fixLoop";
-export { fakeFixLoop, pickTargets, REHEARSAL_PREVIEW, STOREFRONT_REPO, type FakeFixOptions } from "./fakeFix";
+export {
+  chosenFindings,
+  rankFindings,
+  realApplyDecision,
+  realFixLoop,
+  retestConfig,
+  type Analyzer,
+  type ApplyDecision,
+  type Compare,
+  type FixLoop,
+  type FixLoopOptions,
+} from "./fixLoop";
+export { fakeApplyDecision, fakeFixLoop, pickTargets, rehearsalDiff, REHEARSAL_PREVIEW, STOREFRONT_REPO, type FakeFixOptions } from "./fakeFix";
 export { defaultDataDir, fixedTrapsFromFix, ingested, OFFLINE_COST, offlineSwarmRunner, simulateAgent, swarmFile, type OfflineSwarmOptions } from "./offline";
 export { trapOf, trapsOf, TRAP_IDS, type TrapId } from "./traps";
 export { allocateSeeds, newRunId, RunCapError, reserveRun, runsDir } from "./runs";
