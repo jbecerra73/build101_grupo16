@@ -88,6 +88,14 @@ export async function cancelRun(runId: string, reason?: string): Promise<Control
   return { ok: true, value: { ok: true } };
 }
 
+/** Cancels every queued run (each ends failed, "Cancelled before it started");
+ * running ones are untouched. */
+export async function clearQueue(reason = "Queue cleared"): Promise<{ cleared: string[] }> {
+  const cleared: string[] = [];
+  for (const q of await listQueue()) if ((await cancelRun(q.runId, reason)).ok) cleared.push(q.runId);
+  return { cleared };
+}
+
 /** The request a run was started with: request.json (written by the
  * orchestrator), else rebuilt from config.json. A retest retries its analysis. */
 async function requestOf(runId: string): Promise<StartRunRequest | undefined> {

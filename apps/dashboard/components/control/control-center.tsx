@@ -12,6 +12,7 @@ import {
   Hourglass,
   Inbox,
   Laptop,
+  ListX,
   PlugZap,
   ScanSearch,
   RotateCcw,
@@ -40,7 +41,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cancelRun, getControl, getRun, retryRun } from "@/lib/client/api";
+import { cancelRun, clearQueue, getControl, getRun, retryRun } from "@/lib/client/api";
 import type { ControlOverview, OrchestratorHeartbeat, OrchestratorLaunch, Settings } from "@/lib/control-types";
 import { usePoll, useNow } from "@/lib/hooks/use-poll";
 import { compact, duration, formatDateTime, pct1, personaShort, RETEST_PHASES, segmentColor, segmentShort, relativeTime, windowLabel } from "@/lib/format";
@@ -256,6 +257,49 @@ function CancelButton({ runId, onDone }: { runId: string; onDone: () => void }) 
   );
 }
 
+function ClearQueueButton({ count, onDone }: { count: number; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={busy || count === 0}>
+          {busy ? <Spinner data-icon="inline-start" /> : <ListX data-icon="inline-start" />}
+          Clear queue
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Clear the queue?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {count === 1 ? "The queued run" : `All ${count} queued runs`} will be cancelled and listed as failed (&ldquo;Cancelled before it started&rdquo;). Runs already
+            in progress keep going.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep them</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const { cleared } = await clearQueue();
+                toast.success(cleared.length === 1 ? "Cancelled 1 queued run" : `Cancelled ${cleared.length} queued runs`);
+                onDone();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Clearing the queue failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Clear queue
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function ActiveRow({ r, now, onChange }: { r: RunSummary; now: number; onChange: () => void }) {
   const detail = usePoll(() => getRun(r.runId), 1500).data;
   const phase = detail?.status.phase ?? r.status.phase;
@@ -437,6 +481,9 @@ export function ControlCenter() {
                   <span className="tabular font-normal text-muted-foreground">{c.queued.length}</span>
                 </CardTitle>
                 <CardDescription>Requests waiting for the orchestrator, oldest first.</CardDescription>
+                <CardAction>
+                  <ClearQueueButton count={c.queued.length} onDone={poll.refresh} />
+                </CardAction>
               </CardHeader>
               <CardContent>
                 {c.queued.length ? (

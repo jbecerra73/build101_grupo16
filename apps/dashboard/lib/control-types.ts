@@ -98,6 +98,7 @@ export type OrchestratorLaunch = {
  *   GET  /api/runs/[id]/swarm         → SwarmTopology | 404
  *   POST /api/runs/[id]/cancel        → { ok: true }
  *   POST /api/runs/[id]/retry         → { runId }   (same StartRunRequest, fresh seeds)
+ *   DELETE /api/queue                 → { cleared: string[] }   (cancels every queued run)
  *   GET  /api/settings                → Settings
  *   PUT  /api/settings                → Settings   (validated)
  *   POST /api/runs                    → { runId }   (now enqueues a QueuedRun)

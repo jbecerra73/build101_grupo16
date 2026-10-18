@@ -51,6 +51,9 @@ export async function cancelRun(runId: string, reason?: string): Promise<void> {
   await ok(await call(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }));
 }
 
+/** DELETE /api/queue → the run ids that were queued and are now cancelled. */
+export const clearQueue = async (): Promise<{ cleared: string[] }> => ok(await call("/api/queue", { method: "DELETE" }));
+
 /** POST /api/runs/[id]/retry → { runId } (same request, fresh seeds). */
 export const retryRun = async (runId: string): Promise<{ runId: string }> =>
   ok(await call(`/api/runs/${encodeURIComponent(runId)}/retry`, { method: "POST" }));
