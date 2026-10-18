@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ApplyDecision, FixLoop } from "@frictionswarm/pipeline";
 import { describe, expect, it } from "vitest";
-import { buyTshirt, type FixResult, type Finding, type Metrics, type PersonaMetrics, type RunConfig } from "../shared";
+import { buyTshirt, DIFF_UNAVAILABLE, unavailableDiff, type FixResult, type Finding, type Metrics, type PersonaMetrics, type RunConfig } from "../shared";
 import { applyDecision, readJson, retestSeeds, runFixLoop, type FixLoopOptions } from "./fix-loop";
 
 // Every agent reaches each required step; the ones that don't complete stop before Confirmation.
@@ -50,6 +50,12 @@ describe("retestSeeds", () => {
     expect(new Set([...a1, ...a2]).size).toBe(20);
   });
 });
+
+const retryFinding: Finding = {
+  id: "R1", severity: "high", segments: ["mobile"], personas: ["kai"], step: "Product", page: "/shop/product/*",
+  title: "Sizes hidden behind hover", suggestedFix: "Show size buttons",
+  evidence: { sessions: 4, users: 4, exampleSessions: [], quotes: [] },
+};
 
 describe("runFixLoop", () => {
   it("improved: re-tests the preview build with fresh seeds and marks the PR ready", async () => {
@@ -151,6 +157,41 @@ describe("runFixLoop", () => {
     const closes = ghCalls.filter((a) => a[0] === "pr" && a[1] === "close").map((a) => a[2]);
     expect(closes).toEqual(["41"]);
     expect(ghCalls.some((a) => a[1] === "comment" && a[2] === "41" && a.some((x) => x.includes("superseded") || x.includes("retrying")))).toBe(true);
+  });
+
+  it("retry: a diff that can't be fetched replaces the previous attempt's with a placeholder naming the new PR", async () => {
+    const { runsDir, opts } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [retryFinding]);
+    const ghImpl = opts.ghImpl!;
+    await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      ghImpl: async (args) => {
+        if (args[1] === "diff" && args[2] === "42") throw new Error("gh pr diff failed: boom");
+        return ghImpl(args);
+      },
+    });
+    const diff = await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8");
+    expect(diff).toBe(unavailableDiff(42, "gh pr diff failed: boom"));
+    expect(diff.startsWith(DIFF_UNAVAILABLE)).toBe(true);
+    expect(diff).not.toContain("diff --git");
+  });
+
+  it("retry: a superseded PR that won't close is logged, and the retry still runs", async () => {
+    const { opts, agentCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [retryFinding]);
+    const ghImpl = opts.ghImpl!;
+    const logs: string[] = [];
+    const result = await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      log: (l) => void logs.push(l),
+      ghImpl: async (args) => {
+        if (args[1] === "close") throw new Error("gh pr close failed: nope");
+        return ghImpl(args);
+      },
+    });
+    expect(agentCalls.map((c) => c.attempt)).toEqual([1, 2]);
+    expect(result.attempts.map((a) => a.status)).toEqual(["not-proven", "not-proven"]);
+    expect(logs.some((l) => l.includes("could not close superseded PR #41") && l.includes("nope"))).toBe(true);
   });
 
   it("records a failed attempt in fix.json", async () => {

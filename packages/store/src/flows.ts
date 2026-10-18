@@ -158,6 +158,9 @@ export function diffFlows(before: Flow | undefined, after: Flow): string[] {
   const now = new Set(after.steps.map(key));
   for (const s of after.steps) if (!was.has(key(s))) lines.push(`steps: + ${key(s)}`);
   for (const s of before?.steps ?? []) if (!now.has(key(s))) lines.push(`steps: - ${key(s)}`);
+  // Steps are in funnel order, so a move matters even when nothing was added or removed.
+  const kept = (before?.steps ?? []).map(key).filter((k) => now.has(k));
+  if (kept.join("\n") !== after.steps.map(key).filter((k) => was.has(k)).join("\n")) lines.push("steps: reordered");
 
   const list = (label: string, a: string[], b: string[]) => {
     for (const x of b) if (!a.includes(x)) lines.push(`${label}: + ${x}`);

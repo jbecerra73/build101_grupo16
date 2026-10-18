@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buyTshirt, type FixAttempt, type PersonaComparison, type RunPhase, type SegmentMetrics } from "@frictionswarm/shared";
+import { buyJeans, buyTshirt, unavailableDiff, type FixAttempt, type PersonaComparison, type RunPhase, type SegmentMetrics } from "@frictionswarm/shared";
 import type { RunDetail } from "../../dashboard/lib/types";
 import { analysisReport, decisionPackage, flowCard, story, type Links } from "./format";
 
@@ -103,6 +103,20 @@ describe("flowCard", () => {
     expect(card).not.toContain("🔒 Home");
   });
 
+  it("shows completion events, the attempt filter, the done instruction and personas, before the steps", () => {
+    const card = flowCard(buyJeans);
+    expect(card).toContain("Completion events: `shipping_submitted` (success = true), ");
+    expect(card).toContain("`order_completed`, `product_added` (product_id = 2 | 8)");
+    expect(card).toContain("Counts as attempting (real users): sessions with `product_viewed` (product_id = 2 | 8)");
+    expect(card).toContain(`Done when: ${buyJeans.doneWhen}`);
+    expect(card).toContain("Personas: rosa");
+    expect(card.indexOf("Required fields")).toBeLessThan(card.indexOf("Completion events"));
+    expect(card.indexOf("Personas")).toBeLessThan(card.indexOf("Steps ("));
+    const plain = flowCard({ ...buyTshirt, attempt: undefined, personas: undefined });
+    expect(plain).toContain("Counts as attempting (real users): every session");
+    expect(plain).toContain("Personas: every segment's persona");
+  });
+
   it("lists changes for an edit", () => {
     expect(flowCard(buyTshirt, ['goal: "a" → "b"'])).toContain('goal: "a" → "b"');
   });
@@ -180,6 +194,18 @@ describe("decisionPackage", () => {
   it("fences the diff so a ``` line inside it can't close the block", () => {
     const pkg = decisionPackage(r, "diff --git a/README.md b/README.md\n+```\n+code", links);
     expect(pkg).toContain("````diff\ndiff --git a/README.md b/README.md\n+```\n+code\n````");
+  });
+
+  it("fences a diff that contains a four-backtick run with a longer fence", () => {
+    const pkg = decisionPackage(r, "diff --git a/README.md b/README.md\n+````md\n+x\n+````", links);
+    expect(pkg).toContain("`````diff\ndiff --git a/README.md b/README.md\n+````md\n+x\n+````\n`````");
+  });
+
+  it("shows a diff placeholder as unavailable for its PR, not as a diff block", () => {
+    const pkg = decisionPackage(r, unavailableDiff(12, "gh pr diff failed: boom"), links);
+    expect(pkg).toContain("Diff not available for PR #12: gh pr diff failed: boom.");
+    expect(pkg).not.toContain("```");
+    expect(pkg).not.toContain("Changed files");
   });
 
   it("truncates a long diff and lists its files", () => {

@@ -268,6 +268,11 @@ export type FixStatus =
   /** The human rejected the fix. */
   | "rejected";
 
+/** First line of fix/pr.diff when `gh pr diff` failed, so a retry never leaves an earlier
+ * attempt's diff showing under its own PR. */
+export const DIFF_UNAVAILABLE = "# Diff not available";
+export const unavailableDiff = (prNumber: number, reason: string) => `${DIFF_UNAVAILABLE} for PR #${prNumber}: ${reason}\n`;
+
 export type FixAttempt = {
   attempt: number;
   findingIds: string[];

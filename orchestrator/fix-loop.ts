@@ -14,6 +14,7 @@ import {
   type Verdict,
   type Metrics,
   type RunConfig,
+  unavailableDiff,
 } from "../shared";
 import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
 import { topFindings } from "./fix-prompt";
@@ -146,12 +147,16 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       });
       await save();
       // Saved for the dashboard and the PO's decision; the deployed dashboard has no GitHub access.
+      // On failure a placeholder replaces it, so a retry never shows the previous attempt's diff.
+      const diffFile = join(baseDir, "fix", "pr.diff");
+      await mkdir(join(baseDir, "fix"), { recursive: true });
       await prDiff(repo, agent.prNumber, ghImpl)
-        .then(async (diff) => {
-          await mkdir(join(baseDir, "fix"), { recursive: true });
-          await writeFile(join(baseDir, "fix", "pr.diff"), diff + "\n");
-        })
-        .catch((e) => log(`could not save the PR diff: ${e instanceof Error ? e.message : String(e)}`));
+        .then((diff) => writeFile(diffFile, diff + "\n"))
+        .catch(async (e) => {
+          const reason = e instanceof Error ? e.message : String(e);
+          log(`could not save the PR diff: ${reason}`);
+          await writeFile(diffFile, unavailableDiff(agent.prNumber, reason)).catch(() => {});
+        });
 
       log(`waiting for ${attempt.previewUrl} to serve ${agent.commitSha.slice(0, 7)}`);
       await waitForBuild(attempt.previewUrl!, agent.commitSha, {
@@ -214,8 +219,11 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       if (lastChance) break;
       // Superseded: the retry's PR is the Product Owner's decision target, so this one is closed
       // (with a comment saying why) rather than left open next to it.
-      await closeSupersededPr(repo, agent.prNumber, n + 1, ghImpl);
-      log(`closed PR #${agent.prNumber} (not proven, superseded by attempt ${n + 1})`);
+      // A failed close doesn't fail this attempt or stop the retry; the PR is just left open.
+      await closeSupersededPr(repo, agent.prNumber, n + 1, ghImpl).then(
+        () => log(`closed PR #${agent.prNumber} (not proven, superseded by attempt ${n + 1})`),
+        (e) => log(`could not close superseded PR #${agent.prNumber}: ${e instanceof Error ? e.message : String(e)}`),
+      );
       log("retrying once with the re-test's findings");
       findings = retest.findings;
     } catch (e) {

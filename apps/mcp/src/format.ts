@@ -1,7 +1,7 @@
 // Markdown the MCP tools reply with: flow cards, analysis reports, the run story
 // and the decision package. Pure functions over the dashboard API's JSON, sized
 // to read well in a terminal.
-import type { FixAttempt, Finding, Flow, PersonaComparison, RunPhase, Severity } from "@frictionswarm/shared";
+import { DIFF_UNAVAILABLE, type EventMatch, type FixAttempt, type Finding, type Flow, type PersonaComparison, type RunPhase, type Severity } from "@frictionswarm/shared";
 import type { SwarmTopology } from "../../dashboard/lib/control-types";
 import type { RunDetail } from "../../dashboard/lib/types";
 
@@ -33,7 +33,14 @@ const successRule = (flow: Flow) =>
     .filter(Boolean)
     .join(" and ");
 
-/** The flow review card, in the dashboard flow page's order: goal, start URL, success, required fields, steps. */
+const eventMatchText = (m: EventMatch) => {
+  const where = Object.entries(m.where ?? {}).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.map(String).join(" | ") : String(v)}`);
+  return `\`${m.event}\`${where.length ? ` (${where.join(", ")})` : ""}`;
+};
+
+/** The flow review card, in the dashboard flow page's order: goal, start URL, success, required fields, steps.
+ * The rest of the flow (completion events, attempt filter, done instruction, personas) sits between the
+ * required fields and the steps, so nothing the coding agent and swarm use is hidden from the review. */
 export function flowCard(flow: Flow, changes?: string[]): string {
   const lines = [
     `### Flow \`${flow.id}\``,
@@ -41,6 +48,10 @@ export function flowCard(flow: Flow, changes?: string[]): string {
     `Start URL: ${flow.startUrl}`,
     `Success: ${successRule(flow)}`,
     `Required fields: ${flow.required.fields.length ? flow.required.fields.join(", ") : "none"}`,
+    `Completion events: ${flow.completion?.length ? flow.completion.map(eventMatchText).join(", ") : "none"}`,
+    `Counts as attempting (real users): ${flow.attempt ? `sessions with ${eventMatchText(flow.attempt)}` : "every session"}`,
+    `Done when: ${flow.doneWhen || "from the success rule"}`,
+    `Personas: ${flow.personas?.length ? flow.personas.join(", ") : "every segment's persona"}`,
     "",
     "Steps (🔒 = required, the coding agent may not remove it):",
     ...flow.steps.map((s, i) => `${i + 1}. ${s.route} → ${flow.required.steps.includes(s.name) ? "🔒 " : ""}${s.name}`),
@@ -208,10 +219,12 @@ export function decisionPackage(run: RunDetail, diff: string | undefined, links:
 
   out.push("", "### 5. The change", a.summary ? `Coding agent: ${a.summary}` : "No summary from the coding agent.");
   if (diff === undefined) out.push("", "Diff not available.");
+  else if (diff.startsWith(DIFF_UNAVAILABLE)) out.push("", diff.split("\n")[0].slice(2).replace(/\.?$/, "."));
   else {
     const files = changedFiles(diff);
     const lines = diff.replace(/\n$/, "").split("\n");
-    out.push("", `Changed files (${files.length}): ${files.join(", ") || "none"}`, "", "````diff", ...lines.slice(0, MAX_DIFF_LINES), "````");
+    const fence = "`".repeat(Math.max(4, ...[...diff.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+    out.push("", `Changed files (${files.length}): ${files.join(", ") || "none"}`, "", `${fence}diff`, ...lines.slice(0, MAX_DIFF_LINES), fence);
     if (lines.length > MAX_DIFF_LINES) out.push(`… ${lines.length - MAX_DIFF_LINES} more lines; files: ${files.join(", ")}`);
   }
 

@@ -46,6 +46,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const seg = encodeURIComponent;
 
 const stepSchema = z.object({ route: z.string().describe("Pathname pattern, `*` wildcard, optional ?key=value"), name: z.string() });
+const eventMatch = z.object({ event: z.string(), where: z.record(z.string(), z.any()).optional() });
 const flowShape = {
   id: z.string().describe("Lowercase slug, e.g. buy-tshirt"),
   goal: z.string().describe("What the user is trying to do, in one sentence"),
@@ -56,10 +57,12 @@ const flowShape = {
     .object({ steps: z.array(z.string()), fields: z.array(z.string()) })
     .describe("Step names the coding agent may not remove, and required form fields (email, fullName, address, city, postalCode, country, cardNumber)"),
   completion: z
-    .array(z.object({ event: z.string(), where: z.record(z.string(), z.any()).optional() }))
+    .array(eventMatch)
     .optional()
     .describe("Optional: PostHog events a valid completion must contain, e.g. { event: \"order_completed\" }"),
+  attempt: eventMatch.optional().describe("Optional: the PostHog event that marks a real-user session as attempting this flow (default: every session)"),
   doneWhen: z.string().optional().describe("Optional: tells the swarm agent when to call done (default: from the success rule)"),
+  personas: z.array(z.string()).optional().describe("Optional: persona ids that swarm this flow (default: every segment's persona)"),
 };
 const fullFlow = z.object(flowShape);
 /** draft_flow takes whatever the user has said so far; the dashboard reports what is missing. */

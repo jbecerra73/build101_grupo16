@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { buyTshirt, type FixAttempt, type RunPhase } from "@frictionswarm/shared";
+import { buyJeans, buyTshirt, type FixAttempt, type RunPhase } from "@frictionswarm/shared";
 import type { RunDetail } from "../../dashboard/lib/types";
 import { ApiClient } from "./client";
 import { registerTools } from "./tools";
@@ -130,6 +130,20 @@ describe("tools", () => {
     const err = await stale.call("save_flow", { flow: buyTshirt, draftHash: "old" });
     expect(err.isError).toBe(true);
     expect(err.text).toContain("Flow changed since it was reviewed");
+  });
+
+  it("draft_flow → save_flow keeps a flow's attempt filter and personas", async () => {
+    const { call, calls } = await connect({
+      "POST /api/flows/validate": (body) => ({ body: { ...draftOk, flow: (body as { flow: unknown }).flow, draftHash: "hash-j" } }),
+      "PUT /api/flows/buy-jeans": (body) => ({ body: { flow: (body as { flow: unknown }).flow } }),
+    });
+    const draft = await call("draft_flow", { flow: buyJeans, baseFlowId: "buy-jeans" });
+    expect(calls[0].body).toMatchObject({ flow: { attempt: buyJeans.attempt, personas: ["rosa"], completion: buyJeans.completion } });
+    expect(draft.text).toContain("Personas: rosa");
+    expect(draft.text).toContain("`product_viewed`");
+    await call("save_flow", { flow: buyJeans, draftHash: "hash-j" });
+    const put = calls.find((c) => c.method === "PUT");
+    expect(put?.body).toEqual({ flow: buyJeans, draftHash: "hash-j" });
   });
 
   it("accept_fix on a not-proven fix without override is refused", async () => {

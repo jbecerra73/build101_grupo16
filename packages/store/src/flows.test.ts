@@ -110,4 +110,19 @@ describe("diffFlows", () => {
     expect(lines).toContain('success.visibleText: "Payment confirmed" → "Thanks!"');
     expect(diffFlows(buyTshirt, buyTshirt)).toEqual([]);
   });
+
+  it("reports a pure step reorder", () => {
+    const [first, second, ...rest] = buyTshirt.steps;
+    expect(diffFlows(buyTshirt, { ...buyTshirt, steps: [second, first, ...rest] })).toEqual(["steps: reordered"]);
+    // An added step alone is not a reorder.
+    expect(diffFlows(buyTshirt, { ...buyTshirt, steps: [{ route: "/intro", name: "Intro" }, ...buyTshirt.steps] })).toEqual(["steps: + /intro → Intro"]);
+  });
+
+  it("describes required steps and fields added and removed", () => {
+    const after: Flow = {
+      ...buyTshirt,
+      required: { steps: [...buyTshirt.required.steps.filter((s) => s !== "Cart"), "Account"], fields: [...buyTshirt.required.fields.filter((f) => f !== "cardNumber")] },
+    };
+    expect(diffFlows(buyTshirt, after)).toEqual(["required.steps: + Account", "required.steps: - Cart", "required.fields: - cardNumber"]);
+  });
 });
