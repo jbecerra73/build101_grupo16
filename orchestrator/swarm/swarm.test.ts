@@ -233,3 +233,37 @@ describe("offline runner", () => {
 });
 
 vi.setConfig({ testTimeout: 10_000 });
+
+describe("recorded tracks", () => {
+  /** Like finishingWorker, plus the events each agent's browser recorded (one from another run). */
+  const recordingWorker: FakeWorker = async (ctx) => {
+    for (const { personaId, seed } of ctx.input.agents) {
+      const agentId = `${personaId}-${seed}`;
+      const ev = (event: string, ts: string, run = ctx.input.runId) =>
+        JSON.stringify({ uuid: `${agentId}-${event}-${run}`, event, distinct_id: `swarm:${agentId}`, timestamp: ts, properties: { $session_id: agentId, swarm_run: run, swarm_agent: agentId, build_sha: "abc123" } });
+      const lines = [ev("$pageview", "2026-10-18T10:00:00.000Z"), ev("swarm_done", `2026-10-18T10:0${seed % 10}:00.000Z`), ev("$pageview", "2026-10-18T09:00:00.000Z", "other"), "{half"];
+      await ctx.sandbox.writeFile(`${ctx.runsDir}/${ctx.input.runId}/events/${agentId}.jsonl`, lines.join("\n") + "\n");
+    }
+    return finishingWorker(ctx);
+  };
+
+  it("merges every agent's recording into posthog.jsonl and skips the PostHog wait", async () => {
+    const provider = new FakeSandboxProvider({ workerFor: () => recordingWorker });
+    const { opts, runsDir, waiter } = setup(provider, { seeds: { rosa: [1, 2], kai: [1], typical: [3] } });
+    await runSwarm(opts);
+    const events = readFileSync(join(runsDir, "r1", "posthog.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(events).toHaveLength(8);
+    expect(events.every((e) => e.properties.swarm_run === "r1")).toBe(true);
+    expect(events.map((e) => e.timestamp)).toEqual([...events.map((e) => e.timestamp)].sort());
+    expect(existsSync(join(runsDir, "r1", "events", "kai-1.jsonl"))).toBe(true);
+    expect(waiter.calls).toHaveLength(0);
+  });
+
+  it("still waits for PostHog when nothing was recorded", async () => {
+    const provider = new FakeSandboxProvider();
+    const { opts, runsDir, waiter } = setup(provider, { seeds: { rosa: [1], kai: [1], typical: [1] } });
+    await runSwarm(opts);
+    expect(existsSync(join(runsDir, "r1", "posthog.jsonl"))).toBe(false);
+    expect(waiter.calls).toHaveLength(1);
+  });
+});

@@ -53,6 +53,7 @@ export function claudeArgs(o: ClaudeAgentOptions) {
           "--run", o.runId, "--run-dir", o.runDir, "--url", o.targetUrl,
           ...(o.headed ? ["--headed"] : []),
           ...(o.browserWs ? ["--browser-ws", o.browserWs] : []),
+          ...(process.env.SWARM_POSTHOG === "mock" ? ["--posthog-mock"] : []),
         ],
       },
     },

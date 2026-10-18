@@ -206,6 +206,8 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
             await deps.runSwarm(c);
           },
           collect: async (c) => {
+            // The swarm's browsers recorded its events (runs/<retest>/posthog.jsonl): nothing to wait for.
+            if (existsSync(join(deps.runsDir, c.runId, "posthog.jsonl"))) return void (await set("collecting", "Swarm events recorded by the agents' browsers"));
             await set("collecting", "Waiting for PostHog to ingest the swarm's events");
             const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
             await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
