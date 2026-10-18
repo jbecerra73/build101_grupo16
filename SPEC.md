@@ -41,8 +41,8 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 13. As a PM, I want a live grid of agent browser views during the re-test, so that I can watch personas use the fixed flow.
 14. As a PM, I want a before/after comparison per segment (real users before, persona swarm after), so that I can see whether the fix helped.
 15. As a PM, I want failed fix attempts shown honestly ("fix attempted, not proven"), so that I trust the tool.
-16. As an engineer, I want a PR containing the diff, before/after metrics table, fixed findings with their evidence, and a link to the report, so that I can review with evidence.
-17. As an engineer, I want PRs that don't meet the threshold to be closed and labelled `not-proven`, so that my queue only has proven improvements.
+16. As an engineer, I want a PR containing the diff, before/after metrics table, fixed findings with their evidence, and a link to the report, so that I can review with evidence. A human then accepts (merge to production `main`) or rejects (close the PR), from the dashboard or from Claude Code.
+17. As an engineer, I want PRs that don't meet the threshold labelled `not-proven` and left open for a human decision, so that nothing is merged or closed without a person saying so.
 18. As an engineer, I want the coding agent to only touch the storefront repo, so that it can't tamper with personas, tests or analytics.
 19. As a PM, I want a control segment/persona whose metrics must not regress, so that a fix for one group doesn't hurt everyone else.
 20. As a PM, I want re-tests to use fresh seeds, so that fixes don't overfit to specific agent runs.
@@ -155,6 +155,7 @@ type Flow = {
   required: { steps: string[]; fields: string[] };   // locked; coding agent can't change
 };
 ```
+Flows are stored at `flows/<id>.json` in the run store (seeded from `shared/flows.ts`) and can be drafted and saved from Claude Code. Each run snapshots the flow it used in `RunConfig.flow`, so a run stays runnable after the stored flow changes.
 
 ### Analyzer
 - Input is PostHog events, grouped by `$session_id`. One session = one funnel attempt (real user) or one agent (swarm).
@@ -188,14 +189,18 @@ type Finding = {
 - Input: storefront repo clone, top 1–3 findings (with selectors and release attribution), flow's required steps/fields as a hard constraint. **Protected:** `src/lib/analytics.ts`, the `build-sha` meta and `data-echo` markers — a fix that changes tracking can't be measured.
 - Output: branch pushed + **draft PR** opened. Single focused diff.
 - Orchestrator waits for the preview: polls until `build-sha` meta == pushed commit SHA.
-- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment, `not-proven` label, close; dashboard shows "fix attempted, not proven".
+- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment and `not-proven` label; the PR is **not** closed. Either way the run moves to `awaiting-decision`: a human accepts (`gh pr merge --squash --delete-branch`, `FixStatus` `merged`) or rejects (PR closed with a comment, `rejected`). Accepting a `not-proven` fix needs an explicit `override`. Dashboard shows "fix attempted, not proven" until then. One fix per analysis run.
 
 ### Orchestrator & dashboard
 - Run state on disk, no DB: analysis run `runs/<id>/{config.json, status.json, posthog.jsonl, metrics.json, findings.json, fix.json}`; re-test run `runs/<id>/{config.json, status.json, screenshots/, posthog.jsonl, metrics.json, findings.json}`.
-- Phases: `analyzing` → (autoFix: `fixing` → `waiting-preview` → `retesting` → `collecting` (waiting for PostHog ingestion) → `comparing`) → `done` | `failed`.
+- Phases: `analyzing` → (autoFix: `fixing` → `waiting-preview` → `retesting` → `collecting` (waiting for PostHog ingestion) → `comparing` → `awaiting-decision`) → `done` | `failed`. In `awaiting-decision` the pipeline has ended and freed its concurrency slot; `done` is reached only after the decision, which the daemon applies. `fix-request.json` is a "fix it" request for the findings of a finished analysis, `decision.json` the accept/reject, `fix/pr.diff` the PR diff saved so the dashboard can serve it without GitHub access. `RunConfig` gains `flow` (the flow snapshot).
 - Orchestrator: read PostHog → analyze → invoke coding agent → wait for preview → swarm on preview → wait for tracks → analyze tracks → compare → finalize PR.
+- Dashboard API (`/api/*`) is gated by a bearer token (`DASHBOARD_API_TOKEN`, even without `DASHBOARD_PASSWORD`). Routes: `/api/flows*`, `/api/personas`, `/api/runs/:id/fix`, `/api/runs/:id/decision`.
 - Caps: max actions per agent (40), max runs per day.
 - Dashboard pages: define flow / pick window; report (segment funnels + trend with releases, hotspots, evidence); live re-test grid; before/after + PR status; replay a past run.
+
+### Claude Code MCP (`apps/mcp`)
+A stdio MCP server that is a thin client of the dashboard API (`FS_API_URL`, `FS_API_TOKEN`). Tools: `list_flows`, `get_flow`, `draft_flow`, `save_flow`, `list_personas`, `analyze_flow`, `start_fix`, `get_run`, `get_decision`, `accept_fix`, `reject_fix`, `cancel_run`. The `watch-run` skill (`.claude/skills/watch-run`) follows a run until `awaiting-decision`. Accept and reject are asynchronous: the request is recorded, the daemon applies it.
 
 ### Work split (contracts to lock first: tracking plan, PostHogSource, Finding, Metrics)
 - **P1 — storefront + coding agent**: PostHog tracking + swarm tagging (FrissA/demo-ecommerce#7), traps T1–T5, build-sha meta, confirmation echo, Claude Code headless fix flow (analytics files protected), draft PR → ready/close lifecycle, preview-SHA polling, verdict against segment baselines.

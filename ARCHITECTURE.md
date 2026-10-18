@@ -7,6 +7,8 @@ Derived from `SPEC.md` (PostHog pivot: no baseline swarm; the swarm only re-test
 ```mermaid
 flowchart LR
     PM([PM / Presenter])
+    CC(["Claude Code<br/>+ watch-run skill"])
+    MCP["MCP server (apps/mcp)<br/>flows · analyze · fix · decide"]
     Users([Real shoppers])
 
     subgraph Laptop["Demo laptop — this repo (Next.js, TypeScript)"]
@@ -46,6 +48,9 @@ flowchart LR
     end
 
     PM --> Dash
+    PM --> CC
+    CC <-->|stdio| MCP
+    MCP -->|dashboard API,<br/>bearer token| Dash
     Dash <--> Orch
     Presets --> Orch
     Users -->|shop| Prod
@@ -72,7 +77,8 @@ flowchart LR
     Preview -->|same events + swarm_* narration,<br/>tagged swarm_run| PHE
     Agents --> Shots
     Orch -->|poll readFile| Shots
-    Orch -->|ready for review<br/>or close + not-proven| GH
+    Orch -->|ready for review<br/>or not-proven label| GH
+    Orch -->|on human decision:<br/>merge or close PR| GH
 ```
 
 ## Demo loop
