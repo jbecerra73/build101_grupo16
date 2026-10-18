@@ -3,7 +3,7 @@
 // is computed by code from the cited signals, so the model can't invent it. Messages API
 // (ANTHROPIC_API_KEY) → Agent SDK (CLAUDE_CODE_OAUTH_TOKEN) → deterministic heuristic.
 import { z } from "zod";
-import { PERSONAS, SEGMENTS, type Finding, type Flow, type Metrics, type RunKind, type SegmentId, type Severity } from "@frictionswarm/shared";
+import { PERSONAS, SEGMENTS, type Finding, type FixUnderTest, type Flow, type Metrics, type RunKind, type SegmentId, type Severity } from "@frictionswarm/shared";
 import { buildEvidence, clusterGroups, groupsOfSegments, heuristicFindings, segmentsFor, shareFor, type FindingContext } from "./heuristic";
 import type { History } from "./history";
 import type { SessionSummary } from "./sessions";
@@ -26,12 +26,18 @@ export const ModelFindingSchema = z.object({
   suggestedFix: z.string(),
   /** Verbatim swarm notes (retest only). */
   quotes: z.array(z.string()),
+  /** Retest of a fix: the fix target id this is the same problem as (the fix didn't solve it), or null. */
+  persistsFrom: z.string().nullable(),
 });
 export const FindingsSchema = z.object({ findings: z.array(ModelFindingSchema) });
 /** The full model answer: findings and (retest) give-up themes in one call. */
 export const AnswerSchema = FindingsSchema.extend({ themes: z.array(ModelThemeSchema) });
-/** Parsing is lenient about themes: an answer without them keeps its findings and gets heuristic themes. */
-const LenientAnswerSchema = FindingsSchema.extend({ themes: z.array(z.unknown()).optional() });
+/** Parsing is lenient about themes (an answer without them keeps its findings and gets heuristic
+ * themes) and about persistsFrom (older answers have none). */
+const LenientAnswerSchema = z.object({
+  findings: z.array(ModelFindingSchema.extend({ persistsFrom: z.string().nullish() })),
+  themes: z.array(z.unknown()).optional(),
+});
 export type ModelAnswer = z.infer<typeof AnswerSchema>;
 
 /** Anything that turns (system, user) prompts into the model's JSON answer (object or JSON text). */
@@ -47,6 +53,8 @@ export type FindingsInput = {
   sessions: SessionSummary[];
   signals: Signal[];
   history?: History;
+  /** Retest: the fix under test (RunConfig.fix). */
+  fix?: FixUnderTest;
 };
 
 export type FindingsOptions = {
@@ -84,13 +92,18 @@ Rules:
   that keeps every required step and field.
 - "quotes" are copied verbatim from the swarm notes given (re-test only); otherwise [].
 - "severity": high = blocks many orders, medium = loses some, low = annoyance.
+A re-test checks a fix: "fixUnderTest" lists the findings the coding agent was asked to fix and what it says it changed.
+- "persistsFrom" is the id of the fix target a finding is the same problem as, when the swarm still hits it (the fix
+  didn't solve it); null for anything else, including problems the fix may have introduced. Say in "title" when a
+  problem looks new on this build. Without "fixUnderTest", "persistsFrom" is null.
+- "suggestedFix" for a persisting target says what to do differently from the change already made.
 For a re-test, also group the give-ups ("giveUps") into themes: the underlying reasons the agents left, in plain words.
 Each agent in "giveUps" belongs to exactly one theme ("agentIds"); "quotes" are verbatim from that agent's notes,
 with its agentId; "findingIds" are positions in your findings list ("F1" = first). No give-ups (or an analysis) means "themes": [].
 Answer with JSON only, exactly this shape (all keys required):
 {"findings": [{"severity": "high" | "medium" | "low", "signalIds": ["S1"], "segments": ["low_vision" | "mobile" | "desktop"],
   "step": "<step name>", "page": "<route>", "selector": "<selector>" | null, "title": "<problem>",
-  "suggestedFix": "<one change>", "quotes": ["<verbatim note>"]}],
+  "suggestedFix": "<one change>", "quotes": ["<verbatim note>"], "persistsFrom": "<target id>" | null}],
  "themes": [{"title": "<short reason>", "agentIds": ["<agent id>"], "quotes": [{"agentId": "<agent id>", "text": "<verbatim note>"}], "findingIds": ["F<n>"]}]}`;
 
 const pct = (x: number) => Math.round(x * 1000) / 10;
@@ -143,6 +156,7 @@ export function buildPrompt(input: FindingsInput, opts: FindingsOptions = {}) {
     ...(input.history && { releases: input.history.releases.map((r) => `${r.date} ${r.name}`) }),
     groups,
     signals,
+    ...(kind === "retest" && input.fix && { fixUnderTest: input.fix }),
     ...(kind === "retest" && {
       giveUps: [...giveUpAgents(input.sessions)].map(([agentId, g]) => ({ agentId, personaId: g.personaId, step: g.step, notes: g.notes })),
     }),
@@ -180,6 +194,7 @@ export function sanitizeAnswer(raw: unknown, input: FindingsInput): SanitizedAns
   const notes = input.sessions.flatMap((s) => s.notes.map((n) => n.text));
   const steps = new Set(input.flow.steps.map((s) => s.name));
   const ctx: FindingContext = { flow: input.flow, kind: input.kind, sessions: input.sessions };
+  const targetIds = new Set(input.kind === "retest" ? (input.fix?.targets.map((t) => t.id) ?? []) : []);
   const kept = parsed.findings.flatMap((f, i) => {
     const cited = [...new Set(f.signalIds)].map((id) => byId.get(id)).filter((s): s is Signal => !!s);
     if (!cited.length) return [];
@@ -191,6 +206,7 @@ export function sanitizeAnswer(raw: unknown, input: FindingsInput): SanitizedAns
     const evidence = buildEvidence(ctx, cited, groupsOfSegments(input.kind, segments), step);
     const quotes = [...new Set(f.quotes.map((q) => q.trim()).filter((q) => q && notes.some((n) => n.includes(q))))];
     const page = input.flow.steps.find((s) => s.name === step)?.route.split("?")[0] ?? cited[0].page;
+    const persistsFrom = f.persistsFrom && targetIds.has(f.persistsFrom) ? f.persistsFrom : undefined;
     const finding: Finding = {
       id: "",
       severity: f.severity,
@@ -202,6 +218,7 @@ export function sanitizeAnswer(raw: unknown, input: FindingsInput): SanitizedAns
       title: f.title.trim(),
       evidence: { ...evidence, quotes: quotes.length ? quotes : evidence.quotes },
       suggestedFix: f.suggestedFix.trim(),
+      ...(persistsFrom ? { persistsFrom } : {}),
     };
     return [{ modelId: `F${i + 1}`, finding }];
   });
@@ -276,6 +293,20 @@ export function modelFromEnv(env: Record<string, string | undefined>, timeoutMs:
   return undefined;
 }
 
+/** Heuristic link from a retest's findings to the fix targets: the same step, and the same element
+ * when both name one. Each target is linked at most once, to the first (most severe) match. */
+export function linkToTargets(findings: Finding[], fix: FixUnderTest | undefined): Finding[] {
+  if (!fix?.targets.length) return findings;
+  const left = [...fix.targets];
+  return findings.map((f) => {
+    if (f.persistsFrom) return f;
+    const i = left.findIndex((t) => t.step === f.step && (!t.selector || !f.selector || t.selector === f.selector));
+    if (i < 0) return f;
+    const [t] = left.splice(i, 1);
+    return { ...f, persistsFrom: t.id };
+  });
+}
+
 const withTimeout = <T>(p: Promise<T>, ms: number) =>
   Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`timed out after ${ms}ms`)), ms).unref())]);
 
@@ -284,7 +315,7 @@ const withTimeout = <T>(p: Promise<T>, ms: number) =>
 export async function generateFindings(input: FindingsInput, opts: FindingsOptions = {}): Promise<FindingsResult> {
   const ctx: FindingContext = { flow: input.flow, kind: input.kind, sessions: input.sessions };
   const heuristic = (error?: string): FindingsResult => {
-    const findings = heuristicFindings(ctx, input.signals);
+    const findings = input.kind === "retest" ? linkToTargets(heuristicFindings(ctx, input.signals), input.fix) : heuristicFindings(ctx, input.signals);
     return {
       findings,
       themes: heuristicThemes(input.kind, input.sessions, findings),

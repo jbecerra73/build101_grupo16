@@ -116,7 +116,8 @@ export function PopulationsNote() {
 }
 
 function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Finding[]; total: number }) {
-  const fixed = a.findingIds.map((id) => findings.find((f) => f.id === id) ?? ({ id, title: id } as Pick<Finding, "id" | "title">));
+  // Retries target the previous re-test's findings (a.targets), whose ids aren't the analysis's.
+  const fixed = a.targets ?? a.findingIds.map((id) => findings.find((f) => f.id === id) ?? ({ id, title: id } as Pick<Finding, "id" | "title">));
   const v = a.verdict;
   return (
     <Card>

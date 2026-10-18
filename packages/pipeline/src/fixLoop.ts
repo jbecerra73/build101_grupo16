@@ -30,7 +30,7 @@ export type FixLoopOptions = {
   /** Analyzes the retest's tracks. The pipeline moves to "comparing". */
   analyze: Analyzer;
   compare: Compare;
-  /** Fix attempts per loop: 2 retries once with the re-test's findings (#16). */
+  /** Fix attempts per loop: each retry builds on the same PR with the re-test's findings (#16). */
   maxAttempts?: number;
 };
 
@@ -68,11 +68,11 @@ type P1Module = { runFixLoop?: FixLoop };
  * polling, PR finalization), imported at call time from FIX_LOOP_MODULE or
  * <repo>/orchestrator/fix-loop.ts. The specifier is computed so neither tsc nor
  * the Next bundler needs the file; when it is missing the run fails with
- * "P1 fix loop not available". maxAttempts defaults to 2: one retry when the
- * first fix isn't proven (#16). */
+ * "P1 fix loop not available". maxAttempts defaults to 3: up to two retries on
+ * the same PR while the fix isn't proven (#16). */
 export function realFixLoop(
   modulePath = process.env.FIX_LOOP_MODULE ?? join(REPO_ROOT, "orchestrator", "fix-loop.ts"),
-  { maxAttempts = 2 }: { maxAttempts?: number } = {},
+  { maxAttempts = 3 }: { maxAttempts?: number } = {},
 ): FixLoop {
   return async (o) => {
     let mod: P1Module;

@@ -5,6 +5,7 @@
 //   retesting        persona swarm on the preview, fresh seeds
 //   collecting       waiting for PostHog to ingest the swarm's events
 //   comparing        analyzer on the swarm's tracks, persona vs segment verdict
+//                    not proven with attempts left → fixing again, on the same PR
 //   done | failed
 // There is no baseline swarm: "before" is real users, "after" is the swarm.
 import { existsSync } from "node:fs";
@@ -173,10 +174,12 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
   const log = deps.log ?? (() => {});
   let status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString() };
   let writes = Promise.resolve();
-  const set = (phase: RunPhase, message: string, extra: Partial<RunStatus> = {}) => {
+  /** The fix attempt the phases belong to: a retry starts over at "fixing". */
+  let attemptSeen = 1;
+  const set = (phase: RunPhase, message: string, extra: Partial<RunStatus> = {}, opts: { restart?: boolean } = {}) => {
     if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
-    // Phases only move forward (the fix.json watcher may lag behind).
-    if (phase !== "failed" && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
+    // Phases only move forward within an attempt (the fix.json watcher may lag behind).
+    if (phase !== "failed" && !opts.restart && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
     if (phase === status.phase && message === status.message && !Object.keys(extra).length) return writes;
     status = { ...status, ...extra, phase, message, updatedAt: new Date().toISOString() };
     const snap = status;
@@ -197,7 +200,11 @@ export async function runPipeline(runId: string, opts: RunOptions, deps: Pipelin
     const watcher = setInterval(async () => {
       const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
       const a = fix?.attempts.at(-1);
-      if (a?.status === "draft")
+      if (a && a.attempt > attemptSeen) {
+        attemptSeen = a.attempt;
+        void set("fixing", `Not proven yet: coding agent retrying (attempt ${a.attempt}) with what the swarm hit`, {}, { restart: true }).catch(() => {});
+      }
+      if (a?.status === "draft" && a.attempt === attemptSeen)
         void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
     }, deps.fixWatchMs ?? 500);
     let result: FixResult;
@@ -326,7 +333,7 @@ export type DepsConfig = {
   /** Offline swarm speed (>1 is faster); 1 = ~30 s on screen. */
   swarmSpeed: number;
   fixStageDelayMs?: number;
-  /** Real fix loop attempts (default 2: one retry when not proven). */
+  /** Real fix loop attempts (default 3: up to two retries on the same PR while not proven). */
   fixAttempts?: number;
   signal?: AbortSignal;
   log?: (line: string) => void;
@@ -361,7 +368,7 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
 
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
  * SWARM_SPEED, FIX_LOOP=real|fake (fake = offline rehearsal, default with the
- * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 2). */
+ * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 3). */
 export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
   const env = process.env.SWARM_RUNNER ?? "offline";
   if (!["offline", "replay", "tenki", "p2"].includes(env)) throw new Error(`Unknown SWARM_RUNNER "${env}" (offline|tenki)`);
