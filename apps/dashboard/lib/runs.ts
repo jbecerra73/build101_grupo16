@@ -157,7 +157,7 @@ async function queuedRun(runId: string): Promise<RunDetail | undefined> {
     runId,
     config: placeholderConfig(runId, q.req, q.requestedAt),
     status: { runId, phase: "analyzing", message: "Queued: waiting for the orchestrator", updatedAt: q.requestedAt, inferred: true },
-    flow: FLOWS[q.req.flowId],
+    flow: flowOf(q.req),
     agents: [],
     giveUps: [],
     replayBase: replayBase(),
@@ -177,6 +177,7 @@ export function placeholderConfig(runId: string, req: StartRunRequest, createdAt
     runId,
     kind: "analysis",
     flowId: req.flowId,
+    ...(req.goal ? { goal: req.goal } : {}),
     // The orchestrator fills in the default window (last 28 days) and the current release.
     window: req.window ?? defaultWindowFor(createdAt),
     posthog: { source: req.source ?? "file", buildSha: req.window ? "" : "current" },

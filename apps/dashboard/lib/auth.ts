@@ -1,8 +1,11 @@
 // Password gate for the deployed dashboard (Netlify's own password protection
-// is a paid feature). With DASHBOARD_PASSWORD unset the gate is off (local dev).
+// is a paid feature). With DASHBOARD_PASSWORD unset the gate is off locally and
+// fails closed on Netlify builds ("setup": every request gets the "set
+// DASHBOARD_PASSWORD" page, see lib/deploy.ts).
 // The cookie is "<expiry>.<hmac>": HMAC-SHA256 over the expiry, keyed with
 // AUTH_SECRET (or the password itself), so it cannot be forged and changing the
 // password or secret logs everyone out. Web Crypto only: runs in proxy.ts too.
+import { passwordRequired } from "./deploy";
 
 export const AUTH_COOKIE = "fs_auth";
 export const AUTH_MAX_AGE_S = 7 * 24 * 3600;
@@ -50,21 +53,29 @@ export async function checkPassword(password: unknown, env: Env = process.env): 
 export const isPublicPath = (path: string) =>
   path === "/login" || path === "/api/login" || path === "/api/logout" || path.startsWith("/_next/") || path === "/favicon.ico";
 
-export type GateDecision = "allow" | "unauthorized" | "login";
+export type GateDecision = "allow" | "unauthorized" | "login" | "setup";
 
 /** What proxy.ts does with a request. A bearer DASHBOARD_API_TOKEN (for the MCP
  * server) opens /api/* only; pages still need the cookie. A token alone (no
- * password) gates /api/* and leaves pages open. */
+ * password) gates /api/* and leaves pages open. "setup": this deploy requires a
+ * password (Netlify) but none is configured, so nothing is served except /api/*
+ * with a valid bearer token. */
 export async function gate(path: string, cookie: string | undefined, env: Env = process.env, authorization?: string): Promise<GateDecision> {
   const token = env.DASHBOARD_API_TOKEN;
-  if (isPublicPath(path) || (!authEnabled(env) && !token)) return "allow";
-  if (await verifySession(cookie, env)) return "allow";
   const isApi = path.startsWith("/api/");
-  if (token && isApi && authorization !== undefined) {
+  const bearerOk = async () => {
+    if (!token || !isApi || authorization === undefined) return false;
     // Compare digests so the comparison does not depend on the token length.
     const [a, b] = await Promise.all([hmacHex("api", authorization), hmacHex("api", `Bearer ${token}`)]);
-    if (safeEqual(a, b)) return "allow";
+    return safeEqual(a, b);
+  };
+  if (!authEnabled(env)) {
+    if (passwordRequired(env)) return (await bearerOk()) ? "allow" : "setup";
+    if (!token || !isApi || isPublicPath(path)) return "allow";
+    return (await bearerOk()) ? "allow" : "unauthorized";
   }
-  if (!authEnabled(env) && !isApi) return "allow";
+  if (isPublicPath(path)) return "allow";
+  if (await verifySession(cookie, env)) return "allow";
+  if (await bearerOk()) return "allow";
   return isApi ? "unauthorized" : "login";
 }

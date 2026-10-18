@@ -32,8 +32,11 @@ export type FixLoopOptions = {
   analyze: Analyzer;
   compare: Compare;
   /** The findings the Product Owner chose: fixed exactly, in this order, with no
-   * re-ranking. Unknown ids throw `Unknown finding "<id>"`. Default: the loop picks. */
+   * re-ranking, on attempt 1 only (a retry fixes the re-test's findings). Unknown
+   * ids throw `Unknown finding "<id>"`. Default: the loop picks. */
   findingIds?: string[];
+  /** Fix attempts per loop: 2 retries once with the re-test's findings (#16). */
+  maxAttempts?: number;
 };
 
 /** Fixes the top findings, re-tests the preview and records everything in
@@ -68,6 +71,7 @@ export function retestConfig(analysis: RunConfig, o: { attempt: number; commitSh
     kind: "retest",
     flowId: analysis.flowId,
     flow: analysis.flow,
+    ...(analysis.goal ? { goal: analysis.goal } : {}),
     posthog: { source: analysis.posthog.source, buildSha: o.commitSha },
     personaIds,
     seeds: o.seeds,
@@ -99,12 +103,13 @@ async function loadP1(modulePath: string): Promise<P1Module> {
 /** P1's real fix loop (coding agent in a tenki sandbox, draft PR, preview
  * polling, PR finalization), imported at call time from FIX_LOOP_MODULE or
  * <repo>/orchestrator/fix-loop.ts. When it is missing the run fails with
- * "P1 fix loop not available". */
-export function realFixLoop(modulePath = defaultModule()): FixLoop {
+ * "P1 fix loop not available". maxAttempts defaults to 2: one retry when the
+ * first fix isn't proven (#16). */
+export function realFixLoop(modulePath = defaultModule(), { maxAttempts = 2 }: { maxAttempts?: number } = {}): FixLoop {
   return async (o) => {
     const mod = await loadP1(modulePath);
     if (typeof mod.runFixLoop !== "function") throw new Error(`P1 fix loop not available: ${modulePath} does not export runFixLoop`);
-    return mod.runFixLoop(o);
+    return mod.runFixLoop({ maxAttempts, ...o });
   };
 }
 

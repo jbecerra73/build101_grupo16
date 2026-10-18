@@ -1,4 +1,4 @@
-import { buyTshirt, type Flow } from "@frictionswarm/shared";
+import { buyTshirt, FLOWS, type Flow } from "@frictionswarm/shared";
 import { describe, expect, it } from "vitest";
 import { diffFlows, flowHash, getFlow, listFlows, putFlow, validateFlow } from "./flows";
 import { MemoryStore } from "./memory";
@@ -16,6 +16,26 @@ describe("validateFlow", () => {
   });
   it("accepts the seed flow", () => {
     expect(validateFlow(buyTshirt)).toEqual({ ok: true, flow: buyTshirt });
+  });
+  it("accepts every seed flow (completion, attempt, doneWhen, personas)", () => {
+    for (const f of Object.values(FLOWS)) expect(validateFlow(f)).toEqual({ ok: true, flow: f });
+  });
+  it("defaults completion and doneWhen for a flow drafted without them", () => {
+    const { completion: _c, doneWhen: _d, ...draft } = buyTshirt;
+    const r = validateFlow(draft);
+    expect(r).toMatchObject({ ok: true, flow: { completion: [], doneWhen: expect.stringContaining("/checkout/success") } });
+  });
+  it("rejects bad completion events and unknown personas", () => {
+    const errors = errorsOf({ ...buyTshirt, completion: [{ where: {} }, { event: "x", where: { a: {} } }], personas: ["nobody"] });
+    expect(errors).toContain("completion[0] needs an event name");
+    expect(errors).toContain("completion[1].where.a must be a string, number, boolean or a list of them");
+    expect(errors).toContain('unknown persona "nobody"');
+  });
+  it("fills in completion and doneWhen on flows stored before they existed", async () => {
+    const store = new MemoryStore();
+    const { completion: _c, doneWhen: _d, ...old } = { ...buyTshirt, id: "old" };
+    await store.putJson("flows/old.json", old);
+    expect(await getFlow(store, "old")).toMatchObject({ id: "old", completion: [], doneWhen: expect.any(String) });
   });
   it("rejects a bad id", () => {
     expect(errorsOf({ ...buyTshirt, id: "Bad Id" })).toContain("id must be a lowercase slug (a-z, 0-9, -)");
@@ -52,13 +72,14 @@ describe("flowHash", () => {
 describe("flow store", () => {
   it("overlays stored flows onto seeds", async () => {
     const store = new MemoryStore();
-    expect(await listFlows(store)).toEqual([buyTshirt]);
+    const seeds = Object.values(FLOWS).sort((a, b) => a.id.localeCompare(b.id));
+    expect(await listFlows(store)).toEqual(seeds);
     const edited = { ...buyTshirt, goal: "Edited" };
     const coupon = { ...buyTshirt, id: "coupon" };
     await putFlow(store, edited);
     await putFlow(store, coupon);
     await store.putText("flows/broken.json", "{nope");
-    expect(await listFlows(store)).toEqual([edited, coupon]);
+    expect(await listFlows(store)).toEqual([...seeds.filter((f) => f.id !== "buy-tshirt"), edited, coupon].sort((a, b) => a.id.localeCompare(b.id)));
     expect(await getFlow(store, "buy-tshirt")).toEqual(edited);
     expect(await getFlow(new MemoryStore(), "buy-tshirt")).toEqual(buyTshirt);
     expect(await getFlow(store, "missing")).toBeUndefined();

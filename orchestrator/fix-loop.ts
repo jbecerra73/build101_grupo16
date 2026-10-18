@@ -5,7 +5,7 @@ import {
   flowOf,
   PERSONAS,
   previewUrl,
-  SEGMENTS,
+  flowPersonas,
   PRODUCTION_URL,
   type FixAttempt,
   type FixResult,
@@ -17,7 +17,7 @@ import {
 } from "../shared";
 import { runCodingAgent, STOREFRONT_REPO } from "./coding-agent";
 import { topFindings } from "./fix-prompt";
-import { closePr, finalizePr, gh, mergePr, prDiff, uploadEvidence, type Gh } from "./pr";
+import { closePr, closeSupersededPr, finalizePr, gh, mergePr, prDiff, uploadEvidence, type Gh } from "./pr";
 import { waitForBuildSha } from "./preview";
 import { tenkiShell, type Shell } from "./shell";
 import { compareRuns } from "./verdict";
@@ -105,11 +105,12 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const baseline = await readJson<Metrics>(join(baseDir, "metrics.json"));
   const flow = flowOf(config);
   if (!flow) throw new Error(`unknown flow ${config.flowId}`);
-  // Every segment's persona re-tests, control included, so a fix can't quietly hurt the others.
+  // The flow's personas re-test (by default every segment's, control included, so a fix can't
+  // quietly hurt the others).
   const seedsFor = (n: number) =>
     opts.retestSeeds
       ? Object.fromEntries(Object.entries(opts.retestSeeds).map(([p, seeds]) => [p, seeds.map((x) => x + (n - 1) * 1000)]))
-      : retestSeeds(SEGMENTS.map((s) => s.personaId), seedsPerPersona, n);
+      : retestSeeds(flowPersonas(flow), seedsPerPersona, n);
 
   const result: FixResult = { baselineRunId, repo, attempts: [] };
   const save = () => writeJson(join(baseDir, "fix.json"), result);
@@ -165,6 +166,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         kind: "retest",
         flowId: flow.id,
         flow: config.flow,
+        ...(config.goal ? { goal: config.goal } : {}),
         posthog: { source: config.posthog.source, buildSha: agent.commitSha },
         personaIds,
         seeds,
@@ -210,6 +212,10 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       );
       await save();
       if (lastChance) break;
+      // Superseded: the retry's PR is the Product Owner's decision target, so this one is closed
+      // (with a comment saying why) rather than left open next to it.
+      await closeSupersededPr(repo, agent.prNumber, n + 1, ghImpl);
+      log(`closed PR #${agent.prNumber} (not proven, superseded by attempt ${n + 1})`);
       log("retrying once with the re-test's findings");
       findings = retest.findings;
     } catch (e) {

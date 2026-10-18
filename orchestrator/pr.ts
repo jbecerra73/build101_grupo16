@@ -170,6 +170,14 @@ export async function closePr(repo: string, prNumber: number, reason?: string, g
   await ghImpl(["pr", "close", pr, "--repo", repo]);
 }
 
+/** A not-proven attempt the fix loop retries: not the Product Owner's decision target (the
+ * retry's PR is), so it is closed with a comment pointing at the next attempt. */
+export async function closeSupersededPr(repo: string, prNumber: number, nextAttempt: number, ghImpl: Gh = gh): Promise<void> {
+  const pr = String(prNumber);
+  await ghImpl(["pr", "comment", pr, "--repo", repo, "--body", `Not proven; FrictionSwarm is retrying (attempt ${nextAttempt}) with a new PR. Closing this one.`]);
+  await ghImpl(["pr", "close", pr, "--repo", repo]);
+}
+
 /** The PR's unified diff (gh pr diff). */
 export const prDiff = (repo: string, prNumber: number, ghImpl: Gh = gh): Promise<string> =>
   ghImpl(["pr", "diff", String(prNumber), "--repo", repo]);

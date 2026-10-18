@@ -1,7 +1,7 @@
 // Flows in the run store: custom flows live under KEYS.flows and overlay the
 // seed flows from shared/flows.ts by id.
 import { createHash } from "node:crypto";
-import { FLOWS, REQUIRED_FIELDS, type Flow, type RequiredField } from "@frictionswarm/shared";
+import { FLOWS, PERSONAS, REQUIRED_FIELDS, withFlowDefaults, type EventMatch, type Flow, type PersonaId, type RequiredField } from "@frictionswarm/shared";
 import { KEYS } from "./control";
 import type { RunStore } from "./types";
 
@@ -21,6 +21,18 @@ const isHttpUrl = (v: string) => {
 };
 
 const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+const isEventValue = (v: unknown) => typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+
+/** An EventMatch ({ event, where? }), or the error describing why it is not one. */
+function eventMatch(v: unknown, label: string): EventMatch | string {
+  if (!isRecord(v) || !isString(v.event) || !v.event) return `${label} needs an event name`;
+  if (v.where === undefined) return { event: v.event };
+  if (!isRecord(v.where)) return `${label}.where must be an object`;
+  for (const [k, x] of Object.entries(v.where))
+    if (!(isEventValue(x) || (Array.isArray(x) && x.length && x.every(isEventValue)))) return `${label}.where.${k} must be a string, number, boolean or a list of them`;
+  return { event: v.event, where: v.where as EventMatch["where"] };
+}
 
 const TOP_LEVEL = ["id", "goal", "startUrl", "success", "steps", "required"] as const;
 
@@ -65,10 +77,39 @@ export function validateFlow(input: unknown): FlowValidation {
     if (!(REQUIRED_FIELDS as readonly unknown[]).includes(f)) errors.push(`unknown required field "${String(f)}"`);
   }
 
+  // Optional (main's Flow fields): completion events, the real-user attempt filter, the swarm's
+  // done instruction and the flow's personas. Defaults: no extra events, every session, a doneWhen
+  // from the success rule, every segment's persona.
+  const completion: EventMatch[] = [];
+  if (raw.completion !== undefined && raw.completion !== null) {
+    if (!Array.isArray(raw.completion)) errors.push("completion must be a list of { event, where? }");
+    else
+      raw.completion.forEach((c, i) => {
+        const m = eventMatch(c, `completion[${i}]`);
+        if (isString(m)) errors.push(m);
+        else completion.push(m);
+      });
+  }
+  let attempt: EventMatch | undefined;
+  if (raw.attempt !== undefined && raw.attempt !== null) {
+    const m = eventMatch(raw.attempt, "attempt");
+    if (isString(m)) errors.push(m);
+    else attempt = m;
+  }
+  if (raw.doneWhen !== undefined && raw.doneWhen !== null && (!isString(raw.doneWhen) || !raw.doneWhen.trim())) errors.push("doneWhen must be a non-empty string");
+  let personas: PersonaId[] | undefined;
+  if (raw.personas !== undefined && raw.personas !== null) {
+    if (!Array.isArray(raw.personas) || !raw.personas.length) errors.push("personas must be a non-empty list");
+    else {
+      for (const p of raw.personas) if (!isString(p) || !Object.hasOwn(PERSONAS, p)) errors.push(`unknown persona "${String(p)}"`);
+      personas = raw.personas as PersonaId[];
+    }
+  }
+
   if (errors.length) return { ok: false, missing: [], errors };
   return {
     ok: true,
-    flow: {
+    flow: withFlowDefaults({
       id: raw.id as string,
       goal: raw.goal as string,
       startUrl: raw.startUrl as string,
@@ -78,7 +119,11 @@ export function validateFlow(input: unknown): FlowValidation {
       },
       steps,
       required: { steps: reqSteps as string[], fields: reqFields as RequiredField[] },
-    },
+      completion,
+      ...(attempt ? { attempt } : {}),
+      ...(isString(raw.doneWhen) && raw.doneWhen.trim() ? { doneWhen: raw.doneWhen.trim() } : {}),
+      ...(personas ? { personas } : {}),
+    }),
   };
 }
 
@@ -104,6 +149,9 @@ export function diffFlows(before: Flow | undefined, after: Flow): string[] {
   scalar("startUrl", before?.startUrl, after.startUrl);
   scalar("success.urlPattern", before?.success.urlPattern, after.success.urlPattern);
   scalar("success.visibleText", before?.success.visibleText, after.success.visibleText);
+  scalar("doneWhen", before?.doneWhen, after.doneWhen);
+  const json = (v: unknown) => (v === undefined ? undefined : JSON.stringify(v));
+  scalar("attempt", json(before?.attempt), json(after.attempt));
 
   const key = (s: { route: string; name: string }) => `${s.route} → ${s.name}`;
   const was = new Set((before?.steps ?? []).map(key));
@@ -117,6 +165,8 @@ export function diffFlows(before: Flow | undefined, after: Flow): string[] {
   };
   list("required.steps", before?.required.steps ?? [], after.required.steps);
   list("required.fields", before?.required.fields ?? [], after.required.fields);
+  list("completion", (before?.completion ?? []).map((c) => JSON.stringify(c)), (after.completion ?? []).map((c) => JSON.stringify(c)));
+  list("personas", before?.personas ?? [], after.personas ?? []);
   return lines;
 }
 
@@ -125,14 +175,15 @@ export async function listFlows(store: RunStore): Promise<Flow[]> {
   for (const key of await store.list(KEYS.flows)) {
     if (!key.endsWith(".json")) continue;
     const flow = await store.getJson<Flow>(key);
-    if (flow && isString(flow.id)) byId.set(flow.id, flow);
+    if (flow && isString(flow.id)) byId.set(flow.id, withFlowDefaults(flow));
   }
   return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export async function getFlow(store: RunStore, id: string): Promise<Flow | undefined> {
   if (!SLUG.test(id)) return undefined;
-  return (await store.getJson<Flow>(KEYS.flow(id))) ?? (Object.hasOwn(FLOWS, id) ? FLOWS[id] : undefined);
+  const stored = await store.getJson<Flow>(KEYS.flow(id));
+  return stored ? withFlowDefaults(stored) : Object.hasOwn(FLOWS, id) ? FLOWS[id] : undefined;
 }
 
 export async function putFlow(store: RunStore, flow: Flow): Promise<void> {

@@ -15,10 +15,10 @@ import type {
   StartRunRequest,
   Verdict,
 } from "@frictionswarm/shared";
-import { buyTshirt } from "@frictionswarm/shared";
+import { buyTshirt, runFlow } from "@frictionswarm/shared";
 import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeApplyDecision, fakeFixLoop, pickTargets } from "./fakeFix";
-import { realApplyDecision, realFixLoop, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
+import { realApplyDecision, realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
 import { analysisConfig, defaultWindow, runPipeline, seedsFor, startPipeline, validateRequest, type PipelineDeps, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
@@ -93,6 +93,14 @@ async function setup(over: StartOptions = {}) {
   };
   return { runsDir, phases, analyzed, waited, swarms, opts };
 }
+
+describe("seedsFor", () => {
+  it("re-tests the flow's own personas, else every segment's", () => {
+    expect(seedsFor([1, 2], "buy-jeans")).toEqual({ rosa: [1, 2] });
+    expect(Object.keys(seedsFor([1], "buy-tshirt"))).toEqual(["rosa", "kai", "typical"]);
+    expect(Object.keys(seedsFor([1]))).toEqual(["rosa", "kai", "typical"]);
+  });
+});
 
 describe("startPipeline", () => {
   it("happy path: analysis, fix, preview, retest, collecting, comparing, awaiting-decision", async () => {
@@ -196,6 +204,19 @@ describe("startPipeline", () => {
     await expect(startPipeline({ ...req, seedsPerPersona: 11 }, opts)).rejects.toThrow(/1 to 10/);
     await expect(startPipeline({ ...req, window: { from: "2026-10-17", to: "2026-10-01" } }, opts)).rejects.toThrow(/before/);
     expect(() => validateRequest({ ...req, source: "s3" as never }, buyTshirt)).toThrow(/Unknown source/);
+    expect(() => validateRequest({ ...req, goal: " " }, buyTshirt)).toThrow(/goal/);
+  });
+
+  it("carries a custom goal from the request to the analysis and its retests", async () => {
+    const config = await analysisConfig("r1", { ...req, goal: "Buy black sneakers and check out." }, new Date(), buyTshirt);
+    expect(config.goal).toBe("Buy black sneakers and check out.");
+    // The flow snapshot carries the edited goal; steps and success stay the flow's.
+    expect(config.flow).toEqual({ ...buyTshirt, goal: "Buy black sneakers and check out." });
+    const retest = retestConfig(config, { attempt: 1, commitSha: "abc", previewUrl: "https://p.example", seeds: { rosa: [1] } });
+    expect(retest.goal).toBe("Buy black sneakers and check out.");
+    expect(retest.flow).toEqual(config.flow);
+    expect(runFlow(retest)).toMatchObject({ id: "buy-tshirt", goal: "Buy black sneakers and check out." });
+    expect(runFlow({ flowId: "buy-tshirt" })!.goal).toBe("Find a blue polo shirt, buy it in size M and check out.");
   });
 
   it("defaults to the last 28 days, today included", () => {
@@ -355,5 +376,14 @@ describe("realFixLoop", () => {
     const loop: FixLoop = realFixLoop("/nonexistent/orchestrator/fix-loop.ts");
     await expect(loop({} as Parameters<FixLoop>[0])).rejects.toThrow(/P1 fix loop not available/);
     await expect(realApplyDecision("/nonexistent/orchestrator/fix-loop.ts")({} as never)).rejects.toThrow(/P1 fix loop not available/);
+  });
+
+  it("passes maxAttempts to P1's fix loop (2 by default: one retry, #16)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "fs-p1-"));
+    const mod = join(dir, "fix-loop.mjs");
+    await writeFile(mod, "export const runFixLoop = async (o) => ({ baselineRunId: o.baselineRunId, repo: String(o.maxAttempts), attempts: [] });");
+    const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
+    expect((await realFixLoop(mod)(opts)).repo).toBe("2");
+    expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
   });
 });

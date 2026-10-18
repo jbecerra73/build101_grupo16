@@ -73,6 +73,23 @@ describe("POST /api/runs (enqueue)", () => {
     expect(await store.list("queue/")).toEqual([]);
   });
 
+  it("keeps a custom goal (trimmed), drops the preset's own, rejects one over the limit", async () => {
+    const res = await runs.POST(post("/api/runs", { ...req, goal: "  Buy a pair of black sneakers in size 42 and check out. " }));
+    const { runId } = await res.json();
+    const [q] = await Promise.all((await store.list("queue/")).map((k) => store.getJson<QueuedRun>(k)));
+    expect(q!.req.goal).toBe("Buy a pair of black sneakers in size 42 and check out.");
+    const detail = await (await runDetail.GET(get(`/api/runs/${runId}`), ctx({ id: runId }))).json();
+    expect(detail.flow.goal).toBe("Buy a pair of black sneakers in size 42 and check out.");
+    expect(detail.flow.required.steps).toContain("Payment");
+
+    const preset = await (await runs.POST(post("/api/runs", { ...req, goal: "Find a blue polo shirt, buy it in size M and check out." }))).json();
+    const queued = await Promise.all((await store.list("queue/")).map((k) => store.getJson<QueuedRun>(k)));
+    expect(queued.find((x) => x!.runId === preset.runId)!.req).not.toHaveProperty("goal");
+    const long = await runs.POST(post("/api/runs", { ...req, goal: "x".repeat(301) }));
+    expect(long.status).toBe(400);
+    expect((await long.json()).errors).toEqual(["goal must be a string of at most 300 characters"]);
+  });
+
   it("refuses with 429 when today's runs plus the queue reach the cap", async () => {
     await store.putJson("settings.json", { maxRunsPerDay: 2 });
     await store.putJson("usage.json", { date: new Date().toISOString().slice(0, 10), runs: 1 });

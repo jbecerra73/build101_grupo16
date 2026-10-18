@@ -138,6 +138,21 @@ describe("runFixLoop", () => {
     expect(swarmConfigs[0].seeds.kai).not.toEqual(swarmConfigs[1].seeds.kai);
   });
 
+  it("retry: the superseded PR is closed with a comment, the last one stays open for the decision", async () => {
+    const newFinding: Finding = {
+      id: "R1", severity: "high", segments: ["mobile"], personas: ["kai"], step: "Product", page: "/shop/product/*",
+      title: "Sizes hidden behind hover", suggestedFix: "Show size buttons",
+      evidence: { sessions: 4, users: 4, exampleSessions: [], quotes: [] },
+    };
+    const { opts, agentCalls, ghCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 0, 0, 1)], [newFinding]);
+    await runFixLoop({ ...opts, maxAttempts: 2, findingIds: ["F3"] });
+    // The PO's chosen findings apply to attempt 1 only; the retry takes the re-test's.
+    expect(agentCalls.map((c) => c.findingIds)).toEqual([["F3"], ["R1"]]);
+    const closes = ghCalls.filter((a) => a[0] === "pr" && a[1] === "close").map((a) => a[2]);
+    expect(closes).toEqual(["41"]);
+    expect(ghCalls.some((a) => a[1] === "comment" && a[2] === "41" && a.some((x) => x.includes("superseded") || x.includes("retrying")))).toBe(true);
+  });
+
   it("records a failed attempt in fix.json", async () => {
     const { runsDir, opts } = await setup([]);
     await expect(

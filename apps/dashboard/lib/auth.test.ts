@@ -32,6 +32,14 @@ describe("gate", () => {
     expect(await gate("/api/control", undefined, {})).toBe("allow");
     expect(await gate("/", undefined, {})).toBe("allow");
   });
+  it("fails closed where a password is required (Netlify) but none is set", async () => {
+    const req = { DASHBOARD_REQUIRE_PASSWORD: "1" };
+    expect(await gate("/", undefined, req)).toBe("setup");
+    expect(await gate("/login", undefined, req)).toBe("setup");
+    expect(await gate("/api/login", undefined, req)).toBe("setup");
+    expect(await gate("/api/login", undefined, { ...req, ...env })).toBe("allow");
+    expect(await gate("/", undefined, { ...req, ...env })).toBe("login");
+  });
   it("401s API calls and sends pages to /login without a valid cookie", async () => {
     expect(await gate("/api/control", undefined, env)).toBe("unauthorized");
     expect(await gate("/runs/abc", "1.bad", env)).toBe("login");
@@ -59,6 +67,12 @@ describe("bearer token", () => {
     expect(await gate("/api/runs", undefined, only, "Bearer t0k")).toBe("allow");
     expect(await gate("/runs/x", undefined, only)).toBe("allow");
     expect(await gate("/api/runs", undefined, {})).toBe("allow");
+  });
+  it("still opens /api/* where a password is required but none is set (setup otherwise)", async () => {
+    const setup = { DASHBOARD_REQUIRE_PASSWORD: "1", DASHBOARD_API_TOKEN: "t0k" };
+    expect(await gate("/api/runs", undefined, setup, "Bearer t0k")).toBe("allow");
+    expect(await gate("/api/runs", undefined, setup, "Bearer nope")).toBe("setup");
+    expect(await gate("/runs/x", undefined, setup, "Bearer t0k")).toBe("setup");
   });
   it("proxy.ts reads the Authorization header", async () => {
     const saved = { p: process.env.DASHBOARD_PASSWORD, t: process.env.DASHBOARD_API_TOKEN };
@@ -99,6 +113,21 @@ describe("proxy.ts", () => {
   it("lets everything through when no password is configured", async () => {
     delete process.env.DASHBOARD_PASSWORD;
     expect((await proxy(new NextRequest("https://fs.example/api/runs"))).headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("serves the 'set DASHBOARD_PASSWORD' page on a deploy that requires one", async () => {
+    delete process.env.DASHBOARD_PASSWORD;
+    process.env.DASHBOARD_REQUIRE_PASSWORD = "1";
+    try {
+      const page = await proxy(new NextRequest("https://fs.example/runs/r1"));
+      expect(page.status).toBe(503);
+      expect(await page.text()).toContain("Set DASHBOARD_PASSWORD");
+      const api = await proxy(new NextRequest("https://fs.example/api/runs"));
+      expect(api.status).toBe(503);
+      expect(await api.json()).toMatchObject({ error: expect.stringContaining("DASHBOARD_PASSWORD") });
+    } finally {
+      delete process.env.DASHBOARD_REQUIRE_PASSWORD;
+    }
   });
 });
 

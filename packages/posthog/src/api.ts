@@ -62,14 +62,21 @@ export function apiSource(opts: ApiSourceOptions = {}): DescribedSource {
     return body.results ?? [];
   }
 
-  /** Page through `where` ordered by (timestamp, uuid) with LIMIT/OFFSET. */
+  /** Page through `where` ordered by (timestamp, uuid), keyset on the last row: personal API keys
+   * reject OFFSET. The uuid is compared as a string, since ClickHouse doesn't order UUIDs that way.
+   * PostHog dedupes uuids only when ClickHouse merges, so duplicate rows (adjacent in this order) are dropped. */
   async function* events(where: string[], keep: (e: PostHogEvent) => boolean): AsyncGenerator<PostHogEvent> {
-    for (let offset = 0; ; offset += pageSize) {
-      const rows = await query(
-        `SELECT ${COLUMNS} FROM events WHERE ${where.join(" AND ")} ORDER BY timestamp, uuid LIMIT ${pageSize} OFFSET ${offset}`,
-      );
+    let prev: string | undefined;
+    for (let after: { ts: string; uuid: string } | undefined; ; ) {
+      const ts = after && `toDateTime64(${hogqlString(after.ts)}, 6, 'UTC')`;
+      const page = after ? [...where, `(timestamp > ${ts} OR (timestamp = ${ts} AND toString(uuid) > ${hogqlString(after.uuid)}))`] : where;
+      const rows = await query(`SELECT ${COLUMNS} FROM events WHERE ${page.join(" AND ")} ORDER BY timestamp, toString(uuid) LIMIT ${pageSize}`);
+      const last = rows.at(-1);
+      if (last) after = { ts: String(last[3]).replace("T", " ").replace(/(Z|[+-]00:?00)$/, ""), uuid: String(last[0]) };
       for (const row of rows) {
         const e = rowToEvent(row);
+        if (e.uuid === prev) continue;
+        prev = e.uuid;
         if (keep(e)) yield e;
       }
       if (rows.length < pageSize) return;

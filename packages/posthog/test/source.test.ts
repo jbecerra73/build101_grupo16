@@ -140,14 +140,23 @@ describe("api source", () => {
   const row = (e: PostHogEvent) => [e.uuid, e.event, e.distinct_id, e.timestamp.replace("T", " ").replace("Z", ""), JSON.stringify(e.properties)];
   const env = { POSTHOG_APP_HOST: "https://eu.posthog.com/", POSTHOG_PROJECT_ID: "42", POSTHOG_PERSONAL_API_KEY: "phx_test" };
 
-  it("paginates HogQL and maps rows to PostHogEvents, excluding swarm traffic", async () => {
+  it("paginates HogQL by keyset (no OFFSET: personal API keys reject it) and maps rows, excluding swarm traffic", async () => {
     const rows = HISTORY.map(row);
     const { f, calls } = mockFetch((q) => {
-      const offset = Number(/OFFSET (\d+)/.exec(q)![1]);
-      return rows.slice(offset, offset + 2);
+      const after = /toString\(uuid\) > '([^']+)'/.exec(q)?.[1];
+      const start = after ? rows.findIndex((r) => r[0] === after) + 1 : 0;
+      return rows.slice(start, start + 2);
     });
     const got = await collect(apiSource({ env, fetch: f, pageSize: 2 }).realUserEvents({ from: "2026-10-01", to: "2026-10-05", buildSha: "prod" }));
-    expect(calls.map((c) => /OFFSET (\d+)/.exec(c.query)![1])).toEqual(["0", "2", "4", "6"]);
+    expect(calls.map((c) => c.query)).not.toContainEqual(expect.stringMatching(/OFFSET/));
+    expect(calls).toHaveLength(4);
+    expect(calls[1].query).toContain(
+      `(timestamp > toDateTime64('${rows[1][3]}', 6, 'UTC') OR (timestamp = toDateTime64('${rows[1][3]}', 6, 'UTC') AND toString(uuid) > '${rows[1][0]}'))`,
+    );
+    expect(calls[0].query).toMatch(/ORDER BY timestamp, toString\(uuid\) LIMIT 2$/);
+    // Merges dedupe uuids only eventually: the source drops the duplicate rows PostHog still returns.
+    const dup = mockFetch((q) => (/toString\(uuid\) >/.test(q) ? [] : [rows[0], rows[0], rows[1]]));
+    expect(await collect(apiSource({ env, fetch: dup.f }).realUserEvents({ from: "2026-10-01", to: "2026-10-05" }))).toEqual(HISTORY.slice(0, 2));
     expect(calls[0].url).toBe("https://eu.posthog.com/api/projects/42/query");
     expect(calls[0].auth).toBe("Bearer phx_test");
     expect(calls[0].query).toMatch(/isNull\(properties\.swarm_run\)/);

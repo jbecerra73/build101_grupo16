@@ -4,6 +4,7 @@
 // for the live grid, the swarm map and Replay.
 import {
   actionBudget,
+  completionProblems,
   MAX_ACTIONS_PER_AGENT,
   PERSONAS,
   resolveStep,
@@ -19,7 +20,7 @@ import type { AgentOutcome, AgentState, ScreenshotIndex } from "./types";
 export const agentIdsOf = (config: RunConfig) =>
   config.personaIds.flatMap((p) => (config.seeds[p] ?? []).map((seed) => ({ agentId: `${p}-${seed}`, personaId: p, seed })));
 
-/** The agent's action budget, drawn by seed for personas with a range (Kai: 8–12). */
+/** The agent's action budget, drawn by seed for personas with a range (Kai: 16–22). */
 export const budgetOf = (personaId: string, seed: number) => {
   const persona = PERSONAS[personaId];
   return persona ? actionBudget(persona, seed) : MAX_ACTIONS_PER_AGENT;
@@ -47,17 +48,14 @@ const prop = (e: PostHogEvent | undefined, k: string) => (e?.properties as Recor
 export const visitedSteps = (evs: PostHogEvent[], flow?: Flow) =>
   evs.filter((e) => e.event === "$pageview").map((e) => stepOf(flow, e)).filter((s): s is string => !!s);
 
-/** SPEC completion validity: reached the success step, every required step in its
- * $pageviews, shipping and payment submitted successfully, order_completed fired. */
+/** SPEC completion validity for an agent that called done: every required step in its
+ * $pageviews and every flow.completion event fired (e.g. shipping and payment submitted
+ * successfully, order_completed). */
 export function invalidReason(evs: PostHogEvent[], flow?: Flow): string | undefined {
-  const steps = new Set(visitedSteps(evs, flow));
-  const missing = (flow?.required.steps ?? []).filter((s) => !steps.has(s));
-  if (missing.length) return `Reached the end without ${missing.join(", ")}`;
-  const ok = (name: string) => evs.some((e) => e.event === name && prop(e, "success") === true);
-  if (!ok("shipping_submitted")) return "No successful shipping_submitted";
-  if (!ok("payment_submitted")) return "No successful payment_submitted";
-  if (!evs.some((e) => e.event === "order_completed")) return "No order_completed";
-  return undefined;
+  if (!flow) return undefined;
+  // done() is only accepted on the success page, so that check is the agent's, not ours.
+  const why = completionProblems(flow, evs, () => true)[0];
+  return why && why[0].toUpperCase() + why.slice(1);
 }
 
 function outcomeOf(evs: PostHogEvent[], flow: Flow | undefined, live: boolean): { state: AgentOutcome; note?: string } {

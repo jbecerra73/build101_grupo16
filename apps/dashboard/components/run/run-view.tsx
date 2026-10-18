@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CircleX, Cpu, Database, LayoutGrid, Map as MapIcon, Play, Radio, Square, Table2 } from "lucide-react";
+import { ArrowRight, CircleX, Cpu, Database, LayoutGrid, Map as MapIcon, Play, Presentation, Radio, Square, Table2 } from "lucide-react";
 import type { RunPhase } from "@frictionswarm/shared";
 import { FixStatusBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
@@ -105,6 +105,18 @@ function SwarmTabs({ run, agents, live, derived }: { run: RunDetail; agents: Age
         <SwarmMonitor runId={run.runId} agents={agents} live={live} derived={derived} />
       </TabsContent>
     </Tabs>
+  );
+}
+
+/** Full-screen presenter view of this run (/pitch); a re-test opens its analysis run's pitch. */
+function PitchModeButton({ runId }: { runId: string }) {
+  return (
+    <Button variant="outline" asChild>
+      <Link href={`/pitch?run=${encodeURIComponent(runId)}`}>
+        <Presentation data-icon="inline-start" />
+        Pitch mode
+      </Link>
+    </Button>
   );
 }
 
@@ -308,16 +320,17 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
               <span>{formatDateTime(config.createdAt)}</span>
             </div>
           </div>
-          {latestFix?.retestRunId && (
-            <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {latestFix?.retestRunId && (
               <Button variant="secondary" asChild>
                 <Link href={`/runs/${latestFix.retestRunId}?replay=1`}>
                   <Play data-icon="inline-start" />
                   Replay re-test
                 </Link>
               </Button>
-            </div>
-          )}
+            )}
+            <PitchModeButton runId={config.runId} />
+          </div>
         </div>
 
         <Card size="sm">
@@ -439,6 +452,7 @@ function RetestView({ initial, replay }: { initial: RunDetail; replay: boolean }
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {config.baselineRunId && <PitchModeButton runId={config.baselineRunId} />}
             {replay ? (
               <Button variant="outline" asChild>
                 <Link href={`/runs/${config.runId}`}>

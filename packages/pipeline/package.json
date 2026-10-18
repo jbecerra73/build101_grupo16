@@ -13,6 +13,7 @@
     "@frictionswarm/analyzer": "*",
     "@frictionswarm/posthog": "*",
     "@frictionswarm/shared": "*",
-    "@frictionswarm/store": "*"
+    "@frictionswarm/store": "*",
+    "@tenkicloud/sandbox": "^1.4.1"
   }
 }

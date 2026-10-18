@@ -19,7 +19,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { FLOWS, PERSONAS } from "../../shared";
+import { flowPersonas, FLOWS, PERSONAS } from "../../shared";
 import { readBuildSha } from "../../worker/claude";
 import { peekNextSeed } from "./ledger";
 import { freshSeeds, MAX_SANDBOXES, planSwarm } from "./plan";
@@ -34,7 +34,7 @@ const { values: args } = parseArgs({
     url: { type: "string" },
     run: { type: "string" },
     flow: { type: "string", default: "buy-tshirt" },
-    personas: { type: "string", default: "rosa,kai,typical" },
+    personas: { type: "string" },
     "seeds-per-persona": { type: "string", default: "10" },
     provider: { type: "string", default: "tenki" },
     snapshot: { type: "string", default: process.env.TENKI_SNAPSHOT_ID },
@@ -56,7 +56,7 @@ if (!args.url) {
 }
 const flow = FLOWS[args.flow!];
 if (!flow) throw new Error(`Unknown flow ${args.flow}; known: ${Object.keys(FLOWS).join(", ")}`);
-const personaIds = args.personas!.split(",").filter(Boolean);
+const personaIds = args.personas ? args.personas.split(",").filter(Boolean) : flowPersonas(flow);
 for (const p of personaIds) if (!PERSONAS[p]) throw new Error(`Unknown persona ${p}; known: ${Object.keys(PERSONAS).join(", ")}`);
 const runId = args.run ?? `retest-${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}`;
 const runsDir = resolve(args.runs!);

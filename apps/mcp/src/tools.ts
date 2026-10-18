@@ -55,6 +55,11 @@ const flowShape = {
   required: z
     .object({ steps: z.array(z.string()), fields: z.array(z.string()) })
     .describe("Step names the coding agent may not remove, and required form fields (email, fullName, address, city, postalCode, country, cardNumber)"),
+  completion: z
+    .array(z.object({ event: z.string(), where: z.record(z.string(), z.any()).optional() }))
+    .optional()
+    .describe("Optional: PostHog events a valid completion must contain, e.g. { event: \"order_completed\" }"),
+  doneWhen: z.string().optional().describe("Optional: tells the swarm agent when to call done (default: from the success rule)"),
 };
 const fullFlow = z.object(flowShape);
 /** draft_flow takes whatever the user has said so far; the dashboard reports what is missing. */

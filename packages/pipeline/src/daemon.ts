@@ -11,7 +11,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { DecisionRequest, FixAttempt, FixRequest, FixResult, RunConfig, RunStatus } from "@frictionswarm/shared";
+import { flowOf, type DecisionRequest, type FixAttempt, type FixRequest, type FixResult, type RunConfig, type RunStatus } from "@frictionswarm/shared";
 import {
   createStore,
   FsStore,
@@ -28,6 +28,7 @@ import {
   type Settings,
 } from "@frictionswarm/store";
 import { RunMirror } from "./mirror";
+import { registerTenkiSwarmRunner } from "./swarm";
 import {
   analysisConfig,
   buildDeps,
@@ -89,6 +90,7 @@ export const settingsDeps =
       fixLoop: settings.fixLoop,
       swarmSpeed: settings.swarmSpeed,
       fixStageDelayMs: Number(env.FIX_STAGE_DELAY_MS ?? 1500),
+      fixAttempts: env.FIX_ATTEMPTS ? Number(env.FIX_ATTEMPTS) : undefined,
     });
 
 export class Orchestrator {
@@ -288,7 +290,7 @@ export class Orchestrator {
     await this.store.delete(queueKey);
 
     this.#log(`${runId}: starting (${settings.swarmRunner} swarm, ${settings.fixLoop} fix loop, ${config.posthog.source} source, retest x${n} per persona)`);
-    await this.#launch(runId, settings, (deps) => runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds) }, deps));
+    await this.#launch(runId, settings, (deps) => runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, flow) }, deps));
   }
 
   /** Starts the fix of a finished analysis run (or drops the request when the
@@ -319,7 +321,7 @@ export class Orchestrator {
     let started!: () => void;
     const firstStatus = new Promise<void>((r) => (started = r));
     await this.#launch(runId, settings, (deps) =>
-      resumeFix(runId, { autoFix: true, retestSeeds: seedsFor(seeds), findingIds }, { ...deps, onStatus: (s) => (deps.onStatus?.(s), started()) }),
+      resumeFix(runId, { autoFix: true, retestSeeds: seedsFor(seeds, flowOf(config)), findingIds }, { ...deps, onStatus: (s) => (deps.onStatus?.(s), started()) }),
     );
     // Remove the request once the store shows the run reopened, so it is never seen done without a request.
     await Promise.race([firstStatus, this.active.get(runId)?.done]);
@@ -478,6 +480,13 @@ function gitVersion(): string {
 }
 
 /** Orchestrator configured from env (RUN_STORE, RUNS_DIR, ORCHESTRATOR_WORK_DIR, ...). */
+/** Plugs P2's tenki swarm (orchestrator/swarm/pipeline-runner.ts) into tenkiSwarmRunner. Entry
+ * points only: the Next server (inline orchestrator) can't load it, use ORCHESTRATOR=daemon there. */
+export async function registerP2SwarmRunner() {
+  const { tenkiRunnerFactory } = await import(/*turbopackIgnore: true*/ "../../../orchestrator/swarm/pipeline-runner");
+  registerTenkiSwarmRunner(tenkiRunnerFactory());
+}
+
 export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestrator {
   const runsDir = resolve(/*turbopackIgnore: true*/ env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
   const store = createStore(runsDir, env);
@@ -499,6 +508,7 @@ const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(resolve(pr
 if (isMain) {
   const envFile = join(REPO_ROOT, ".env.local");
   if (existsSync(envFile)) process.loadEnvFile(envFile);
+  await registerP2SwarmRunner();
   const o = orchestratorFromEnv();
   await o.start();
   const shutdown = async (sig: string) => {

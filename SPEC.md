@@ -16,7 +16,7 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 
 ## Demo loop (the one thing that must work end to end)
 
-1. PM opens the dashboard, picks the flow "Buy a size M blue t-shirt, check out" and an analysis window (default: the current production release, last 28 days).
+1. PM opens the dashboard, picks the flow "Find a blue polo shirt, buy it in size M and check out" and an analysis window (default: the current production release, last 28 days).
 2. Analyzer pulls real-user events from PostHog (or the fake dataset file), computes the funnel per segment, and shows the report: funnel per segment over time with release markers, hotspots (rage clicks, failed submits, drop-offs), and which release introduced each.
 3. Analyzer writes `findings.json`; the top 1–3 findings go to the coding agent (Claude Code headless, Opus 5.5) in a tenki sandbox with the storefront repo cloned.
 4. Coding agent pushes a branch and opens a **draft PR**. Netlify builds a deploy preview.
@@ -101,7 +101,7 @@ A segment is a slice of real users; a persona is the swarm's stand-in for it on 
 ### Personas
 Unchanged in shape and constraints; they now run **only on the re-test**. A persona = `{ prompt, perception filters, action limits, patience model }`. The constraints, not the prompt, are the validity argument.
 - **Rosa, 67, low vision**: screenshot only (no DOM text), blurred/downscaled; elements below a contrast/size threshold removed from what the agent sees; distrusts jargon; gives up after 2 failed attempts at the same thing; no hover-only elements.
-- **Kai, 19, impatient, mobile**: 375px viewport; tap targets < 44px register as misses; action budget drawn per seed (8–12); patience drains on page loads, modals, errors.
+- **Kai, 19, impatient, mobile**: 375px viewport; tap targets < 44px register as misses; action budget drawn per seed (16–22); patience drains on page loads, modals, errors.
 - **Typical shopper (control)**: desktop, standard perception, generous budget, applies WELCOME10. Must not regress.
 
 ### Swarm worker (re-test only, runs inside tenki sandboxes)
@@ -153,9 +153,22 @@ type Flow = {
   success: { urlPattern?: string; visibleText?: string };
   steps: { route: string; name: string }[];          // e.g. /cart → Cart
   required: { steps: string[]; fields: string[] };   // locked; coding agent can't change
+  completion: EventMatch[];   // events a valid completion must contain, e.g. order_completed
+  attempt?: EventMatch;       // real users only: which sessions count (default all)
+  doneWhen: string;           // tells the agent when to call done
 };
+// A list in `where` matches any of its values.
+type EventMatch = { event: string; where?: Record<string, EventValue | EventValue[]> };
 ```
 Flows are stored at `flows/<id>.json` in the run store (seeded from `shared/flows.ts`) and can be drafted and saved from Claude Code. Each run snapshots the flow it used in `RunConfig.flow`, so a run stays runnable after the stored flow changes.
+
+Seed flows (`shared/flows.ts`), all on the same store and the same PostHog events:
+- `buy-tshirt`: find a blue polo shirt and buy it in size M (the id stays `buy-tshirt` for stored runs); completion = a placed order.
+- `buy-jeans`: a broad goal, "buy jeans as a gift for your grandchild, who loves green" (no jeans come in green, so the agent has to judge); placed order + `product_added {product_id: 2|8}`; real users who viewed either pair; swarmed by Rosa only (`Flow.personas`).
+- `promo-checkout`: buy with WELCOME10; placed order + `promo_applied {success: true}`; real users who tried a code (T5).
+- `add-to-cart`: pick a size and add to cart; success at `/cart`, `product_added`; steps Home → Cart (T4).
+
+A run can override the goal text (`goal`) for the swarm; steps and completion stay the flow's. The run's `RunConfig.flow` snapshot carries the overridden goal.
 
 ### Analyzer
 - Input is PostHog events, grouped by `$session_id`. One session = one funnel attempt (real user) or one agent (swarm).
@@ -163,7 +176,7 @@ Flows are stored at `flows/<id>.json` in the run store (seeded from `shared/flow
 - **Signals** from events: `$rageclick` (by `$elements_chain`), failed submits (`*_submitted {success:false}` with `error_fields`), `add_to_cart_clicked {has_size:false}`, step drop-off with dwell time, and — for swarm runs — `swarm_give_up` reasons and `swarm_think_aloud` notes as quotes.
 - **Release attribution:** for each signal, the first release where its rate jumps against the previous release.
 - **Sonnet 5.5** pass → `findings.json`: clusters signals into ranked findings. Falls back to the deterministic heuristic as today.
-- **Completion validity** (swarm and real users alike): a session counts only if it reaches the success step AND every required step appears in its `$pageview`s AND `shipping_submitted {success:true}` and `payment_submitted {success:true}` happened AND `order_completed` fired. (The confirmation echo is checked by the swarm agent's `done()` evidence, not PostHog.)
+- **Completion validity** (swarm and real users alike): a session counts only if it reaches the success step AND every required step appears in its `$pageview`s AND every `flow.completion` event happened (for a checkout flow: `shipping_submitted {success:true}`, `payment_submitted {success:true}`, `order_completed`). Real-user sessions that don't match `flow.attempt` are left out of the flow's N. (The confirmation echo is checked by the swarm agent's `done()` evidence, not PostHog.)
 ```ts
 type Finding = {
   id: string; severity: "high" | "medium" | "low";
@@ -189,7 +202,7 @@ type Finding = {
 - Input: storefront repo clone, top 1–3 findings (with selectors and release attribution), flow's required steps/fields as a hard constraint. **Protected:** `src/lib/analytics.ts`, the `build-sha` meta and `data-echo` markers — a fix that changes tracking can't be measured.
 - Output: branch pushed + **draft PR** opened. Single focused diff.
 - Orchestrator waits for the preview: polls until `build-sha` meta == pushed commit SHA.
-- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment and `not-proven` label; the PR is **not** closed. Either way the run moves to `awaiting-decision`: a human accepts (`gh pr merge --squash --delete-branch`, `FixStatus` `merged`) or rejects (PR closed with a comment, `rejected`). Accepting a `not-proven` fix needs an explicit `override`. Dashboard shows "fix attempted, not proven" until then. One fix per analysis run.
+- After re-test: improved → rewrite PR body (before/after table per segment/persona, fixed findings + evidence, report link), mark ready for review. Not improved → metrics comment and `not-proven` label; the PR is **not** closed. Either way the run moves to `awaiting-decision`: a human accepts (`gh pr merge --squash --delete-branch`, `FixStatus` `merged`) or rejects (PR closed with a comment, `rejected`). Accepting a `not-proven` fix needs an explicit `override`. Dashboard shows "fix attempted, not proven" until then. One fix per analysis run. With the retry (`FIX_ATTEMPTS`, default 2), a not-proven attempt that gets retried is superseded: its PR is closed with a comment pointing at the next attempt, and only the last attempt's PR waits for the decision. Chosen `findingIds` apply to attempt 1; the retry fixes the re-test's findings.
 
 ### Orchestrator & dashboard
 - Run state on disk, no DB: analysis run `runs/<id>/{config.json, status.json, posthog.jsonl, metrics.json, findings.json, fix.json, fix-request.json, decision.json, fix/pr.diff}`; re-test run `runs/<id>/{config.json, status.json, screenshots/, posthog.jsonl, metrics.json, findings.json}`.

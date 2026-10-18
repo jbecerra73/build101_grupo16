@@ -100,6 +100,7 @@ async function requestOf(runId: string): Promise<StartRunRequest | undefined> {
   const hasFix = !!(await store.getJson(KEYS.runFile(runId, "fix.json")));
   return {
     flowId: config.flowId,
+    ...(config.goal ? { goal: config.goal } : {}),
     ...(config.window ? { window: config.window } : {}),
     source: config.posthog?.source ?? "file",
     autoFix: hasFix,

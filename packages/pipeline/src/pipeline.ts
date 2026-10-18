@@ -12,7 +12,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  flowPersonas,
   FLOWS,
+  MAX_GOAL_LENGTH,
   PERSONAS,
   PRODUCTION_URL,
   type Finding,
@@ -112,6 +114,8 @@ const DATE = /^\d{4}-\d\d-\d\d(T[\d:.]+Z?)?$/;
 
 export function validateRequest(req: StartRunRequest, flow: Flow | undefined): void {
   if (!flow) throw new Error(`Unknown flow "${req.flowId}"`);
+  if (req.goal !== undefined && (typeof req.goal !== "string" || !req.goal.trim() || req.goal.length > MAX_GOAL_LENGTH))
+    throw new Error(`goal must be a non-empty string of at most ${MAX_GOAL_LENGTH} characters`);
   if (typeof req.autoFix !== "boolean") throw new Error("autoFix must be a boolean");
   if (req.source !== undefined && req.source !== "file" && req.source !== "api") throw new Error(`Unknown source "${req.source}" (file|api)`);
   if (req.window) {
@@ -133,7 +137,9 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
     runId,
     kind: "analysis",
     flowId: req.flowId,
-    flow,
+    // The snapshot carries the goal the PM typed, so the run reads the same without config.goal.
+    ...(flow ? { flow: req.goal ? { ...flow, goal: req.goal } : flow } : {}),
+    ...(req.goal ? { goal: req.goal } : {}),
     window: req.window ?? defaultWindow(now),
     posthog: { source, buildSha: req.window ? "" : await currentReleaseSha(source) },
     personaIds: [],
@@ -143,8 +149,12 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
   };
 }
 
-/** The same fresh seeds for every re-test persona. */
-export const seedsFor = (seeds: number[]): Record<PersonaId, number[]> => Object.fromEntries(RETEST_PERSONAS.map((p) => [p, seeds]));
+/** The same seeds for each persona that re-tests: the flow's (Flow.personas), else RETEST_PERSONAS.
+ * Takes the run's flow (store-backed flows included) or a built-in flow's id. */
+export const seedsFor = (seeds: number[], flowOrId?: Flow | string): Record<PersonaId, number[]> => {
+  const flow = typeof flowOrId === "string" ? (Object.hasOwn(FLOWS, flowOrId) ? FLOWS[flowOrId] : undefined) : flowOrId;
+  return Object.fromEntries((flow ? flowPersonas(flow) : RETEST_PERSONAS).map((p) => [p, seeds]));
+};
 
 /** Validate, enforce the runs/day cap, write config.json + status.json, and
  * run the pipeline in the background. Resolves as soon as the run exists. */
@@ -162,7 +172,7 @@ export async function startPipeline(
   await writeJson(join(deps.runsDir, runId, "request.json"), req);
   const status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString(), message: "Starting" };
   await writeJson(join(deps.runsDir, runId, "status.json"), status);
-  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds) }, deps);
+  const done = runPipeline(runId, { autoFix: req.autoFix, retestSeeds: seedsFor(seeds, flow) }, deps);
   done.catch(() => {}); // runPipeline never rejects; belt and braces
   return { runId, done };
 }
@@ -230,6 +240,8 @@ async function fixAndRetest(runId: string, opts: RunOptions, deps: PipelineDeps,
           await deps.runSwarm(c);
         },
         collect: async (c) => {
+          // The swarm's browsers recorded its events (runs/<retest>/posthog.jsonl): nothing to wait for.
+          if (existsSync(join(deps.runsDir, c.runId, "posthog.jsonl"))) return void (await set("collecting", "Swarm events recorded by the agents' browsers"));
           await set("collecting", "Waiting for PostHog to ingest the swarm's events");
           const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
           await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
@@ -375,6 +387,8 @@ export type DepsConfig = {
   /** Offline swarm speed (>1 is faster); 1 = ~30 s on screen. */
   swarmSpeed: number;
   fixStageDelayMs?: number;
+  /** Real fix loop attempts (default 2: one retry when not proven). */
+  fixAttempts?: number;
   signal?: AbortSignal;
   log?: (line: string) => void;
 };
@@ -402,14 +416,14 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
     compare: moduleCompare(),
     signal: c.signal,
     log: c.log,
-    fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(),
+    fixLoop: c.fixLoop === "fake" ? fakeFixLoop({ stageDelayMs: c.fixStageDelayMs ?? 1500 }) : realFixLoop(undefined, { maxAttempts: c.fixAttempts }),
     applyDecision: c.fixLoop === "fake" ? fakeApplyDecision : realApplyDecision(),
   };
 }
 
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
  * SWARM_SPEED, FIX_LOOP=real|fake (fake = offline rehearsal, default with the
- * offline swarm), FIX_STAGE_DELAY_MS. */
+ * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 2). */
 export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
   const env = process.env.SWARM_RUNNER ?? "offline";
   if (!["offline", "replay", "tenki", "p2"].includes(env)) throw new Error(`Unknown SWARM_RUNNER "${env}" (offline|tenki)`);
@@ -423,6 +437,7 @@ export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => 
     fixLoop: fixMode,
     swarmSpeed: Number(process.env.SWARM_SPEED ?? process.env.REPLAY_SPEED ?? 1),
     fixStageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500),
+    fixAttempts: process.env.FIX_ATTEMPTS ? Number(process.env.FIX_ATTEMPTS) : undefined,
   });
 }
 

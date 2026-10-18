@@ -37,4 +37,9 @@ describe("buildFixPrompt", () => {
     }
     expect(prompt).not.toContain(findings[3].title);
   });
+
+  it("asks for a non-technical summary aimed at a product owner", () => {
+    expect(prompt).toContain("summary for a product owner");
+    expect(prompt).toContain("No file names, code");
+  });
 });

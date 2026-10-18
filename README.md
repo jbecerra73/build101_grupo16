@@ -74,11 +74,17 @@ You:    Yes, accept.   (accept_fix merges the PR to production main)
 `/watch-run <runId>` (`.claude/skills/watch-run`) polls the run, posts a line per change,
 and stops at `awaiting-decision` to show the decision package. It never accepts without your yes.
 
+## Deploy
+
+Dashboard on Netlify, orchestrator in a tenki sandbox, linked only by Netlify Blobs:
+see [`docs/DEPLOY.md`](docs/DEPLOY.md) for the architecture, env vars and the setup checklist.
+
 ## Other entry points
 
 ```bash
 npm run pipeline -- --auto-fix                 # same pipeline in the terminal (SWARM_SPEED=5 for a quick run)
-npm run orchestrator                           # daemon: takes queued runs from the run store (ORCHESTRATOR=daemon)
+npm run orchestrator                           # daemon: takes queued runs from the run store (dashboard with ORCHESTRATOR=queue)
+npm run orchestrator:tenki -- up|status|logs|stop  # the same daemon in a tenki sandbox, against Netlify Blobs
 npm run analyze -- runs/<id>                   # analyzer on one run folder
 npm run typecheck && npm test
 npx tsx apps/dashboard/scripts/gen-fixtures.mts          # regenerate the runs/fixture-* demo folders

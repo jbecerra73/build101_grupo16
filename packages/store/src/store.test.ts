@@ -140,6 +140,37 @@ describe("BlobsStore against a local Netlify Blobs server", () => {
   const real = () =>
     new BlobsStore({ siteID: "test-site", token: "test-token", edgeURL: `http://localhost:${port}`, uncachedEdgeURL: `http://localhost:${port}`, name: `t${Math.random().toString(36).slice(2)}` });
   contract("BlobsStore (BlobsServer)", async () => real());
+
+  it("uses the function's Blobs context over NETLIFY_SITE_ID + NETLIFY_AUTH_TOKEN", async () => {
+    const edge = `http://localhost:${port}`;
+    const g = globalThis as { netlifyBlobsContext?: string };
+    g.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID: "test-site", token: "test-token", edgeURL: edge, uncachedEdgeURL: edge })).toString("base64");
+    try {
+      // With these credentials the client would call the REST API instead.
+      const s = new BlobsStore({ siteID: "other-site", token: "nfp_personal", name: "ctx" });
+      await s.putJson("settings.json", { ok: true });
+      expect(await s.getJson("settings.json")).toEqual({ ok: true });
+    } finally {
+      delete g.netlifyBlobsContext;
+    }
+  });
+
+  it("rebuilds the client when the function's Blobs context changes (per-invocation token)", async () => {
+    const edge = `http://localhost:${port}`;
+    const ctx = (token: string) => Buffer.from(JSON.stringify({ siteID: "test-site", token, edgeURL: edge, uncachedEdgeURL: edge })).toString("base64");
+    const g = globalThis as { netlifyBlobsContext?: string };
+    try {
+      // One store across invocations, as in a warm function instance.
+      const s = new BlobsStore({ name: "ctx-rotate" });
+      g.netlifyBlobsContext = ctx("expired-token");
+      await expect(s.getJson("settings.json")).rejects.toThrow();
+      g.netlifyBlobsContext = ctx("test-token");
+      await s.putJson("settings.json", { ok: true });
+      expect(await s.getJson("settings.json")).toEqual({ ok: true });
+    } finally {
+      delete g.netlifyBlobsContext;
+    }
+  });
 });
 
 describe("FsStore layout", () => {

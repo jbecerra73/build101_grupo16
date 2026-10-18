@@ -32,7 +32,7 @@ export const kai: Persona = {
     "and hate forms, sign-ups and pop-ups. If it takes too long you leave.",
   viewport: { width: 375, height: 812, mobile: true },
   perception: { mode: "screenshot+a11y", hideHoverOnly: true },
-  actions: { maxActions: 12, maxActionsRange: [8, 12], minTapTargetPx: 44, maxRetriesSameTarget: 2 },
+  actions: { maxActions: 22, maxActionsRange: [16, 22], minTapTargetPx: 44, maxRetriesSameTarget: 2 },
   patience: { start: 6, costs: { pageLoad: 1, modal: 2, error: 2 } },
 };
 

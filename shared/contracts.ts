@@ -61,6 +61,12 @@ export type Persona = {
  * listed in funnel order. */
 export type FlowStep = { route: string; name: string };
 
+type EventValue = string | number | boolean;
+
+/** A PostHog event a session must contain; `where` matches its properties exactly, or any of
+ * the values when given a list. */
+export type EventMatch = { event: string; where?: Record<string, EventValue | EventValue[]> };
+
 export type Flow = {
   id: string;
   goal: string;
@@ -69,6 +75,15 @@ export type Flow = {
   steps: FlowStep[];
   /** Locked: the coding agent may not remove these. */
   required: { steps: string[]; fields: RequiredField[] };
+  /** Events a valid completion must contain, besides reaching the success step and every required step. */
+  completion: EventMatch[];
+  /** Real users only: the sessions that count as attempting this flow (default: every session).
+   * Swarm agents are told the goal, so all of theirs count. */
+  attempt?: EventMatch;
+  /** Tells the swarm agent when to call done. */
+  doneWhen: string;
+  /** The personas that swarm this flow (default: every segment's persona; see flowPersonas). */
+  personas?: PersonaId[];
 };
 
 export const REQUIRED_FIELDS = [
@@ -200,6 +215,8 @@ export type RunConfig = {
   runId: string;
   kind: RunKind;
   flowId: string;
+  /** What the swarm agents are told to do, in place of the flow's preset goal. */
+  goal?: string;
   /** Analysis window over real users, [from, to), ISO dates. */
   window?: { from: string; to: string };
   posthog: {
@@ -319,6 +336,8 @@ export type DecisionRequest = { runId: string; decision: "accept" | "reject"; re
 /** What the dashboard sends to start a pipeline ("Analyze"). */
 export type StartRunRequest = {
   flowId: string;
+  /** Overrides the flow's goal for the swarm (e.g. a different item); still measured on its checkout funnel. */
+  goal?: string;
   /** Defaults to the current production release, last 28 days. */
   window?: { from: string; to: string };
   /** Defaults to POSTHOG_SOURCE (file). */

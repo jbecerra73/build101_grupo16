@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { StartRunRequest } from "@frictionswarm/shared";
 import { KEYS, onNetlify, readSettings, readUsage, type QueuedRun } from "@frictionswarm/store";
+import { builtForNetlify, orchestratorSetting } from "./deploy";
 import { listQueue, runsDir } from "./runs";
 import { runStore } from "./store";
 
@@ -20,7 +21,7 @@ function setupEnv() {
   const runs = runsDir();
   const root = dirname(runs);
   const envFile = join(/*turbopackIgnore: true*/ root, ".env.local");
-  if (!onNetlify() && existsSync(/*turbopackIgnore: true*/ envFile)) process.loadEnvFile(envFile);
+  if (!onNetlify() && !builtForNetlify() && existsSync(/*turbopackIgnore: true*/ envFile)) process.loadEnvFile(envFile);
   const defaults: Record<string, string> = {
     RUNS_DIR: runs,
     SWARM_RUNNER: "offline",
@@ -35,12 +36,14 @@ function setupEnv() {
 }
 setupEnv();
 
-/** ORCHESTRATOR=inline|daemon. inline (the local default) runs the orchestrator
- * loop inside this Next server; daemon (always on Netlify) leaves the queue to
- * `npm run orchestrator`, locally or in a tenki sandbox. */
-export function orchestratorMode(env = process.env): "inline" | "daemon" {
-  if (onNetlify(env)) return "daemon";
-  return env.ORCHESTRATOR === "daemon" ? "daemon" : "inline";
+/** ORCHESTRATOR=inline|queue ("daemon" is an alias of queue). inline (the local
+ * default) runs the orchestrator loop inside this Next server; queue (always on
+ * Netlify, where functions cannot run long jobs) only enqueues and leaves the
+ * queue to `npm run orchestrator`, locally or in a tenki sandbox. */
+export function orchestratorMode(env: Record<string, string | undefined> = process.env): "inline" | "queue" {
+  if (onNetlify(env) || builtForNetlify()) return "queue";
+  const mode = orchestratorSetting(env);
+  return mode === "queue" || mode === "daemon" ? "queue" : "inline";
 }
 
 const g = globalThis as { __frictionswarmInline?: Promise<unknown> };

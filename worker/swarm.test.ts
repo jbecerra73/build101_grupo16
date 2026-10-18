@@ -67,6 +67,24 @@ describe("runSwarmWorker", () => {
     expect(seen.every((s) => s.browserWs === "ws://browser" && s.runDir.endsWith("/runs/r1") && s.targetUrl === "https://preview.test")).toBe(true);
   });
 
+  it("tells every agent the run's custom goal, on the flow's own success criteria", async () => {
+    const flows: { goal: string; success: unknown }[] = [];
+    await runSwarmWorker({ ...input, goal: "Buy black sneakers and check out.", agents: input.agents.slice(0, 2) }, {
+      runsDir: join(mkdtempSync(join(tmpdir(), "worker-")), "runs"),
+      model: "haiku",
+      timeoutMs: 1000,
+      log: () => {},
+      launchBrowser: async () => ({ wsEndpoint: () => "ws://browser", close: async () => {} }),
+      runAgent: async (o) => {
+        flows.push(o.flow);
+        const now = new Date().toISOString();
+        return { result: { runId: o.runId, agentId: `${o.persona.id}-${o.seed}`, personaId: o.persona.id, seed: o.seed, outcome: "success", actions: 1, startedAt: now, endedAt: now } };
+      },
+    });
+    expect(flows).toHaveLength(2);
+    expect(flows.every((f) => f.goal === "Buy black sneakers and check out." && (f.success as { urlPattern: string }).urlPattern === "/checkout/success")).toBe(true);
+  });
+
   it("rejects unknown personas before launching anything", async () => {
     let launched = false;
     await expect(

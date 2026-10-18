@@ -20,6 +20,7 @@ import {
   PERSONA_PROFILES,
   RELEASES,
   simulateSession,
+  SWARM_INTENTS,
   type TrapId,
   type Visitor,
 } from "../../../tools/posthog-sim/sim";
@@ -83,7 +84,7 @@ export async function fixedTrapsFromFix(runsDir: string, config: RunConfig): Pro
 }
 
 /** One agent's simulated session on the preview (deterministic per persona + seed). */
-export function simulateAgent(o: { runId: string; personaId: string; seed: number; host: string; buildSha: string; traps: TrapId[]; start: number }) {
+export function simulateAgent(o: { runId: string; personaId: string; seed: number; host: string; buildSha: string; traps: TrapId[]; start: number; flowId?: string }) {
   const persona = PERSONAS[o.personaId];
   if (!persona) throw new Error(`Unknown persona "${o.personaId}"`);
   const agent = `${o.personaId}-${o.seed}`;
@@ -106,6 +107,7 @@ export function simulateAgent(o: { runId: string; personaId: string; seed: numbe
     traps: o.traps,
     profile: PERSONA_PROFILES[o.personaId],
     swarm: { run: o.runId, agent, persona: o.personaId },
+    intent: SWARM_INTENTS[o.flowId ?? "buy-tshirt"],
     promoCodes: true,
   });
 }
@@ -134,7 +136,7 @@ export function offlineSwarmRunner(opts: OfflineSwarmOptions = {}): SwarmRunner 
       (config.seeds[personaId] ?? []).map((seed) => ({
         agentId: `${personaId}-${seed}`,
         personaId,
-        events: simulateAgent({ runId: config.runId, personaId, seed, host, buildSha: config.posthog.buildSha, traps, start: simStart }).events,
+        events: simulateAgent({ runId: config.runId, personaId, seed, host, buildSha: config.posthog.buildSha, traps, start: simStart, flowId: config.flowId }).events,
         shown: 0,
         ingested: 0,
         done: false,

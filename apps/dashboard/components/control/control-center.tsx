@@ -13,7 +13,6 @@ import {
   Inbox,
   Laptop,
   PlugZap,
-  ScanSearch,
   RotateCcw,
   Settings as SettingsIcon,
   TriangleAlert,
@@ -36,7 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -352,12 +351,6 @@ export function ControlCenter() {
               Can&apos;t reach the dashboard API, retrying
             </Badge>
           ) : null}
-          <Button asChild>
-            <Link href="/runs/new">
-              <ScanSearch data-icon="inline-start" />
-              Analyze
-            </Link>
-          </Button>
         </div>
       </div>
 
@@ -403,14 +396,6 @@ export function ControlCenter() {
                     <EmptyTitle>The swarm is resting</EmptyTitle>
                     <EmptyDescription>No pipeline is running. Analyze a flow and it shows up here with its phase and funnel, live.</EmptyDescription>
                   </EmptyHeader>
-                  <EmptyContent>
-                    <Button asChild>
-                      <Link href="/runs/new">
-                        <ScanSearch data-icon="inline-start" />
-                        Analyze
-                      </Link>
-                    </Button>
-                  </EmptyContent>
                 </Empty>
               )}
             </CardContent>
