@@ -37,4 +37,44 @@ describe("buildFixPrompt", () => {
     }
     expect(prompt).not.toContain(findings[3].title);
   });
+
+  it("has no retry section on attempt 1", () => {
+    expect(prompt).not.toContain("This is attempt");
+  });
+});
+
+describe("buildFixPrompt on a retry", () => {
+  const original = topFindings(findings, 2);
+  const swarmFinding: Finding = { ...findings[0], id: "F1", title: "Agents still miss the Continue button", persistsFrom: original[0].id };
+  const prompt = buildFixPrompt(buyTshirt, [swarmFinding], {
+    attempt: 2,
+    original,
+    previousTargets: original,
+    previousSummary: "Enlarged the Continue button on shipping",
+    previousVerdict: {
+      improved: false,
+      targetedPersonas: ["rosa"],
+      reasons: ["Rosa: +5 pts, below the 20 pts bar"],
+      comparisons: [{
+        personaId: "rosa", segmentId: "low_vision", completionDeltaPts: 5, regressions: [],
+        before: { n: 100, completed: 4, completionRate: 0.04, medianTimeMs: 0 },
+        after: { n: 10, completed: 1, completionRate: 0.1, medianTimeMs: 0 },
+      } as never],
+    },
+  });
+
+  it("says what was already tried, how the swarm did and what it still hit", () => {
+    expect(prompt).toContain("This is attempt 2");
+    expect(prompt).toContain("Enlarged the Continue button on shipping");
+    expect(prompt).toContain("Rosa: +5 pts, below the 20 pts bar");
+    expect(prompt).toContain("10% of 10 agents completed");
+    expect(prompt).toContain(`"${original[0].title}" is still a problem (finding 1 below)`);
+    expect(prompt).toContain("Agents still miss the Continue button");
+    for (const f of original) expect(prompt).toContain(f.title);
+  });
+
+  it("keeps the hard constraints", () => {
+    for (const s of buyTshirt.required.steps) expect(prompt).toContain(s);
+    expect(prompt).toContain("Do not undo the previous attempt wholesale");
+  });
 });

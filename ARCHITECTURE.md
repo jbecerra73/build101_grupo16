@@ -112,7 +112,12 @@ sequenceDiagram
     A->>A: Compare persona (after) vs segment (before)
     alt ≥20pp gain for a targeted persona AND none below its segment
         O->>G: Rewrite PR body (metrics table), mark ready
-    else not improved
+    else not improved, attempts left (FIX_ATTEMPTS, default 3)
+        O->>G: Retry comment (metrics + what the swarm hit), PR stays draft
+        O->>C: Swarm's findings (linked to unresolved targets) + previous change + verdict
+        C->>G: Push onto the same branch, update the PR body
+        Note over O,S: preview → swarm (fresh seeds) → analyzer (told the fix under test) → verdict, again
+    else not improved, last attempt
         O->>G: Metrics comment, label not-proven, close
     end
     O-->>D: Before/after + PR status

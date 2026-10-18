@@ -1,5 +1,5 @@
 import { ghInstallScript, type Finding, type Flow } from "../shared";
-import { buildFixPrompt } from "./fix-prompt";
+import { buildFixPrompt, type RetryContext } from "./fix-prompt";
 import { run, ShellError, type Shell } from "./shell";
 
 export const STOREFRONT_REPO = "FrissA/demo-ecommerce";
@@ -32,6 +32,8 @@ export type CodingAgentInput = {
   findings: Finding[];
   repo?: string;
   baseBranch?: string;
+  /** Attempt 2+: continue on the previous attempt's branch and PR instead of opening a new one. */
+  retry?: RetryContext & { branch: string; prNumber: number; prUrl: string };
   log?: (line: string) => void;
 };
 
@@ -45,11 +47,14 @@ export type CodingAgentResult = {
 
 export class GuardrailError extends Error {}
 
+const listFindings = (findings: Finding[]) =>
+  findings.map((f) => `- **${f.title}** (${f.severity}; ${f.segments.join(", ")}; step ${f.step})`).join("\n");
+
 const draftBody = (input: CodingAgentInput, summary: string) => `Automated fix by FrictionSwarm for analysis run \`${input.runId}\` (attempt ${input.attempt}).
 
 ## Findings addressed
-${input.findings.map((f) => `- **${f.title}** (${f.severity}; ${f.segments.join(", ")}; step ${f.step})`).join("\n")}
-
+${listFindings(input.retry?.original ?? input.findings)}
+${input.retry ? `\n## Attempt ${input.attempt}: what the swarm still hit on the previous preview\n${listFindings(input.findings)}\n` : ""}
 ## Agent summary
 ${summary}
 
@@ -70,7 +75,8 @@ async function checkGuardrails(shell: Shell, cwd: string) {
 }
 
 /** Clone the storefront, let Claude Code fix the findings, push a branch and
- * open a draft PR. The agent never sees this repo, only the storefront. */
+ * open a draft PR. A retry clones that branch instead, pushes another commit
+ * onto it and updates the same PR. The agent never sees this repo, only the storefront. */
 export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Promise<CodingAgentResult> {
   const repo = input.repo ?? STOREFRONT_REPO;
   const base = input.baseBranch ?? "main";
@@ -79,13 +85,16 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   if (!ghToken) throw new Error("GH_TOKEN is required to clone, push and open the PR");
   const gitEnv = { GH_TOKEN: ghToken, REPO: repo, BASE: base };
   const cwd = `${shell.home}/storefront`;
-  const branch = `frictionswarm/${input.runId}-fix${input.attempt}`;
+  const retry = input.retry;
+  const branch = retry?.branch ?? `frictionswarm/${input.runId}-fix${input.attempt}`;
+  // A retry needs the previous attempts' commits for `git log -p`
+  const from = retry ? branch : base;
 
-  log(`cloning ${repo}@${base}`);
+  log(`cloning ${repo}@${from}`);
   await run(
     shell,
-    `rm -rf ${cwd} && git clone --depth 1 --branch "$BASE" "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" ${cwd}`,
-    { env: gitEnv, timeoutMs: 120_000 },
+    `rm -rf ${cwd} && git clone --depth ${retry ? 20 : 1} --branch "$FROM" "https://x-access-token:$GH_TOKEN@github.com/$REPO.git" ${cwd}`,
+    { env: { ...gitEnv, FROM: from }, timeoutMs: 120_000 },
   );
   log("installing dependencies");
   await run(shell, `cd ${cwd} && npm ci --no-audit --no-fund`, { timeoutMs: 600_000 });
@@ -100,7 +109,7 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
 
   log(`running Claude Code (${CODING_MODEL}) on ${input.findings.length} finding(s)`);
   const promptFile = `${shell.home}/fix-prompt.md`;
-  await shell.writeFile(promptFile, buildFixPrompt(input.flow, input.findings));
+  await shell.writeFile(promptFile, buildFixPrompt(input.flow, input.findings, retry));
   // No GitHub token in the agent's environment: it edits files, we push
   const claudeEnv: Record<string, string> = { GH_TOKEN: "", GITHUB_TOKEN: "" };
   if (process.env.ANTHROPIC_API_KEY) claudeEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -127,17 +136,25 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   }
 
   log(`pushing ${branch} (${changed.length} file(s) changed)`);
-  const title = `FrictionSwarm: ${input.findings.map((f) => f.title).join("; ")}`.slice(0, 120);
+  const title = `FrictionSwarm: ${(retry?.original ?? input.findings).map((f) => f.title).join("; ")}`.slice(0, 120);
   await shell.writeFile(`${shell.home}/pr-body.md`, draftBody(input, summary));
   const prEnv = { ...gitEnv, BRANCH: branch, TITLE: title };
   await run(
     shell,
-    `cd ${cwd} && git checkout -b "$BRANCH" && git add -A && ` +
-      `git -c user.name=FrictionSwarm -c user.email=frictionswarm@users.noreply.github.com commit -q -m "$TITLE" && ` +
+    `cd ${cwd} && ${retry ? "" : `git checkout -b "$BRANCH" && `}git add -A && ` +
+      `git -c user.name=FrictionSwarm -c user.email=frictionswarm@users.noreply.github.com commit -q -m "$MESSAGE" && ` +
       `git push -q origin "$BRANCH"`,
-    { env: prEnv, timeoutMs: 120_000 },
+    { env: { ...prEnv, MESSAGE: retry ? `FrictionSwarm attempt ${input.attempt}: ${input.findings.map((f) => f.title).join("; ")}`.slice(0, 120) : title }, timeoutMs: 120_000 },
   );
   const commitSha = await run(shell, `cd ${cwd} && git rev-parse HEAD`);
+  if (retry) {
+    await run(shell, `cd ${cwd} && ${ghBin} pr edit ${retry.prNumber} --repo "$REPO" --body-file ${shell.home}/pr-body.md`, {
+      env: prEnv,
+      timeoutMs: 60_000,
+    });
+    log(`pushed attempt ${input.attempt} to PR #${retry.prNumber}`);
+    return { branch, commitSha, prNumber: retry.prNumber, prUrl: retry.prUrl, summary };
+  }
   const prUrl = await run(
     shell,
     `cd ${cwd} && ${ghBin} pr create --draft --repo "$REPO" --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file ${shell.home}/pr-body.md`,

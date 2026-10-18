@@ -19,6 +19,7 @@ import {
   heuristicFindings,
   heuristicThemes,
   historyFromSummaries,
+  linkToTargets,
   KNOWN_RELEASES,
   modelFromEnv,
   parseElementsChain,
@@ -396,6 +397,51 @@ describe("themes", () => {
         findingIds: ["F1"],
       },
     ]);
+  });
+});
+
+describe("findings on a fix's retest", () => {
+  const sessions = summarizeSessions(buyTshirt, SWARM);
+  const signals = frictionSignals(buyTshirt, sessions, { kind: "retest" });
+  const fix = {
+    attempt: 1,
+    summary: "Made Continue bigger",
+    targets: [{ id: "F2", title: "Continue is invisible", step: "Shipping", page: "/checkout", suggestedFix: "Big button" }],
+  };
+  const input: FindingsInput = {
+    runId: "r1", kind: "retest", flow: buyTshirt, sessions, signals, fix,
+    metrics: computeMetrics(retestConfig, buyTshirt, sessions),
+  };
+  const mf = (over: object) => ({
+    severity: "high", signalIds: [signals[0].id], segments: ["low_vision"], step: "Shipping", page: "/checkout",
+    selector: null, title: "Still can't find Continue", suggestedFix: "Pin it", quotes: [], persistsFrom: null, ...over,
+  });
+
+  it("tells the model which fix it checks and keeps links to real targets only", async () => {
+    let user = "";
+    const res = await generateFindings(input, {
+      model: async (p) => ((user = p.user), { findings: [mf({ persistsFrom: "F2" }), mf({ persistsFrom: "F9", title: "Other" })], themes: [] }),
+    });
+    expect(user).toContain("fixUnderTest");
+    expect(user).toContain("Made Continue bigger");
+    expect(res.findings.map((f) => f.persistsFrom)).toEqual(["F2", undefined]);
+  });
+
+  it("accepts answers without persistsFrom", async () => {
+    const { persistsFrom: _, ...old } = mf({});
+    const res = await generateFindings(input, { model: async () => ({ findings: [old], themes: [] }) });
+    expect(res.path).toBe("custom");
+    expect(res.findings[0].persistsFrom).toBeUndefined();
+  });
+
+  it("heuristic: links a finding on the target's step and element, once per target", () => {
+    const f = (id: string, step: string, selector?: string) => ({ ...heuristicFindings({ flow: buyTshirt, kind: "retest", sessions }, signals)[0], id, step, ...(selector ? { selector } : {}) });
+    const targets = { attempt: 1, targets: [{ id: "T1", title: "x", step: "Shipping", page: "/checkout", selector: "#continue", suggestedFix: "y" }] };
+    expect(linkToTargets([f("F1", "Shipping", "#other"), f("F2", "Shipping", "#continue"), f("F3", "Shipping")], targets).map((x) => x.persistsFrom)).toEqual([
+      undefined, "T1", undefined,
+    ]);
+    expect(linkToTargets([f("F1", "Payment")], targets)[0].persistsFrom).toBeUndefined();
+    expect(linkToTargets([f("F1", "Shipping")], undefined)[0].persistsFrom).toBeUndefined();
   });
 });
 
