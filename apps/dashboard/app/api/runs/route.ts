@@ -15,7 +15,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const read = await readBody(req);
   if (!read.ok) return read.res;
-  const parsed = parseStartRunRequest(read.body);
+  const parsed = await parseStartRunRequest(read.body);
   if (!parsed.ok) return errorJson(400, parsed.errors.join("; "), parsed.errors);
   try {
     return json(await enqueueRun(parsed.value), 201);

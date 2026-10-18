@@ -4,7 +4,7 @@ import { AUTH_COOKIE, gate } from "./lib/auth";
 
 export async function proxy(req: NextRequest) {
   const path = req.nextUrl.pathname;
-  const decision = await gate(path, req.cookies.get(AUTH_COOKIE)?.value);
+  const decision = await gate(path, req.cookies.get(AUTH_COOKIE)?.value, process.env, req.headers.get("authorization") ?? undefined);
   if (decision === "allow") return NextResponse.next();
   if (decision === "unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const url = req.nextUrl.clone();

@@ -16,6 +16,12 @@ const cancel = await import("@/app/api/runs/[id]/cancel/route");
 const retry = await import("@/app/api/runs/[id]/retry/route");
 const control = await import("@/app/api/control/route");
 const settings = await import("@/app/api/settings/route");
+const flowsRoute = await import("@/app/api/flows/route");
+const flowRoute = await import("@/app/api/flows/[id]/route");
+const flowValidate = await import("@/app/api/flows/validate/route");
+const personasRoute = await import("@/app/api/personas/route");
+const fix = await import("@/app/api/runs/[id]/fix/route");
+const decision = await import("@/app/api/runs/[id]/decision/route");
 
 const req: StartRunRequest = { flowId: "buy-tshirt", window: { from: "2026-09-19", to: "2026-10-17" }, source: "file", seedsPerPersona: 2, autoFix: true };
 const url = (p: string) => `http://localhost${p}`;
@@ -215,5 +221,136 @@ describe("swarm topology and files", () => {
     expect(miss.headers.get("cache-control")).toBe("no-store");
     for (const path of [["..", "x.png"], ["screenshots/../../x.png"], ["config.json"]])
       expect((await files.GET(get("/x"), ctx({ id: "r", path }))).status).toBe(404);
+  });
+});
+
+const couponFlow = {
+  id: "coupon", goal: "Buy a t-shirt with a coupon", startUrl: "https://example.com/",
+  success: { urlPattern: "/thanks" },
+  steps: [{ route: "/", name: "Home" }, { route: "/cart", name: "Cart" }],
+  required: { steps: ["Cart"], fields: ["email"] },
+};
+
+describe("flows", () => {
+  it("validates, saves and reads back a new flow; a stale draftHash is refused", async () => {
+    const v = await (await flowValidate.POST(post("/api/flows/validate", { flow: couponFlow }))).json();
+    expect(v).toMatchObject({ ok: true, isNew: true, flow: { id: "coupon" } });
+    expect(v.changes.length).toBeGreaterThan(0);
+
+    const stale = await flowRoute.PUT(put("/api/flows/coupon", { flow: couponFlow, draftHash: "stale" }), ctx({ id: "coupon" }));
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).error).toBe("Flow changed since it was reviewed");
+    expect((await flowRoute.GET(get("/api/flows/coupon"), ctx({ id: "coupon" }))).status).toBe(404);
+
+    const saved = await flowRoute.PUT(put("/api/flows/coupon", { flow: couponFlow, draftHash: v.draftHash }), ctx({ id: "coupon" }));
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).flow.id).toBe("coupon");
+    expect(await (await flowRoute.GET(get("/api/flows/coupon"), ctx({ id: "coupon" }))).json()).toEqual(v.flow);
+    expect((await (await flowsRoute.GET()).json()).map((f: { id: string }) => f.id)).toContain("coupon");
+    expect((await (await flowValidate.POST(post("/api/flows/validate", { flow: couponFlow }))).json()).isNew).toBe(false);
+  });
+
+  it("reports missing fields, and refuses a mismatched or invalid PUT", async () => {
+    const bad = await (await flowValidate.POST(post("/api/flows/validate", { flow: { id: "x" } }))).json();
+    expect(bad).toMatchObject({ ok: false, missing: expect.arrayContaining(["goal"]) });
+    const v = await (await flowValidate.POST(post("/api/flows/validate", { flow: couponFlow }))).json();
+    expect((await flowRoute.PUT(put("/api/flows/other", { flow: couponFlow, draftHash: v.draftHash }), ctx({ id: "other" }))).status).toBe(400);
+    expect((await flowRoute.PUT(put("/api/flows/coupon", { flow: { id: "coupon" }, draftHash: "x" }), ctx({ id: "coupon" }))).status).toBe(400);
+  });
+
+  it("lets POST /api/runs start a stored flow and rejects unknown ones", async () => {
+    expect((await runs.POST(post("/api/runs", { ...req, flowId: "coupon" }))).status).toBe(400);
+    await store.putJson("flows/coupon.json", couponFlow);
+    expect((await runs.POST(post("/api/runs", { ...req, flowId: "coupon" }))).status).toBe(201);
+  });
+});
+
+describe("GET /api/personas", () => {
+  it("lists the personas with their segment", async () => {
+    const list = await (await personasRoute.GET()).json();
+    expect(list).toContainEqual(expect.objectContaining({ id: "kai", segmentId: "mobile", control: false }));
+    expect(list.find((p: { id: string }) => p.id === "typical")).toMatchObject({ segmentId: "desktop", control: true });
+  });
+});
+
+const finding = (id: string, severity: string, sessions: number) => ({ id, severity, segments: ["mobile"], personas: ["kai"], step: "Cart", page: "/cart", title: id, evidence: { sessions, users: sessions } });
+
+describe("POST /api/runs/:id/fix", () => {
+  it("writes fix-request.json once for a done analysis and validates finding ids", async () => {
+    await seedRun("a", "done");
+    await store.putJson("runs/a/findings.json", [finding("f1", "low", 5), finding("f2", "high", 3)]);
+    expect((await fix.POST(post("/api/runs/a/fix", { findingIds: ["zzz"] }), ctx({ id: "a" }))).status).toBe(400);
+    expect((await fix.POST(post("/api/runs/a/fix", { findingIds: [] }), ctx({ id: "a" }))).status).toBe(400);
+    const res = await fix.POST(post("/api/runs/a/fix", { findingIds: ["f1"] }), ctx({ id: "a" }));
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, findingIds: ["f1"] });
+    expect(await store.getJson("runs/a/fix-request.json")).toMatchObject({ runId: "a", findingIds: ["f1"] });
+    expect((await fix.POST(post("/api/runs/a/fix", { findingIds: ["f1"] }), ctx({ id: "a" }))).status).toBe(409);
+  });
+
+  it("defaults to the top findings by severity then sessions", async () => {
+    await seedRun("b", "done");
+    await store.putJson("runs/b/findings.json", [finding("f1", "low", 9), finding("f2", "high", 3), finding("f3", "high", 7), finding("f4", "medium", 1)]);
+    const res = await fix.POST(post("/api/runs/b/fix"), ctx({ id: "b" }));
+    expect((await res.json()).findingIds).toEqual(["f3", "f2", "f4"]);
+  });
+
+  it("refuses unknown, unfinished, already-fixed and retest runs", async () => {
+    expect((await fix.POST(post("/api/runs/nope/fix"), ctx({ id: "nope" }))).status).toBe(404);
+    await seedRun("c", "analyzing");
+    expect((await fix.POST(post("/api/runs/c/fix"), ctx({ id: "c" }))).status).toBe(409);
+    await seedRun("d", "done");
+    await store.putJson("runs/d/findings.json", [finding("f1", "low", 1)]);
+    await store.putJson("runs/d/fix.json", { baselineRunId: "d", repo: "x", attempts: [] });
+    expect((await fix.POST(post("/api/runs/d/fix"), ctx({ id: "d" }))).status).toBe(409);
+    await seedRun("e", "done", { kind: "retest" });
+    expect((await fix.POST(post("/api/runs/e/fix"), ctx({ id: "e" }))).status).toBe(409);
+  });
+});
+
+describe("POST /api/runs/:id/decision", () => {
+  const seedFix = async (runId: string, phase: RunStatus["phase"], attemptStatus: string) => {
+    await seedRun(runId, phase);
+    await store.putJson(`runs/${runId}/fix.json`, { baselineRunId: runId, repo: "x", attempts: [{ attempt: 1, findingIds: ["f1"], status: attemptStatus }] });
+  };
+
+  it("needs an override to accept a not-proven fix, and only one decision at a time", async () => {
+    await seedFix("a", "awaiting-decision", "not-proven");
+    const refused = await decision.POST(post("/api/runs/a/decision", { decision: "accept" }), ctx({ id: "a" }));
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toBe("Fix not proven: pass override to accept anyway");
+    expect(await store.getJson("runs/a/decision.json")).toBeUndefined();
+    const ok = await decision.POST(post("/api/runs/a/decision", { decision: "accept", override: true, reason: "ship it" }), ctx({ id: "a" }));
+    expect(ok.status).toBe(202);
+    expect(await store.getJson("runs/a/decision.json")).toMatchObject({ runId: "a", decision: "accept", override: true, reason: "ship it" });
+    const again = await decision.POST(post("/api/runs/a/decision", { decision: "reject" }), ctx({ id: "a" }));
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toBe("A decision is already pending");
+  });
+
+  it("rejects without an override, and refuses wrong phases, wrong attempts and bad bodies", async () => {
+    await seedFix("b", "awaiting-decision", "not-proven");
+    expect((await decision.POST(post("/api/runs/b/decision", { decision: "reject" }), ctx({ id: "b" }))).status).toBe(202);
+    await seedFix("c", "done", "ready");
+    expect((await decision.POST(post("/api/runs/c/decision", { decision: "accept" }), ctx({ id: "c" }))).status).toBe(409);
+    await seedFix("d", "awaiting-decision", "merged");
+    const none = await decision.POST(post("/api/runs/d/decision", { decision: "accept" }), ctx({ id: "d" }));
+    expect(none.status).toBe(409);
+    expect((await none.json()).error).toBe("No fix awaiting a decision");
+    await seedFix("e", "awaiting-decision", "ready");
+    expect((await decision.POST(post("/api/runs/e/decision", { decision: "maybe" }), ctx({ id: "e" }))).status).toBe(400);
+    expect((await decision.POST(post("/api/runs/e/decision", { decision: "accept" }), ctx({ id: "e" }))).status).toBe(202);
+    expect((await decision.POST(post("/api/runs/nope/decision", { decision: "accept" }), ctx({ id: "nope" }))).status).toBe(404);
+  });
+});
+
+describe("fix/pr.diff", () => {
+  it("is served as text/x-diff; other non-images stay refused", async () => {
+    await store.putBytes("runs/r/fix/pr.diff", new TextEncoder().encode("diff --git a b"));
+    const res = await files.GET(get("/x"), ctx({ id: "r", path: ["fix", "pr.diff"] }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/x-diff");
+    expect(await res.text()).toBe("diff --git a b");
+    expect((await files.GET(get("/x"), ctx({ id: "r", path: ["fix", "other.diff"] }))).status).toBe(404);
   });
 });

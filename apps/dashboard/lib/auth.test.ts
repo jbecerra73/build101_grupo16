@@ -41,6 +41,32 @@ describe("gate", () => {
   });
 });
 
+describe("bearer token", () => {
+  const tokenEnv = { ...env, DASHBOARD_API_TOKEN: "t0k" };
+  it("opens /api/* only, with the exact token", async () => {
+    expect(await gate("/api/runs", undefined, tokenEnv, "Bearer t0k")).toBe("allow");
+    expect(await gate("/api/runs", undefined, tokenEnv, "Bearer nope")).toBe("unauthorized");
+    expect(await gate("/api/runs", undefined, tokenEnv)).toBe("unauthorized");
+    expect(await gate("/runs/x", undefined, tokenEnv, "Bearer t0k")).toBe("login");
+  });
+  it("is ignored when no token is configured", async () => {
+    expect(await gate("/api/runs", undefined, env, "Bearer t0k")).toBe("unauthorized");
+    expect(await gate("/api/runs", undefined, { ...env, DASHBOARD_API_TOKEN: "" }, "Bearer ")).toBe("unauthorized");
+  });
+  it("proxy.ts reads the Authorization header", async () => {
+    process.env.DASHBOARD_PASSWORD = "hunter2";
+    process.env.DASHBOARD_API_TOKEN = "t0k";
+    try {
+      const ok = await proxy(new NextRequest("https://fs.example/api/runs", { headers: { authorization: "Bearer t0k" } }));
+      expect(ok.headers.get("x-middleware-next")).toBe("1");
+      expect((await proxy(new NextRequest("https://fs.example/api/runs", { headers: { authorization: "Bearer x" } }))).status).toBe(401);
+    } finally {
+      delete process.env.DASHBOARD_API_TOKEN;
+      delete process.env.DASHBOARD_PASSWORD;
+    }
+  });
+});
+
 describe("proxy.ts", () => {
   const saved = process.env.DASHBOARD_PASSWORD;
   afterEach(() => {

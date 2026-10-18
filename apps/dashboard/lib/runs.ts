@@ -300,7 +300,7 @@ export function runFileKey(runId: string, parts: string[]): { key: string; conte
   if (parts.some((p) => !p || p === "." || p === ".." || p.includes("\0") || p.includes("/") || p.includes("\\"))) return undefined;
   const rel = parts.join("/");
   const ext = rel.slice(rel.lastIndexOf(".")).toLowerCase();
-  const contentType = MIME[ext];
+  const contentType = rel === "fix/pr.diff" ? "text/x-diff" : MIME[ext];
   if (!contentType) return undefined;
   return { key: runKey(runId, rel), contentType };
 }
