@@ -6,7 +6,7 @@ export { BlobsStore, BLOBS_STORE_NAME, type BlobsClient, type BlobsStoreOptions 
 export { CONTROL_DIR, FsStore } from "./fs";
 export { MemoryStore } from "./memory";
 export { FixtureFallbackStore, isFixtureKey } from "./layered";
-export { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore } from "./types";
+export { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore, type Versioned } from "./types";
 export * from "./control";
 
 type Env = Record<string, string | undefined>;

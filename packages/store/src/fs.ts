@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore } from "./types";
+import { assertKey, folder, fromBytes, jsonText, parseJson, toBytes, type RunStore, type Versioned } from "./types";
 
 /** Folder inside the runs dir that holds the non-run keys (queue/, settings.json, ...). */
 export const CONTROL_DIR = ".control";
@@ -51,7 +51,18 @@ export class FsStore implements RunStore {
     return this.putBytes(key, toBytes(text));
   }
   putJson(key: string, data: unknown) {
-    return this.putText(key, JSON.stringify(data, null, 2) + "\n");
+    return this.putText(key, jsonText(data));
+  }
+  /** The version is the stored text itself. */
+  async getJsonVersioned<T>(key: string): Promise<Versioned<T>> {
+    const text = await this.getText(key);
+    return { value: parseJson<T>(text), version: text };
+  }
+  /** Check-then-write: not atomic, but the fs store is local (one machine). */
+  async putJsonIf(key: string, data: unknown, version: string | undefined) {
+    if ((await this.getText(key)) !== version) return false;
+    await this.putText(key, jsonText(data));
+    return true;
   }
   async putBytes(key: string, data: Uint8Array) {
     const file = this.path(key);

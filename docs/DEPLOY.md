@@ -32,6 +32,44 @@ What each part does:
 - **Password gate**: `proxy.ts` / `lib/auth.ts`. When `DASHBOARD_PASSWORD` is unset on Netlify, every page is a 503 "Set DASHBOARD_PASSWORD" page and every API call is a 503 JSON error. Locally the gate stays open without a password.
 - **tenki orchestrator**: `packages/pipeline/scripts/tenki-orchestrator.ts`. The `up`, `status`, `logs` and `stop` commands are described below. It is **untested against real tenki**: the unit tests use a mocked SDK.
 
+## Autostart: the site boots the orchestrator itself
+
+You don't have to keep a daemon running. When **Analyze** queues a run and no
+heartbeat is fresh, the dashboard pokes `netlify/functions/orchestrator-launch`.
+That is a background function: it answers 202 at once and may run for up to
+15 minutes. It creates a tenki sandbox, writes the daemon's env file and a
+bootstrap script, starts the script detached, and returns. The bootstrap runs
+clone → `npm ci` → `posthog:generate` → `npm run orchestrator` inside the
+sandbox, so the first heartbeat arrives **3–5 minutes** after the click. While
+it boots, /control shows **Starting**. `orchestrator-watch` runs every 5
+minutes and launches again if runs are queued and nothing is online or booting.
+That covers a missed poke and a sandbox that died during boot. While the
+record owns a sandbox and nothing is online, it also pokes the launcher with
+an empty queue, so a broken or orphaned sandbox gets closed.
+
+- **One at a time:** `orchestrator-launch.json` in Blobs is the launch record, and every write that claims it is a conditional Blobs write (`onlyIfNew` / `onlyIfMatch` on the etag), so two launchers can't both win. A new launch happens only when there's no fresh heartbeat and one of these holds: no record exists; the record is `closing`; the sandbox never sent a heartbeat within 20 minutes of launch; its daemon was online and its heartbeat has been quiet for 3 minutes; or the last launch failed long enough ago (5 minutes, doubling per failure in a row, at most 1 hour). A stale sandbox from an earlier launch is closed first.
+- **Failed boot:** the bootstrap script writes `~/bootstrap.status` (`booting`, `started`, or `failed: exit N at line L`). While a launch is booting, the launcher reads it; on a failure it closes the sandbox and records the error with the log tail, which /control shows.
+- **Idle shutdown:** the autostarted daemon gets `ORCHESTRATOR_IDLE_EXIT_MS` (default 30 min). After that long with nothing running or queued, it marks the launch record `closing` and closes its own sandbox. If that close fails, the launcher closes it on the next poke.
+- **Time limit:** `TENKI_MAX_HOURS` (default 3 for autostart) is the hard ceiling. The daemon gets the deadline as `ORCHESTRATOR_DEADLINE`. From 30 minutes before it (`ORCHESTRATOR_DRAIN_MS`), it takes no new runs, lets the active ones finish, then shuts down like an idle exit, and the next poke launches a fresh sandbox for what is still queued.
+- **Secret:** the launcher accepts only requests carrying `AUTH_SECRET` (or `DASHBOARD_PASSWORD`) in `x-frictionswarm-launch`. The password gate (`proxy.ts`) skips `/.netlify/functions/`. Even with the secret, the launcher does nothing unless runs are queued.
+- **Code:** `packages/store/src/launch.ts`, shared with the `npm run orchestrator:tenki` CLI.
+- **Credentials:** the autostart forwards `TENKI_API_KEY` into the sandbox, unlike the CLI. Its daemon needs the key for the tenki swarm, the real fix loop and its own shutdown.
+
+Set these in the Netlify UI (Functions scope), on top of `DASHBOARD_PASSWORD`:
+
+| Name | Required | Notes |
+|---|---|---|
+| `TENKI_API_KEY` | **yes** | creates the sandbox; also forwarded into it |
+| `NETLIFY_AUTH_TOKEN` | **yes** | the daemon writes Blobs from outside Netlify. `NETLIFY_SITE_ID` is taken from the function's context when unset |
+| `GITHUB_TOKEN` | for `FIX_LOOP=real` | clone, push and open the storefront PR |
+| `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` | for real runs | coding agent, swarm agents, model-written findings |
+| `TENKI_SNAPSHOT_ID` | for `SWARM_RUNNER=tenki` | the swarm's Chrome snapshot |
+| `SWARM_RUNNER`, `FIX_LOOP`, `POSTHOG_*`, `PRODUCTION_BUILD_SHA`, ... | optional | forwarded as with the CLI (`FORWARDED_ENV`) |
+| `ORCHESTRATOR_REF` | optional | branch the sandbox clones, default `main` |
+| `ORCHESTRATOR_IDLE_EXIT_MS`, `TENKI_MAX_HOURS`, `ORCHESTRATOR_DRAIN_MS` | optional | idle shutdown (default 30 min), sandbox lifetime (default 3 h), and how long before it the daemon stops taking runs (default 30 min) |
+
+The rest of this page (the CLI) still works. Use it to run a branch, follow the logs, or stop a sandbox by hand.
+
 ## Environment variables
 
 | Name | Where it is set | Required | Example / notes |
@@ -40,7 +78,7 @@ What each part does:
 | `AUTH_SECRET` | Netlify UI | optional | random 32+ chars. Signs the login cookie; defaults to the password |
 | `POSTHOG_PROJECT_ID`, `POSTHOG_APP_HOST` | Netlify UI | optional | `12345`, `https://us.posthog.com`. Session-replay links on findings |
 | `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_HOST` | Netlify UI | only for the `api` source | `phx_...`, `https://us.i.posthog.com`. The dashboard reads a live re-test's swarm tracks from PostHog |
-| `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` | Netlify UI: **no**. Root `.env.local` → tenki env | optional | Analysis runs in the sandbox, not on Netlify. Without a key the analyzer uses its heuristic |
+| `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` | Netlify UI only for the autostart. Root `.env.local` → tenki env | optional | Analysis runs in the sandbox, not on Netlify. Without a key the analyzer uses its heuristic |
 | `RUN_STORE` | `netlify.toml` (build) → baked | set | `blobs` |
 | `ORCHESTRATOR` | `netlify.toml` (build) → baked | set | `queue` (Analyze only enqueues). Locally: `inline` (default) or `queue` |
 | `DASHBOARD_REQUIRE_PASSWORD` | `netlify.toml` (build) → baked | set | `1`: fail closed |
@@ -58,7 +96,7 @@ What each part does:
 `npm run orchestrator:tenki` loads the repo-root `.env.local`. Shell variables
 win over the file, and the file is gitignored.
 
-## Checklist (you do these: the code never changes Netlify settings or creates sandboxes on its own)
+## Checklist for the manual CLI (the code never changes Netlify settings; with the autostart variables above it does create sandboxes)
 
 ### 1. Netlify environment variables
 Open https://app.netlify.com/projects/shimmering-melomakarona-fcc08f, then
@@ -67,7 +105,7 @@ Open https://app.netlify.com/projects/shimmering-melomakarona-fcc08f, then
 - `DASHBOARD_PASSWORD`: required.
 - `AUTH_SECRET`: optional.
 - `POSTHOG_PROJECT_ID`, `POSTHOG_APP_HOST`: optional, for replay links. Add `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_HOST` only if you will use the PostHog **api** source.
-- Do **not** add `CLAUDE_CODE_OAUTH_TOKEN` here: analysis runs in the tenki sandbox.
+- Add `CLAUDE_CODE_OAUTH_TOKEN` here only for the autostart (see above), which forwards it to the sandbox. The site itself never calls a model.
 
 Then go to **Deploys → Trigger deploy → Deploy site** (env changes need a new deploy).
 

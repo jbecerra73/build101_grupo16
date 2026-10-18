@@ -69,7 +69,13 @@ export type QueuedRun = {
   requestedAt: string;
 };
 
-export type CancelRequest = { runId: string; requestedAt: string; reason?: string };
+export type CancelRequest = {
+  runId: string;
+  requestedAt: string;
+  reason?: string;
+  /** Only stop it from starting (Clear queue): a run already in progress ignores it. */
+  queuedOnly?: boolean;
+};
 
 /** GET /api/control */
 export type ControlOverview = {
@@ -80,6 +86,17 @@ export type ControlOverview = {
   settings: Settings;
   /** Missing or stale (lastSeenAt > 20s ago) means the orchestrator is offline. */
   orchestrator?: OrchestratorHeartbeat;
+  /** While offline: the autostart's last launch (packages/store/src/launch.ts). */
+  launch?: OrchestratorLaunch;
+};
+
+/** A sandbox the Netlify autostart is booting, or why it couldn't. */
+export type OrchestratorLaunch = {
+  state: "launching" | "booting" | "closing" | "failed";
+  requestedAt: string;
+  updatedAt: string;
+  sandboxId?: string;
+  error?: string;
 };
 
 /** API routes added alongside the existing /api/runs ones:
@@ -87,6 +104,7 @@ export type ControlOverview = {
  *   GET  /api/runs/[id]/swarm         → SwarmTopology | 404
  *   POST /api/runs/[id]/cancel        → { ok: true }
  *   POST /api/runs/[id]/retry         → { runId }   (same StartRunRequest, fresh seeds)
+ *   DELETE /api/queue                 → { cleared: string[] }   (cancels every queued run)
  *   GET  /api/settings                → Settings
  *   PUT  /api/settings                → Settings   (validated)
  *   POST /api/runs                    → { runId }   (now enqueues a QueuedRun)

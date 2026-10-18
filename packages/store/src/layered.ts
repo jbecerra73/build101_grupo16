@@ -60,6 +60,12 @@ export class FixtureFallbackStore implements RunStore {
     this.#wrote(key);
     return this.primary.appendText(key, text);
   }
+  getJsonVersioned<T>(key: string) {
+    return this.primary.getJsonVersioned<T>(key);
+  }
+  putJsonIf(key: string, data: unknown, version: string | undefined) {
+    return this.primary.putJsonIf(key, data, version);
+  }
 
   async list(prefix: string) {
     const p = folder(prefix);

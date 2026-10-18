@@ -54,7 +54,7 @@ const compare: Compare = (a, r, targetedPersonas) => ({
   comparisons: r.personas.map((after, i) => ({ personaId: after.personaId, segmentId: a.segments[i].segmentId, before: a.segments[i], after, completionDeltaPts: 50, regressions: [] })),
 });
 
-function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?: number; settingsSeen?: Settings[] } = {}) {
+function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?: number; settingsSeen?: Settings[]; idleExitMs?: number; onIdle?: (why: "idle" | "deadline") => void; deadline?: number; drainMs?: number } = {}) {
   return (async () => {
     const workDir = o.workDir ?? (await mkdtemp(join(tmpdir(), "fs-daemon-")));
     cleanup.push(() => rm(workDir, { recursive: true, force: true }));
@@ -75,7 +75,7 @@ function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?
         fixWatchMs: 5,
       };
     };
-    const orch = new Orchestrator({ store, workDir, makeDeps, pollMs: 20, heartbeatMs: 50, log: () => {}, env: {} });
+    const orch = new Orchestrator({ store, workDir, makeDeps, pollMs: 20, heartbeatMs: 50, log: () => {}, env: {}, idleExitMs: o.idleExitMs, onIdle: o.onIdle, deadline: o.deadline, drainMs: o.drainMs });
     cleanup.push(() => orch.stop({ abort: true, wait: true }));
     return { store, workDir, orch };
   })();
@@ -89,6 +89,48 @@ const enqueue = async (store: MemoryStore | FsStore, runId: string, r: StartRunR
 const status = (store: MemoryStore | FsStore, runId: string) => store.getJson<RunStatus>(`runs/${runId}/status.json`);
 
 describe("orchestrator daemon", () => {
+  it("calls onIdle once after idleExitMs with nothing running or queued, not while a run is going", async () => {
+    let idle = 0;
+    const { store, orch } = await setup({ idleExitMs: 150, durationMs: 300, onIdle: () => void idle++ });
+    await enqueue(store, "r-idle");
+    await orch.start();
+    await until(async () => (await status(store, "r-idle"))?.phase === "retesting");
+    expect(idle).toBe(0);
+    await until(async () => idle > 0);
+    expect((await status(store, "r-idle"))?.phase).toBe("done");
+    await sleep(300);
+    expect(idle).toBe(1);
+  });
+
+  it("near the sandbox's deadline takes no new run, lets the active one finish, then exits", async () => {
+    const exits: string[] = [];
+    const { store, orch } = await setup({ durationMs: 300, deadline: Date.now() + 60 * 60_000, drainMs: 60 * 60_000 - 500, onIdle: (why) => void exits.push(why) });
+    await enqueue(store, "r-first");
+    await orch.start();
+    await until(async () => (await status(store, "r-first"))?.phase === "retesting");
+    // Draining from here on: the second run stays queued.
+    await sleep(600);
+    await enqueue(store, "r-second");
+    await until(async () => exits.length > 0);
+    expect(exits).toEqual(["deadline"]);
+    expect((await status(store, "r-first"))?.phase).toBe("done");
+    expect(await status(store, "r-second")).toBeUndefined();
+    expect(await store.list("queue/")).toEqual(["queue/q-r-second.json"]);
+  });
+
+  it("ignores a queued-only cancel (Clear queue) once the run has started", async () => {
+    const { store, orch } = await setup({ durationMs: 200 });
+    await enqueue(store, "r-kept");
+    await orch.start();
+    await until(async () => orch.active.has("r-kept"));
+    await store.putJson("runs/r-kept/cancel.json", { runId: "r-kept", requestedAt: new Date().toISOString(), queuedOnly: true });
+    const final = await until(async () => {
+      const s = await status(store, "r-kept");
+      return s && (s.phase === "done" || s.phase === "failed") && s;
+    });
+    expect(final.phase).toBe("done");
+  });
+
   it("takes a queued run, runs the pipeline and mirrors every run file to the store", async () => {
     const { store, workDir, orch } = await setup();
     await enqueue(store, "r1");

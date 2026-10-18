@@ -3,8 +3,10 @@
 #
 # Monorepo: Netlify installs the npm workspaces from the repo root, then builds
 # the dashboard workspace with the Next.js runtime. The site never runs the
-# pipeline: "Analyze" only enqueues a run in Netlify Blobs, and the orchestrator
-# (`npm run orchestrator:tenki -- up`) takes it from there.
+# pipeline: "Analyze" only enqueues a run in Netlify Blobs. The orchestrator
+# daemon takes it from there, in a tenki sandbox that netlify/functions/ boots
+# on demand (orchestrator-launch, orchestrator-watch) or that you start with
+# `npm run orchestrator:tenki -- up`.
 
 [build]
   command = "npm run build -w @frictionswarm/dashboard"
@@ -22,6 +24,12 @@
   # Playwright is a root dependency for the worker; the site never runs a browser.
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   NEXT_TELEMETRY_DISABLED = "1"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  # Plain Node with its own transport: load it from node_modules, unbundled.
+  external_node_modules = ["@tenkicloud/sandbox"]
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"

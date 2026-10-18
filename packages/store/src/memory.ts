@@ -1,4 +1,4 @@
-import { assertKey, folder, fromBytes, parseJson, toBytes, type RunStore } from "./types";
+import { assertKey, folder, fromBytes, jsonText, parseJson, toBytes, type RunStore, type Versioned } from "./types";
 
 /** In-process store for tests and throwaway runs. */
 export class MemoryStore implements RunStore {
@@ -21,7 +21,17 @@ export class MemoryStore implements RunStore {
     await this.putBytes(key, toBytes(text));
   }
   async putJson(key: string, data: unknown) {
-    await this.putText(key, JSON.stringify(data, null, 2) + "\n");
+    await this.putText(key, jsonText(data));
+  }
+  /** The version is the stored text itself. */
+  async getJsonVersioned<T>(key: string): Promise<Versioned<T>> {
+    const text = await this.getText(key);
+    return { value: parseJson<T>(text), version: text };
+  }
+  async putJsonIf(key: string, data: unknown, version: string | undefined) {
+    if ((await this.getText(key)) !== version) return false;
+    await this.putText(key, jsonText(data));
+    return true;
   }
   async putBytes(key: string, data: Uint8Array) {
     assertKey(key);

@@ -14,6 +14,7 @@ const files = await import("@/app/api/runs/[id]/files/[...path]/route");
 const swarm = await import("@/app/api/runs/[id]/swarm/route");
 const cancel = await import("@/app/api/runs/[id]/cancel/route");
 const retry = await import("@/app/api/runs/[id]/retry/route");
+const queue = await import("@/app/api/queue/route");
 const control = await import("@/app/api/control/route");
 const settings = await import("@/app/api/settings/route");
 
@@ -110,6 +111,18 @@ describe("cancel and retry", () => {
     expect(await store.list("queue/")).toEqual([]);
     expect(await store.getJson(`runs/${runId}/status.json`)).toMatchObject({ phase: "failed", error: "cancelled" });
     expect(await store.getJson(`runs/${runId}/cancel.json`)).toMatchObject({ runId });
+  });
+
+  it("clears the queue: every queued run ends cancelled, running runs keep going", async () => {
+    const a = (await (await runs.POST(post("/api/runs", req))).json()).runId;
+    const b = (await (await runs.POST(post("/api/runs", req))).json()).runId;
+    await seedRun("r", "analyzing");
+    const res = await queue.DELETE();
+    expect((await res.json()).cleared.sort()).toEqual([a, b].sort());
+    expect(await store.list("queue/")).toEqual([]);
+    for (const id of [a, b]) expect(await store.getJson(`runs/${id}/status.json`)).toMatchObject({ phase: "failed", error: "cancelled" });
+    expect(await store.getJson("runs/r/cancel.json")).toBeUndefined();
+    expect(await (await queue.DELETE()).json()).toEqual({ cleared: [] });
   });
 
   it("asks the orchestrator to cancel a running run; refuses finished and unknown runs", async () => {

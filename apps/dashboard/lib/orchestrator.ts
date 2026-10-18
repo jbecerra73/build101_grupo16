@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { StartRunRequest } from "@frictionswarm/shared";
 import { KEYS, onNetlify, readSettings, readUsage, type QueuedRun } from "@frictionswarm/store";
+import { LAUNCH_HEADER, LAUNCH_PATH, launchSecret } from "@frictionswarm/store/launch";
 import { builtForNetlify, orchestratorSetting } from "./deploy";
 import { listQueue, runsDir } from "./runs";
 import { runStore } from "./store";
@@ -81,6 +82,19 @@ export async function enqueueRun(req: StartRunRequest): Promise<{ runId: string 
   const q: QueuedRun = { requestId: `${runId}-${randomBytes(3).toString("hex")}`, runId, req, requestedAt: now.toISOString() };
   await store.putJson(KEYS.queued(q.requestId), q);
   void ensureInlineOrchestrator();
+  await pokeLauncher();
   return { runId };
+}
+
+/** On Netlify: asks the launcher function to boot the orchestrator. It answers
+ * 202 at once and does nothing when one is online or booting. Without the poke
+ * the orchestrator-watch schedule still launches within 5 minutes. */
+async function pokeLauncher() {
+  const base = process.env.URL;
+  const secret = launchSecret();
+  if (!(onNetlify() || builtForNetlify()) || !base || !secret) return;
+  await fetch(`${base}${LAUNCH_PATH}?reason=enqueue`, { method: "POST", headers: { [LAUNCH_HEADER]: secret }, signal: AbortSignal.timeout(3000) }).catch((e) =>
+    console.error("[orchestrator] could not poke the launcher:", e),
+  );
 }
 

@@ -9,10 +9,11 @@ import {
   readUsage,
   type CancelRequest,
   type OrchestratorHeartbeat,
+  type QueuedRun,
   type Settings,
   type SwarmTopology,
 } from "@frictionswarm/store";
-import type { ControlOverview } from "./control-types";
+import type { ControlOverview, OrchestratorLaunch } from "./control-types";
 import { enqueueRun } from "./orchestrator";
 import { isValidRunId, listQueue, listRuns, placeholderConfig } from "./runs";
 import { runStore } from "./store";
@@ -34,6 +35,8 @@ export async function getControlOverview(now = Date.now()): Promise<ControlOverv
     readUsage(store, new Date(now)),
     store.getJson<OrchestratorHeartbeat>(KEYS.heartbeat).catch(() => undefined),
   ]);
+  const online = isOnline(hb, now);
+  const launch = online ? undefined : await store.getJson<OrchestratorLaunch>(KEYS.launch).catch(() => undefined);
   return {
     active: runs.filter(isActive),
     recent: runs.filter((r) => !isActive(r)).slice(0, RECENT),
@@ -41,7 +44,8 @@ export async function getControlOverview(now = Date.now()): Promise<ControlOverv
     usage: { date: usage.date, runs: usage.runs, max: settings.maxRunsPerDay },
     settings,
     // Omitted when missing or stale: the UI shows the orchestrator offline.
-    ...(isOnline(hb, now) ? { orchestrator: hb } : {}),
+    ...(online ? { orchestrator: hb } : {}),
+    ...(launch ? { launch: { state: launch.state, requestedAt: launch.requestedAt, updatedAt: launch.updatedAt, sandboxId: launch.sandboxId, error: launch.error } } : {}),
   };
 }
 
@@ -67,15 +71,7 @@ export async function cancelRun(runId: string, reason?: string): Promise<Control
   const req: CancelRequest = { runId, requestedAt: new Date().toISOString(), ...(reason ? { reason } : {}) };
   const queued = (await listQueue()).find((q) => q.runId === runId);
   if (queued) {
-    // cancel.json first: if the orchestrator takes the run meanwhile, it drops it.
-    await store.putJson(KEYS.cancel(runId), req);
-    await store.delete(KEYS.queued(queued.requestId));
-    if (!(await store.getJson(KEYS.runFile(runId, "config.json")))) {
-      const config: RunConfig = placeholderConfig(runId, queued.req, queued.requestedAt);
-      const status: RunStatus = { runId, phase: "failed", message: "Cancelled before it started", error: "cancelled", updatedAt: req.requestedAt };
-      await store.putJson(KEYS.runFile(runId, "config.json"), config);
-      await store.putJson(KEYS.runFile(runId, "status.json"), status);
-    }
+    await cancelQueued(queued, req);
     return { ok: true, value: { ok: true } };
   }
   const status = await store.getJson<RunStatus>(KEYS.runFile(runId, "status.json"));
@@ -83,6 +79,36 @@ export async function cancelRun(runId: string, reason?: string): Promise<Control
   if (TERMINAL.has(status.phase)) return { ok: false, status: 409, error: `Run already ${status.phase}` };
   await store.putJson(KEYS.cancel(runId), req);
   return { ok: true, value: { ok: true } };
+}
+
+/** Removes a queued run; it ends failed, "Cancelled before it started". True
+ * unless the orchestrator took it first and started it. */
+async function cancelQueued(q: QueuedRun, req: CancelRequest): Promise<boolean> {
+  const store = runStore();
+  // cancel.json first: if the orchestrator takes the run meanwhile, it drops it.
+  await store.putJson(KEYS.cancel(q.runId), req);
+  await store.delete(KEYS.queued(q.requestId));
+  if (await store.getJson(KEYS.runFile(q.runId, "config.json"))) {
+    // Taken first: either it saw cancel.json (failed, "Not started") or it is running.
+    return (await store.getJson<RunStatus>(KEYS.runFile(q.runId, "status.json")))?.phase === "failed";
+  }
+  const config: RunConfig = placeholderConfig(q.runId, q.req, q.requestedAt);
+  const status: RunStatus = { runId: q.runId, phase: "failed", message: "Cancelled before it started", error: "cancelled", updatedAt: req.requestedAt };
+  await store.putJson(KEYS.runFile(q.runId, "config.json"), config);
+  await store.putJson(KEYS.runFile(q.runId, "status.json"), status);
+  return true;
+}
+
+/** Cancels every queued run (each ends failed, "Cancelled before it started").
+ * Running ones are untouched, including one the orchestrator takes while this
+ * runs: its cancel is queuedOnly, which an active run ignores. */
+export async function clearQueue(reason = "Queue cleared"): Promise<{ cleared: string[] }> {
+  const cleared: string[] = [];
+  for (const q of await listQueue()) {
+    const req: CancelRequest = { runId: q.runId, requestedAt: new Date().toISOString(), reason, queuedOnly: true };
+    if (await cancelQueued(q, req)) cleared.push(q.runId);
+  }
+  return { cleared };
 }
 
 /** The request a run was started with: request.json (written by the

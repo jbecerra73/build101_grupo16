@@ -26,6 +26,7 @@ import {
   type RunStore,
   type Settings,
 } from "@frictionswarm/store";
+import type { LaunchRecord } from "@frictionswarm/store/launch";
 import { RunMirror } from "./mirror";
 import { registerTenkiSwarmRunner } from "./swarm";
 import {
@@ -60,6 +61,15 @@ export type DaemonOptions = {
   pollMs?: number;
   /** Runs at once. One by default: a run already uses all 5 sandboxes. */
   maxConcurrent?: number;
+  /** With nothing running or queued for this long, onIdle is called once (the
+   * autostarted sandbox shuts itself down). Default: never. */
+  idleExitMs?: number;
+  /** The sandbox's time limit (ms since epoch). From `deadline - drainMs` on, no
+   * new run starts, and once the active ones end onIdle("deadline") is called. */
+  deadline?: number;
+  /** Default DRAIN_MS. */
+  drainMs?: number;
+  onIdle?: (why: "idle" | "deadline") => void | Promise<void>;
   /** Pipeline wiring per run (tests inject fakes). Default: buildDeps from settings. */
   makeDeps?: DepsFactory;
   now?: () => Date;
@@ -69,6 +79,8 @@ type Active = { runId: string; controller: AbortController; done: Promise<RunSta
 
 const TERMINAL = new Set(["done", "failed"]);
 export const RESTARTED = "orchestrator restarted";
+/** Stop taking runs this long before the sandbox's time limit (longer than a run). */
+export const DRAIN_MS = 30 * 60_000;
 
 /** Default wiring: settings.json picks the swarm runner, fix loop and speed. */
 export const settingsDeps =
@@ -97,6 +109,8 @@ export class Orchestrator {
   #timers: NodeJS.Timeout[] = [];
   #ticking?: Promise<void>;
   #stopped = false;
+  #idleSince?: number;
+  #draining = false;
 
   constructor(o: DaemonOptions) {
     this.#o = o;
@@ -172,7 +186,8 @@ export class Orchestrator {
   async #tick() {
     for (const a of this.active.values()) {
       await this.#sync(a.runId);
-      if (!a.controller.signal.aborted && (await this.store.getJson<CancelRequest>(KEYS.cancel(a.runId)))) {
+      const cancel = a.controller.signal.aborted ? undefined : await this.store.getJson<CancelRequest>(KEYS.cancel(a.runId));
+      if (cancel && !cancel.queuedOnly) {
         this.#log(`${a.runId}: cancel requested`);
         a.controller.abort();
       }
@@ -181,11 +196,45 @@ export class Orchestrator {
     const queued = await this.queue();
     this.#queueDepth = queued.length;
     const max = this.#o.maxConcurrent ?? 1;
+    const draining = this.#checkDeadline();
     for (const item of queued) {
-      if (this.active.size >= max || this.#stopped) break;
+      if (this.active.size >= max || this.#stopped || draining) break;
       await this.take(item);
       this.#queueDepth--;
     }
+    this.#checkIdle(queued.length);
+  }
+
+  #checkIdle(queued: number) {
+    const { idleExitMs, onIdle } = this.#o;
+    if (!onIdle || this.#stopped) return;
+    if (this.#draining) {
+      if (this.active.size === 0) this.#exit("deadline", "drained before the sandbox's time limit");
+      return;
+    }
+    if (!idleExitMs) return;
+    const now = this.#now().getTime();
+    if (this.active.size > 0 || queued > 0) this.#idleSince = undefined;
+    else if (this.#idleSince === undefined) this.#idleSince = now;
+    else if (now - this.#idleSince >= idleExitMs) this.#exit("idle", `idle for ${Math.round((now - this.#idleSince) / 60_000)} min`);
+  }
+
+  /** True once the sandbox is close enough to its time limit that a new run
+   * might not finish: tenki would kill it mid-run. */
+  #checkDeadline() {
+    const { deadline, onIdle } = this.#o;
+    if (!deadline || !onIdle || this.#draining) return this.#draining;
+    const left = deadline - this.#now().getTime();
+    if (left > (this.#o.drainMs ?? DRAIN_MS)) return false;
+    this.#draining = true;
+    this.#log(`${Math.round(left / 60_000)} min left in the sandbox: taking no new runs, exiting once ${this.active.size} active end`);
+    return true;
+  }
+
+  #exit(why: "idle" | "deadline", detail: string) {
+    this.#log(`${detail}, shutting down`);
+    this.#stopped = true;
+    void Promise.resolve(this.#o.onIdle!(why)).catch((e) => this.#log(`shutdown failed: ${errMsg(e)}`));
   }
 
   /** Queued runs, oldest first. Unreadable entries are dropped. */
@@ -298,7 +347,7 @@ export async function registerP2SwarmRunner() {
   registerTenkiSwarmRunner(tenkiRunnerFactory());
 }
 
-export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestrator {
+export function orchestratorFromEnv(env: Env = process.env, log?: Log, extra: Partial<DaemonOptions> = {}): Orchestrator {
   const runsDir = resolve(/*turbopackIgnore: true*/ env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
   const store = createStore(runsDir, env);
   // With a Blobs store the pipeline still needs a local folder; under /home/tenki in the sandbox.
@@ -312,7 +361,46 @@ export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestr
     env,
     log,
     maxConcurrent: Number(env.ORCHESTRATOR_MAX_CONCURRENT ?? 1),
+    ...(Number(env.ORCHESTRATOR_IDLE_EXIT_MS) > 0 && { idleExitMs: Number(env.ORCHESTRATOR_IDLE_EXIT_MS) }),
+    ...(Date.parse(env.ORCHESTRATOR_DEADLINE ?? "") > 0 && { deadline: Date.parse(env.ORCHESTRATOR_DEADLINE!) }),
+    ...(Number(env.ORCHESTRATOR_DRAIN_MS) > 0 && { drainMs: Number(env.ORCHESTRATOR_DRAIN_MS) }),
+    ...extra,
   });
+}
+
+/** Autostarted in a sandbox (packages/store/src/launch.ts): close our own
+ * sandbox, so an idle orchestrator stops billing. The launch record is marked
+ * "closing" first, because closing the sandbox kills this process: if the
+ * close fails, the launcher closes the sandbox instead (orchestrator-watch
+ * pokes it within 5 minutes). */
+async function shutdownSandbox(o: Orchestrator, env: Env, why: "idle" | "deadline") {
+  await o.stop();
+  const id = env.TENKI_SANDBOX_ID;
+  if (!id || !(env.TENKI_API_KEY || env.TENKI_AUTH_TOKEN)) process.exit(0);
+  const { tenkiClient } = await import("@frictionswarm/store/launch");
+  const now = new Date().toISOString();
+  try {
+    const rec = await o.store.getJson<LaunchRecord>(KEYS.launch);
+    // Another sandbox's record (a newer launch) is not ours to touch.
+    if (!rec?.sandboxId || rec.sandboxId === id)
+      await o.store.putJson(KEYS.launch, { nonce: "daemon", requestedAt: now, ...rec, reason: why, state: "closing", sandboxId: id, updatedAt: now } satisfies LaunchRecord);
+  } catch (e) {
+    console.log(`[orchestrator] could not mark the launch record closing: ${errMsg(e)}`);
+  }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const client = await tenkiClient(env);
+      const session = await client.get(id);
+      console.log(`[orchestrator] closing sandbox ${id} (${why})`);
+      await session.closeIfOpen();
+      process.exit(0);
+    } catch (e) {
+      console.log(`[orchestrator] closing sandbox ${id} failed (attempt ${attempt}/3): ${errMsg(e)}`);
+      await new Promise((r) => setTimeout(r, attempt * 5_000));
+    }
+  }
+  console.log(`[orchestrator] leaving sandbox ${id} to the launcher (launch record: closing)`);
+  process.exit(1);
 }
 
 const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
@@ -320,7 +408,7 @@ if (isMain) {
   const envFile = join(REPO_ROOT, ".env.local");
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   await registerP2SwarmRunner();
-  const o = orchestratorFromEnv();
+  const o: Orchestrator = orchestratorFromEnv(process.env, undefined, { onIdle: (why) => shutdownSandbox(o, process.env, why) });
   await o.start();
   const shutdown = async (sig: string) => {
     console.log(`[orchestrator] ${sig}: stopping (active runs will be marked "${RESTARTED}" on next start)`);
