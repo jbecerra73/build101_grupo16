@@ -7,7 +7,7 @@ import {
   completionProblems,
   MAX_ACTIONS_PER_AGENT,
   PERSONAS,
-  resolveStep,
+  stepEntries,
   type Flow,
   type FunnelStep,
   type Metrics,
@@ -41,12 +41,10 @@ export function groupByAgent(events: PostHogEvent[]): Map<string, PostHogEvent[]
   return map;
 }
 
-const stepOf = (flow: Flow | undefined, e: PostHogEvent) => (flow && e.properties.$current_url ? resolveStep(flow, e.properties.$current_url) : undefined);
 const prop = (e: PostHogEvent | undefined, k: string) => (e?.properties as Record<string, unknown> | undefined)?.[k];
 
-/** Steps the agent's $pageviews resolve to, in order. */
-export const visitedSteps = (evs: PostHogEvent[], flow?: Flow) =>
-  evs.filter((e) => e.event === "$pageview").map((e) => stepOf(flow, e)).filter((s): s is string => !!s);
+/** Steps the agent entered, in order: its $pageviews plus query-only step changes (stepEntries). */
+export const visitedSteps = (evs: PostHogEvent[], flow?: Flow) => (flow ? stepEntries(flow, evs).map((x) => x.step) : []);
 
 /** SPEC completion validity for an agent that called done: every required step in its
  * $pageviews and every flow.completion event fired (e.g. shipping and payment submitted
@@ -134,7 +132,7 @@ export function funnelSteps(flow: Flow | undefined, seen: Set<string>): string[]
 export function deriveMetrics(config: RunConfig, events: PostHogEvent[], flow: Flow | undefined): Metrics {
   const byAgent = groupByAgent(events);
   const agents = deriveAgents(config, events, flow, true);
-  const seen = new Set(events.map((e) => (e.event === "$pageview" ? stepOf(flow, e) : undefined)).filter((s): s is string => !!s));
+  const seen = new Set([...byAgent.values()].flatMap((evs) => visitedSteps(evs, flow)));
   const steps = funnelSteps(flow, seen);
   const personas: PersonaMetrics[] = config.personaIds.map((personaId) => {
     const mine = agents.filter((a) => a.personaId === personaId);

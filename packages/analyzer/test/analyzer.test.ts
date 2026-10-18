@@ -63,6 +63,14 @@ describe("validateCompletion", () => {
   it("rejects an order whose $pageviews miss a required step", () => {
     expect(validateCompletion(buyTshirt, fx("missing-step"))).toEqual({ valid: false, reasons: ["skipped required step(s): Payment"] });
   });
+  it("sees the payment step without a $pageview (posthog-js skips query-only navigations)", () => {
+    // What the storefront really sends: /checkout → /checkout?step=payment is a router.push on the same path.
+    const real = fx("valid-order").filter((e) => !(e.event === "$pageview" && e.properties.$current_url?.endsWith("?step=payment")));
+    expect(validateCompletion(buyTshirt, real)).toEqual({ valid: true, reasons: [] });
+    const [s] = summarizeSessions(buyTshirt, real);
+    expect(s.steps).toEqual(["Home", "Product", "Cart", "Shipping", "Payment", "Confirmation"]);
+    expect(s.dwell.map((d) => d.step)).toContain("Payment");
+  });
   it("rejects a drop-off", () => {
     expect(validateCompletion(buyTshirt, session("drop-1")).reasons[0]).toBe("never reached the success step");
   });
