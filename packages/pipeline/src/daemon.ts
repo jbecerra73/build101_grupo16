@@ -34,6 +34,7 @@ import {
   buildDeps,
   CANCELLED,
   DEFAULT_SEEDS_PER_PERSONA,
+  fixAttemptsFrom,
   PARKED,
   resumeFix,
   runPipeline,
@@ -90,7 +91,7 @@ export const settingsDeps =
       fixLoop: settings.fixLoop,
       swarmSpeed: settings.swarmSpeed,
       fixStageDelayMs: Number(env.FIX_STAGE_DELAY_MS ?? 1500),
-      fixAttempts: env.FIX_ATTEMPTS ? Number(env.FIX_ATTEMPTS) : undefined,
+      fixAttempts: fixAttemptsFrom(env.FIX_ATTEMPTS),
     });
 
 export class Orchestrator {

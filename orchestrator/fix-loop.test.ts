@@ -187,21 +187,66 @@ describe("runFixLoop", () => {
 
   // Main closed the PR here; this branch's decision gate never auto-closes, so the PR is labelled
   // not-proven on the last verdict and left open.
-  it("a failed retry labels the PR not-proven on the last verdict and leaves it open", async () => {
-    const { opts, ghCalls } = await setup([metrics("r1", 0, 0, 1)]);
+  // The run then parks in awaiting-decision, so the Product Owner can still reject the PR.
+  it("a failed retry labels the PR not-proven on the last verdict, re-fetches the diff and returns for the decision", async () => {
+    const { runsDir, opts, ghCalls } = await setup([metrics("r1", 0, 0, 1)]);
     const agent = opts.codingAgent!;
+    const ghImpl = opts.ghImpl!;
+    let diffs = 0;
+    const result = await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      ghImpl: async (args) => (args[1] === "diff" ? (ghCalls.push(args), `diff --git a/v${++diffs} b/v${diffs}`) : ghImpl(args)),
+      codingAgent: async (shell, input) => {
+        if (input.retry) throw new Error("build fails after the fix");
+        return agent(shell, input);
+      },
+    });
+    expect(result.attempts.map((a) => a.status)).toEqual(["not-proven", "not-proven"]);
+    expect(result.attempts[1]).toMatchObject({ prNumber: 41, prUrl: "u", branch: "b1", error: "build fails after the fix" });
+    expect(result.attempts[1].verdict).toBeUndefined();
+    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["diff", "comment", "comment", "edit", "diff"]);
+    expect(ghCalls.some((c) => c[0] === "label" && c[1] === "create")).toBe(true);
+    expect(ghCalls.some((c) => c[0] === "pr" && (c[1] === "close" || c[1] === "merge"))).toBe(false);
+    expect(await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8")).toBe("diff --git a/v2 b/v2\n");
+    const saved = await readJson<FixResult>(join(runsDir, "fixture-analysis", "fix.json"));
+    expect(saved.attempts.at(-1)).toMatchObject({ status: "not-proven", error: "build fails after the fix" });
+  });
+
+  it("a failed retry's diff that can't be re-fetched becomes the placeholder", async () => {
+    const { runsDir, opts } = await setup([metrics("r1", 0, 0, 1)]);
+    const agent = opts.codingAgent!;
+    const ghImpl = opts.ghImpl!;
+    let diffs = 0;
+    await runFixLoop({
+      ...opts,
+      maxAttempts: 2,
+      ghImpl: async (args) => {
+        if (args[1] === "diff" && ++diffs === 2) throw new Error("gh pr diff failed: boom");
+        return ghImpl(args);
+      },
+      codingAgent: async (shell, input) => {
+        if (input.retry) throw new Error("build fails after the fix");
+        return agent(shell, input);
+      },
+    });
+    expect(await readFile(join(runsDir, "fixture-analysis", "fix", "pr.diff"), "utf8")).toBe(unavailableDiff(41, "gh pr diff failed: boom"));
+  });
+
+  it("a retry that fails after its verdict (finalizePr) still throws, without the last verdict's label", async () => {
+    const { opts, ghCalls } = await setup([metrics("r1", 0, 0, 1), metrics("r2", 6, 7, 10)], [retryFinding]);
+    const ghImpl = opts.ghImpl!;
     await expect(
       runFixLoop({
         ...opts,
         maxAttempts: 2,
-        codingAgent: async (shell, input) => {
-          if (input.retry) throw new Error("build fails after the fix");
-          return agent(shell, input);
+        ghImpl: async (args) => {
+          if (args[0] === "pr" && args[1] === "ready") throw new Error("gh pr ready failed");
+          return ghImpl(args);
         },
       }),
-    ).rejects.toThrow("build fails");
-    expect(ghCalls.filter((c) => c[0] === "pr").map((c) => c[1])).toEqual(["diff", "comment", "comment", "edit"]);
-    expect(ghCalls.some((c) => c[0] === "label" && c[1] === "create")).toBe(true);
+    ).rejects.toThrow("gh pr ready failed");
+    expect(ghCalls.some((c) => c[0] === "label")).toBe(false);
   });
 
   it("retry: the chosen findings apply to attempt 1 only, and the PR is never closed", async () => {

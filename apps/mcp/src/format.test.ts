@@ -248,6 +248,23 @@ describe("decisionPackage", () => {
     expect(pkg).toContain("- PR: https://github.com/FrissA/demo-ecommerce/pull/12");
   });
 
+  it("a retry that failed before its re-test says its push was not re-tested", () => {
+    const crashed = run("awaiting-decision", {
+      fix: {
+        baselineRunId: "run-1",
+        repo: "r",
+        attempts: [
+          attempt({ status: "not-proven" }),
+          attempt({ attempt: 2, status: "not-proven", verdict: undefined, error: "preview timed out\n  at waitForBuild" }),
+        ],
+      },
+    });
+    const pkg = decisionPackage(crashed, undefined, links);
+    expect(pkg).toContain("Attempt 2 failed (preview timed out): its push, if any, was not re-tested.");
+    expect(pkg).not.toContain("at waitForBuild");
+    expect(decisionPackage(run("awaiting-decision", { fix: { baselineRunId: "run-1", repo: "r", attempts: [attempt()] } }), undefined, links)).not.toContain("not re-tested");
+  });
+
   it("says when the fix is a rehearsal", () => {
     const rehearsal = run("awaiting-decision", { fix: { baselineRunId: "run-1", repo: "r", attempts: [attempt({ prNumber: 0, prUrl: "about:blank#rehearsal" })] } });
     expect(decisionPackage(rehearsal, undefined, links)).toContain("(rehearsal — no PR merged)");

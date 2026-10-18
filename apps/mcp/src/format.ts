@@ -203,6 +203,7 @@ export function decisionPackage(run: RunDetail, diff: string | undefined, links:
     "",
     "### 1. Verdict",
     v ? `**${v.improved ? "Improved" : "Not proven"}** (status: ${a.status})` : `No verdict (status: ${a.status})`,
+    ...(a.error ? [`Attempt ${a.attempt} failed (${a.error.split("\n")[0]}): its push, if any, was not re-tested.`] : []),
     ...(v?.reasons ?? []).map((r) => `- ${r}`),
     "",
     `Measured: before = real users (PostHog segments, production build ${sha7(run.metrics?.buildSha ?? run.config.posthog.buildSha)}); ` +

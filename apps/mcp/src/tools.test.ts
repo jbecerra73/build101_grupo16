@@ -176,6 +176,15 @@ describe("tools", () => {
     expect(res.isError).toBe(true);
   });
 
+  it("get_decision's findingIds are attempt 1's (the analysis's), not a retry's re-test ids", async () => {
+    const retried = run("awaiting-decision", {
+      fix: { baselineRunId: "run-1", repo: "r", attempts: [attempt({ findingIds: ["F2", "F3"], status: "not-proven" }), attempt({ attempt: 2, findingIds: ["F1"] })] },
+    });
+    const { call } = await connect({ "GET /api/runs/run-1": { body: retried }, "GET /api/runs/run-1/files/fix/pr.diff": { text: "diff --git a/x b/x\n+y" } });
+    const res = await call("get_decision", { runId: "run-1" });
+    expect(res.structuredContent).toMatchObject({ findingIds: ["F2", "F3"], attempt: { attempt: 2 } });
+  });
+
   it("analyze_flow queues without autoFix and hands over to get_run when the run is slow", async () => {
     const { call, calls } = await connect({
       "GET /api/control": online,

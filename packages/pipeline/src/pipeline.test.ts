@@ -20,7 +20,7 @@ import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeApplyDecision, fakeFixLoop, pickTargets } from "./fakeFix";
 import { realApplyDecision, realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { analysisConfig, defaultWindow, runPipeline, seedsFor, startPipeline, validateRequest, type PipelineDeps, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, fixAttemptsFrom, runPipeline, seedsFor, startPipeline, validateRequest, type PipelineDeps, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -175,6 +175,24 @@ describe("startPipeline", () => {
     const { opts } = await setup({ compare: (a, r, t) => ({ ...compare(a, r, t), improved: false }) });
     const final = await (await startPipeline(req, opts)).done;
     expect(final).toMatchObject({ phase: "awaiting-decision", message: expect.stringContaining("not-proven") });
+  });
+
+  it("a retry that crashed before its re-test (not-proven, with its error) parks too, so the PR can be rejected", async () => {
+    const crashedRetry: FixLoop = async (o) => {
+      const result: FixResult = {
+        baselineRunId: o.baselineRunId,
+        repo: "r",
+        attempts: [
+          { attempt: 1, findingIds: ["F1"], status: "not-proven", prNumber: 7 },
+          { attempt: 2, findingIds: ["R1"], status: "not-proven", prNumber: 7, error: "build fails after the fix" },
+        ],
+      };
+      await writeFile(join(o.runsDir, o.baselineRunId, "fix.json"), JSON.stringify(result));
+      return result;
+    };
+    const { opts } = await setup({ fixLoop: crashedRetry });
+    const final = await (await startPipeline(req, opts)).done;
+    expect(final.phase).toBe("awaiting-decision");
   });
 
   it("records phase history, ending in awaiting-decision", async () => {
@@ -417,5 +435,11 @@ describe("realFixLoop", () => {
     const opts = { baselineRunId: "r" } as Parameters<FixLoop>[0];
     expect((await realFixLoop(mod)(opts)).repo).toBe("3");
     expect((await realFixLoop(mod, { maxAttempts: 1 })(opts)).repo).toBe("1");
+  });
+
+  it("FIX_ATTEMPTS: a whole number ≥ 1, else the default", () => {
+    expect(fixAttemptsFrom("2")).toBe(2);
+    expect(fixAttemptsFrom(" 1 ")).toBe(1);
+    for (const bad of [undefined, "", " ", "abc", "0", "-1", "1.5", "NaN"]) expect(fixAttemptsFrom(bad)).toBeUndefined();
   });
 });

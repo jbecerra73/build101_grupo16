@@ -245,8 +245,6 @@ export type RunConfig = {
   baselineRunId?: string;
   /** Snapshot of the flow this run was started with (custom flows live in the store). */
   flow?: Flow;
-  /** Fix runs: the findings to fix, overriding the default top-N. */
-  fixFindingIds?: string[];
   /** For a retest, the fix it checks: the analyzer links what the swarm hit to these targets. */
   fix?: FixUnderTest;
   createdAt: string;

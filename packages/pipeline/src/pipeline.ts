@@ -432,6 +432,12 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
   };
 }
 
+/** FIX_ATTEMPTS as a whole number ≥ 1; unset or invalid (non-numeric, < 1) → undefined, the loop's default. */
+export function fixAttemptsFrom(value: string | undefined): number | undefined {
+  const n = Number(value);
+  return value?.trim() && Number.isInteger(n) && n >= 1 ? n : undefined;
+}
+
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
  * SWARM_SPEED, FIX_LOOP=real|fake (fake = offline rehearsal, default with the
  * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 3). */
@@ -448,7 +454,7 @@ export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => 
     fixLoop: fixMode,
     swarmSpeed: Number(process.env.SWARM_SPEED ?? process.env.REPLAY_SPEED ?? 1),
     fixStageDelayMs: Number(process.env.FIX_STAGE_DELAY_MS ?? 1500),
-    fixAttempts: process.env.FIX_ATTEMPTS ? Number(process.env.FIX_ATTEMPTS) : undefined,
+    fixAttempts: fixAttemptsFrom(process.env.FIX_ATTEMPTS),
   });
 }
 

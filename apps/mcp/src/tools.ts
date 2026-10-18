@@ -289,7 +289,7 @@ export function registerTools(server: McpServer, api: ApiClient, links: Links, o
           true,
         );
       const diff = await api.getText(`/api/runs/${seg(id)}/files/fix/pr.diff`);
-      return reply(decisionPackage(run, diff, links), { runId: id, phase: run.status.phase, attempt, findingIds: attempt?.findingIds ?? [] });
+      return reply(decisionPackage(run, diff, links), { runId: id, phase: run.status.phase, attempt, findingIds: run.fix?.attempts[0]?.findingIds ?? [] });
     }),
   );
 

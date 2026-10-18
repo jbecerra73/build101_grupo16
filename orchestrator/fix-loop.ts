@@ -95,6 +95,8 @@ function chosenFindings(findings: Finding[], ids: string[]): Finding[] {
  * Not proven with attempts left: the PR stays open, and the next attempt pushes onto the same branch,
  * told what the previous change was, how the swarm did and what it struggled with (the re-test's
  * findings, linked to the targets they show unresolved); fix/pr.diff is re-fetched after each push.
+ * A retry that fails before its verdict ends not-proven (with its error) on the last verdict, so the
+ * run still parks for the decision.
  * Progress is written to runs/<baseline>/fix.json after every stage for the dashboard. */
 export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const { baselineRunId, maxFindings = 3, maxAttempts = 1, seedsPerPersona = 10, repo = STOREFRONT_REPO, runsDir = RUNS_DIR } = opts;
@@ -126,13 +128,33 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   let retry: CodingAgentInput["retry"];
   /** The last verdict's PR context, to label the PR not-proven with if a retry fails. */
   let lastCtx: PrContext | undefined;
+  // Saved for the dashboard and the PO's decision; the deployed dashboard has no GitHub access.
+  // On failure a placeholder replaces it, so a retry never shows the previous attempt's diff.
+  const diffFile = join(baseDir, "fix", "pr.diff");
+  const saveDiff = async (prNumber: number) => {
+    await mkdir(join(baseDir, "fix"), { recursive: true });
+    await prDiff(repo, prNumber, ghImpl)
+      .then((diff) => writeFile(diffFile, diff + "\n"))
+      .catch(async (e) => {
+        const reason = e instanceof Error ? e.message : String(e);
+        log(`could not save the PR diff: ${reason}`);
+        await writeFile(diffFile, unavailableDiff(prNumber, reason)).catch(() => {});
+      });
+  };
 
   for (let n = 1; n <= maxAttempts; n++) {
     if (targets.length === 0) {
       log("no findings left to fix");
       break;
     }
-    const attempt: FixAttempt = { attempt: n, findingIds: targets.map((f) => f.id), targets, status: "running" };
+    const attempt: FixAttempt = {
+      attempt: n,
+      findingIds: targets.map((f) => f.id),
+      targets,
+      status: "running",
+      // A retry pushes onto the same PR: recorded from the start, so a crash keeps it in fix.json.
+      ...(retry && { prNumber: retry.prNumber, prUrl: retry.prUrl, branch: retry.branch }),
+    };
     result.attempts.push(attempt);
     await save();
 
@@ -154,17 +176,7 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
         status: "draft",
       });
       await save();
-      // Saved for the dashboard and the PO's decision; the deployed dashboard has no GitHub access.
-      // On failure a placeholder replaces it, so a retry never shows the previous attempt's diff.
-      const diffFile = join(baseDir, "fix", "pr.diff");
-      await mkdir(join(baseDir, "fix"), { recursive: true });
-      await prDiff(repo, agent.prNumber, ghImpl)
-        .then((diff) => writeFile(diffFile, diff + "\n"))
-        .catch(async (e) => {
-          const reason = e instanceof Error ? e.message : String(e);
-          log(`could not save the PR diff: ${reason}`);
-          await writeFile(diffFile, unavailableDiff(agent.prNumber, reason)).catch(() => {});
-        });
+      await saveDiff(agent.prNumber);
 
       log(`waiting for ${attempt.previewUrl} to serve ${agent.commitSha.slice(0, 7)}`);
       await waitForBuild(attempt.previewUrl!, agent.commitSha, {
@@ -256,9 +268,17 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       attempt.status = "failed";
       attempt.error = e instanceof Error ? e.message : String(e);
       await save();
-      // A failed retry: report the last verdict we have on the PR (labelled not-proven, left open).
-      if (lastCtx) await finalizePr(lastCtx, retry?.previousSummary, ghImpl).catch((err) => log(`could not label PR #${lastCtx!.prNumber}: ${err.message}`));
-      throw e;
+      // A retry that failed before its verdict: the PR is labelled not-proven on the last verdict and
+      // parks for the Product Owner (who can reject it). Its push, if any, was never re-tested, so the
+      // diff is re-fetched to show what the PR now holds. With a verdict (finalizePr failed), rethrow:
+      // the last verdict's label would contradict this attempt's.
+      if (!lastCtx || attempt.verdict) throw e;
+      await finalizePr(lastCtx, retry?.previousSummary, ghImpl).catch((err) => log(`could not label PR #${lastCtx!.prNumber}: ${err.message}`));
+      await saveDiff(lastCtx.prNumber);
+      attempt.status = "not-proven";
+      await save();
+      log(`attempt ${n} failed (${attempt.error}); PR #${lastCtx.prNumber} left for the decision`);
+      return result;
     }
   }
   return result;
