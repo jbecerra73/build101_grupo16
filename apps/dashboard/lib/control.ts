@@ -16,6 +16,7 @@ import type { ControlOverview } from "./control-types";
 import { enqueueRun } from "./orchestrator";
 import { isValidRunId, listQueue, listRuns, placeholderConfig } from "./runs";
 import { runStore } from "./store";
+import { withRunLock } from "./run-lock";
 import { MAX_SEEDS_PER_PERSONA } from "./validate";
 import type { RunSummary } from "./types";
 
@@ -123,7 +124,9 @@ const rankFindings = (findings: Finding[]) =>
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Asks the orchestrator to fix findings of a finished analysis: writes fix-request.json, which the daemon picks up. */
-export async function requestFix(runId: string, body: unknown): Promise<ControlResult<{ ok: true; findingIds: string[] }>> {
+export const requestFix = (runId: string, body: unknown) => withRunLock(runId, () => requestFixLocked(runId, body));
+
+async function requestFixLocked(runId: string, body: unknown): Promise<ControlResult<{ ok: true; findingIds: string[] }>> {
   if (!isValidRunId(runId)) return { ok: false, status: 404, error: "Run not found" };
   const store = runStore();
   const [config, status] = await Promise.all([
@@ -158,7 +161,9 @@ export async function requestFix(runId: string, body: unknown): Promise<ControlR
 }
 
 /** Accepts or rejects the fix of a run awaiting a decision: writes decision.json, which the daemon applies. */
-export async function requestDecision(runId: string, body: unknown): Promise<ControlResult<{ ok: true }>> {
+export const requestDecision = (runId: string, body: unknown) => withRunLock(runId, () => requestDecisionLocked(runId, body));
+
+async function requestDecisionLocked(runId: string, body: unknown): Promise<ControlResult<{ ok: true }>> {
   if (!isValidRunId(runId)) return { ok: false, status: 404, error: "Run not found" };
   const store = runStore();
   const status = await store.getJson<RunStatus>(KEYS.runFile(runId, "status.json"));

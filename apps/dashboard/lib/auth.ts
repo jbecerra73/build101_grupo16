@@ -53,11 +53,18 @@ export const isPublicPath = (path: string) =>
 export type GateDecision = "allow" | "unauthorized" | "login";
 
 /** What proxy.ts does with a request. A bearer DASHBOARD_API_TOKEN (for the MCP
- * server) opens /api/* only; pages still need the cookie. */
+ * server) opens /api/* only; pages still need the cookie. A token alone (no
+ * password) gates /api/* and leaves pages open. */
 export async function gate(path: string, cookie: string | undefined, env: Env = process.env, authorization?: string): Promise<GateDecision> {
-  if (!authEnabled(env) || isPublicPath(path)) return "allow";
-  if (await verifySession(cookie, env)) return "allow";
   const token = env.DASHBOARD_API_TOKEN;
-  if (token && path.startsWith("/api/") && authorization !== undefined && safeEqual(authorization, `Bearer ${token}`)) return "allow";
-  return path.startsWith("/api/") ? "unauthorized" : "login";
+  if (isPublicPath(path) || (!authEnabled(env) && !token)) return "allow";
+  if (await verifySession(cookie, env)) return "allow";
+  const isApi = path.startsWith("/api/");
+  if (token && isApi && authorization !== undefined) {
+    // Compare digests so the comparison does not depend on the token length.
+    const [a, b] = await Promise.all([hmacHex("api", authorization), hmacHex("api", `Bearer ${token}`)]);
+    if (safeEqual(a, b)) return "allow";
+  }
+  if (!authEnabled(env) && !isApi) return "allow";
+  return isApi ? "unauthorized" : "login";
 }

@@ -288,6 +288,16 @@ describe("POST /api/runs/:id/fix", () => {
     expect((await fix.POST(post("/api/runs/a/fix", { findingIds: ["f1"] }), ctx({ id: "a" }))).status).toBe(409);
   });
 
+  it("serializes concurrent requests: exactly one wins", async () => {
+    await seedRun("p", "done");
+    await store.putJson("runs/p/findings.json", [finding("f1", "low", 1), finding("f2", "low", 2)]);
+    const codes = (await Promise.all([
+      fix.POST(post("/api/runs/p/fix", { findingIds: ["f1"] }), ctx({ id: "p" })),
+      fix.POST(post("/api/runs/p/fix", { findingIds: ["f2"] }), ctx({ id: "p" })),
+    ])).map((r) => r.status);
+    expect(codes.sort()).toEqual([202, 409]);
+  });
+
   it("defaults to the top findings by severity then sessions", async () => {
     await seedRun("b", "done");
     await store.putJson("runs/b/findings.json", [finding("f1", "low", 9), finding("f2", "high", 3), finding("f3", "high", 7), finding("f4", "medium", 1)]);
@@ -326,6 +336,15 @@ describe("POST /api/runs/:id/decision", () => {
     const again = await decision.POST(post("/api/runs/a/decision", { decision: "reject" }), ctx({ id: "a" }));
     expect(again.status).toBe(409);
     expect((await again.json()).error).toBe("A decision is already pending");
+  });
+
+  it("serializes concurrent decisions: exactly one wins", async () => {
+    await seedFix("q", "awaiting-decision", "ready");
+    const codes = (await Promise.all([
+      decision.POST(post("/api/runs/q/decision", { decision: "accept" }), ctx({ id: "q" })),
+      decision.POST(post("/api/runs/q/decision", { decision: "reject" }), ctx({ id: "q" })),
+    ])).map((r) => r.status);
+    expect(codes.sort()).toEqual([202, 409]);
   });
 
   it("rejects without an override, and refuses wrong phases, wrong attempts and bad bodies", async () => {
