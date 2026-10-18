@@ -6,8 +6,6 @@ import type { PitchData } from "./data";
 import { Dot, FitBox, Reveal, SceneHeader } from "./parts";
 import { HIGHLIGHT_AT, PitchTrend } from "./pitch-trend";
 
-const SUMMARY_AT = HIGHLIGHT_AT + 1.4;
-
 export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
   const trend = d.run.metrics?.trend;
   const sessions = d.run.metrics?.segments.reduce((n, s) => n + s.n, 0) ?? 0;
@@ -67,10 +65,6 @@ export function ScenePostHog({ d, index }: { d: PitchData; index: number }) {
         </div>
       </div>
 
-      <Reveal delay={SUMMARY_AT} className="mt-auto text-3xl">
-        <span className="font-semibold">{d.findings.length} findings</span>
-        <span className="text-muted-foreground">, cada uno ligado al release que lo introdujo.</span>
-      </Reveal>
       </FitBox>
     </div>
   );
