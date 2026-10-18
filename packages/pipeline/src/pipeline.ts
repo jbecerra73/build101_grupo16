@@ -15,8 +15,10 @@ import {
   FLOWS,
   PERSONAS,
   PRODUCTION_URL,
+  type Finding,
   type Flow,
   type FixResult,
+  type Metrics,
   type PersonaId,
   type PostHogSourceKind,
   type RunConfig,
@@ -167,83 +169,128 @@ export async function startPipeline(
 
 const range = (w?: { from: string; to: string }) => (w ? `${w.from} → ${w.to}` : "all time");
 
+/** status.json of one run: phases only move forward, every change is appended
+ * to history, writes land in order. */
+type Tracker = { status: RunStatus; set: (phase: RunPhase, message: string, extra?: Partial<RunStatus>) => Promise<void> };
+
+function tracker(dir: string, deps: PipelineDeps, initial: RunStatus): Tracker {
+  let writes = Promise.resolve();
+  const t: Tracker = {
+    status: initial,
+    set: (phase, message, extra = {}) => {
+      if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
+      // Phases only move forward (the fix.json watcher may lag behind).
+      if (phase !== "failed" && ORDER.indexOf(phase) < ORDER.indexOf(t.status.phase)) return writes;
+      if (phase === t.status.phase && message === t.status.message && !Object.keys(extra).length) return writes;
+      const at = new Date().toISOString();
+      t.status = { ...t.status, ...extra, phase, message, updatedAt: at, history: [...(t.status.history ?? []), { phase, at, message }] };
+      const snap = t.status;
+      deps.onStatus?.(snap);
+      return (writes = writes.catch(() => {}).then(() => writeJson(join(dir, "status.json"), snap)));
+    },
+  };
+  return t;
+}
+
+/** Ends the run failed (or cancelled) during its current phase. */
+async function fail(t: Tracker, deps: PipelineDeps, e: unknown): Promise<RunStatus> {
+  const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;
+  await t.set("failed", cancelled ? `Cancelled during ${t.status.phase}` : `Failed during ${t.status.phase}`, { error: cancelled ? CANCELLED : errMsg(e) }).catch(() => {});
+  return t.status;
+}
+
+const fixingMessage = (opts: RunOptions) =>
+  opts.findingIds ? `Coding agent is fixing ${opts.findingIds.join(", ")}` : "Coding agent is fixing the top findings";
+
+/** fixing → … → awaiting-decision (or done when the loop ends without a verdict). */
+async function fixAndRetest(runId: string, opts: RunOptions, deps: PipelineDeps, t: Tracker): Promise<RunStatus> {
+  const dir = join(deps.runsDir, runId);
+  const log = deps.log ?? (() => {});
+  const { set } = t;
+  await set("fixing", fixingMessage(opts));
+  const watcher = setInterval(async () => {
+    const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
+    const a = fix?.attempts.at(-1);
+    if (a?.status === "draft")
+      void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
+  }, deps.fixWatchMs ?? 500);
+  let result: FixResult;
+  try {
+    result = await abortable(
+      deps.fixLoop({
+        baselineRunId: runId,
+        runsDir: deps.runsDir,
+        log,
+        retestSeeds: opts.retestSeeds,
+        findingIds: opts.findingIds,
+        compare: deps.compare,
+        runSwarm: async (c) => {
+          const n = Object.values(c.seeds).flat().length;
+          await set("retesting", `Swarm re-testing the preview: ${n} agents (${c.personaIds.join(", ")}), fresh seeds`, { retestRunId: c.runId });
+          await deps.runSwarm(c);
+        },
+        collect: async (c) => {
+          await set("collecting", "Waiting for PostHog to ingest the swarm's events");
+          const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
+          await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
+        },
+        analyze: async (id) => {
+          await set("comparing", "Analyzing the swarm's tracks and comparing each persona to its segment");
+          return deps.analyze(id);
+        },
+      }),
+      deps.signal,
+    );
+  } finally {
+    clearInterval(watcher);
+  }
+  const last = result.attempts.at(-1);
+  const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
+  const where = pr ?? "(rehearsal)";
+  if (last?.status === "ready") return await set("awaiting-decision", `Improved: ${where} ready, awaiting your decision`).then(() => t.status);
+  if (last?.status === "not-proven")
+    return await set("awaiting-decision", `Not proven: ${where} labelled not-proven, awaiting your decision`).then(() => t.status);
+  const msg = `Fix loop ended (${last?.status ?? "no attempt"})`;
+  return await set("done", msg).then(() => t.status);
+}
+
 /** The demo loop for an analysis run whose config.json exists. Never rejects:
  * failures end in status.json phase "failed" (fix.json is kept by the fix loop). */
 export async function runPipeline(runId: string, opts: RunOptions, deps: PipelineDeps): Promise<RunStatus> {
   const dir = join(deps.runsDir, runId);
-  const log = deps.log ?? (() => {});
-  let status: RunStatus = { runId, phase: "analyzing", updatedAt: new Date().toISOString() };
-  let writes = Promise.resolve();
-  const set = (phase: RunPhase, message: string, extra: Partial<RunStatus> = {}) => {
-    if (phase !== "failed" && deps.signal?.aborted) return Promise.reject(new Error(CANCELLED));
-    // Phases only move forward (the fix.json watcher may lag behind).
-    if (phase !== "failed" && ORDER.indexOf(phase) < ORDER.indexOf(status.phase)) return writes;
-    if (phase === status.phase && message === status.message && !Object.keys(extra).length) return writes;
-    const at = new Date().toISOString();
-    status = { ...status, ...extra, phase, message, updatedAt: at, history: [...(status.history ?? []), { phase, at, message }] };
-    const snap = status;
-    deps.onStatus?.(snap);
-    return (writes = writes.catch(() => {}).then(() => writeJson(join(dir, "status.json"), snap)));
-  };
-
+  const t = tracker(dir, deps, { runId, phase: "analyzing", updatedAt: new Date().toISOString() });
   try {
     const config = (await readJson<RunConfig>(join(dir, "config.json")))!;
     const release = config.posthog.buildSha ? ` on ${config.posthog.buildSha.slice(0, 7)}` : "";
-    await set("analyzing", `Reading real-user events from PostHog (${config.posthog.source}, ${range(config.window)}${release})`);
+    await t.set("analyzing", `Reading real-user events from PostHog (${config.posthog.source}, ${range(config.window)}${release})`);
     const { findings } = await abortable(deps.analyze(runId), deps.signal);
 
-    if (!opts.autoFix) return await set("done", `Report ready: ${findings.length} findings`).then(() => status);
-    if (!findings.length) return await set("done", "No findings to fix").then(() => status);
-
-    await set("fixing", opts.findingIds ? `Coding agent is fixing ${opts.findingIds.join(", ")}` : "Coding agent is fixing the top findings");
-    const watcher = setInterval(async () => {
-      const fix = await readJson<FixResult>(join(dir, "fix.json")).catch(() => undefined);
-      const a = fix?.attempts.at(-1);
-      if (a?.status === "draft")
-        void set("waiting-preview", `Draft ${a.prNumber ? `PR #${a.prNumber}` : "PR (rehearsal)"}: waiting for the preview to deploy ${a.commitSha?.slice(0, 7)}`).catch(() => {});
-    }, deps.fixWatchMs ?? 500);
-    let result: FixResult;
-    try {
-      result = await abortable(
-        deps.fixLoop({
-          baselineRunId: runId,
-          runsDir: deps.runsDir,
-          log,
-          retestSeeds: opts.retestSeeds,
-          findingIds: opts.findingIds,
-          compare: deps.compare,
-          runSwarm: async (c) => {
-            const n = Object.values(c.seeds).flat().length;
-            await set("retesting", `Swarm re-testing the preview: ${n} agents (${c.personaIds.join(", ")}), fresh seeds`, { retestRunId: c.runId });
-            await deps.runSwarm(c);
-          },
-          collect: async (c) => {
-            await set("collecting", "Waiting for PostHog to ingest the swarm's events");
-            const agentIds = c.personaIds.flatMap((p) => (c.seeds[p] ?? []).map((s) => `${p}-${s}`));
-            await deps.source(c.posthog.source).waitForSwarm({ runId: c.runId, agentIds, timeoutMs: deps.collectTimeoutMs ?? 5 * 60_000 });
-          },
-          analyze: async (id) => {
-            await set("comparing", "Analyzing the swarm's tracks and comparing each persona to its segment");
-            return deps.analyze(id);
-          },
-        }),
-        deps.signal,
-      );
-    } finally {
-      clearInterval(watcher);
-    }
-    const last = result.attempts.at(-1);
-    const pr = last?.prNumber ? `PR #${last.prNumber}` : undefined;
-    const where = pr ?? "(rehearsal)";
-    if (last?.status === "ready") return await set("awaiting-decision", `Improved: ${where} ready, awaiting your decision`).then(() => status);
-    if (last?.status === "not-proven")
-      return await set("awaiting-decision", `Not proven: ${where} labelled not-proven, awaiting your decision`).then(() => status);
-    const msg = `Fix loop ended (${last?.status ?? "no attempt"})`;
-    return await set("done", msg).then(() => status);
+    if (!opts.autoFix) return await t.set("done", `Report ready: ${findings.length} findings`).then(() => t.status);
+    if (!findings.length) return await t.set("done", "No findings to fix").then(() => t.status);
+    return await fixAndRetest(runId, opts, deps, t);
   } catch (e) {
-    const cancelled = deps.signal?.aborted || errMsg(e) === CANCELLED;
-    await set("failed", cancelled ? `Cancelled during ${status.phase}` : `Failed during ${status.phase}`, { error: cancelled ? CANCELLED : errMsg(e) }).catch(() => {});
-    return status;
+    return fail(t, deps, e);
+  }
+}
+
+/** The fix half of runPipeline on an analysis run that already ended done
+ * (its metrics.json and findings.json exist): reopens it at fixing, keeping
+ * its history. Never rejects, like runPipeline. */
+export async function resumeFix(runId: string, opts: RunOptions, deps: PipelineDeps): Promise<RunStatus> {
+  const dir = join(deps.runsDir, runId);
+  const prev = await readJson<RunStatus>(join(dir, "status.json")).catch(() => undefined);
+  const { error: _error, ...rest } = prev ?? { runId, updatedAt: "" };
+  // "analyzing" as the base so the move to fixing counts as forward.
+  const t = tracker(dir, deps, { ...rest, runId, phase: "analyzing", updatedAt: new Date().toISOString() });
+  try {
+    await t.set("fixing", fixingMessage(opts));
+    const metrics = await readJson<Metrics>(join(dir, "metrics.json"));
+    const findings = await readJson<Finding[]>(join(dir, "findings.json"));
+    if (!metrics || !findings) throw new Error(`Run ${runId} has no analysis to fix (metrics.json/findings.json missing)`);
+    if (!findings.length) return await t.set("done", "No findings to fix").then(() => t.status);
+    return await fixAndRetest(runId, opts, deps, t);
+  } catch (e) {
+    return fail(t, deps, e);
   }
 }
 
