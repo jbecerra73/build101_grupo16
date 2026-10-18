@@ -13,7 +13,7 @@ export type SwarmRunner = (config: RunConfig) => Promise<void>;
 const REPO = resolve(import.meta.dirname, "..", "..");
 
 export function liveSwarmRunner(
-  o: Omit<RunSwarmOptions, "runId" | "flowId" | "previewUrl" | "buildSha" | "personaIds" | "seeds" | "baselineRunId">,
+  o: Omit<RunSwarmOptions, "runId" | "flowId" | "goal" | "previewUrl" | "buildSha" | "personaIds" | "seeds" | "baselineRunId">,
 ): SwarmRunner {
   return async (config) => {
     const hasSeeds = config.personaIds.some((p) => (config.seeds[p]?.length ?? 0) > 0);
@@ -21,6 +21,7 @@ export function liveSwarmRunner(
       ...o,
       runId: config.runId,
       flowId: config.flowId,
+      goal: config.goal,
       previewUrl: config.targetUrl,
       buildSha: config.posthog.buildSha,
       personaIds: config.personaIds,
@@ -41,6 +42,7 @@ export function generateArgs(config: RunConfig, fixed: string[] = []): string[] 
   if (new Set(ranges).size > 1) throw new Error(`Personas have different seed ranges (${ranges.join(", ")}); the generator takes one`);
   return [
     "--swarm", config.runId,
+    "--flow", config.flowId,
     "--sha", config.posthog.buildSha,
     "--host", new URL(config.targetUrl).host,
     "--personas", config.personaIds.join(","),

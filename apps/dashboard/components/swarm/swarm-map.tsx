@@ -408,7 +408,7 @@ export function SwarmMap({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No valid checkout yet.</p>
+                <p className="text-sm text-muted-foreground">No valid completion yet.</p>
               )}
               {invalid.length > 0 && (
                 <div className="flex flex-col gap-1.5 rounded-lg bg-muted/60 p-2">

@@ -153,8 +153,19 @@ type Flow = {
   success: { urlPattern?: string; visibleText?: string };
   steps: { route: string; name: string }[];          // e.g. /cart → Cart
   required: { steps: string[]; fields: string[] };   // locked; coding agent can't change
+  completion: EventMatch[];   // events a valid completion must contain, e.g. order_completed
+  attempt?: EventMatch;       // real users only: which sessions count (default all)
+  doneWhen: string;           // tells the agent when to call done
 };
+type EventMatch = { event: string; where?: Record<string, string | number | boolean> };
 ```
+Flows (`shared/flows.ts`), all on the same store and the same PostHog events:
+- `buy-tshirt`: buy a size M blue t-shirt; completion = a placed order.
+- `buy-jeans`: buy the Skinny Fit Jeans; placed order + `product_added {product_id: 2}`; real users who viewed product 2.
+- `promo-checkout`: buy with WELCOME10; placed order + `promo_applied {success: true}`; real users who tried a code (T5).
+- `add-to-cart`: pick a size and add to cart; success at `/cart`, `product_added`; steps Home → Cart (T4).
+
+A run can override the goal text (`goal`) for the swarm; steps and completion stay the flow's.
 
 ### Analyzer
 - Input is PostHog events, grouped by `$session_id`. One session = one funnel attempt (real user) or one agent (swarm).
@@ -162,7 +173,7 @@ type Flow = {
 - **Signals** from events: `$rageclick` (by `$elements_chain`), failed submits (`*_submitted {success:false}` with `error_fields`), `add_to_cart_clicked {has_size:false}`, step drop-off with dwell time, and — for swarm runs — `swarm_give_up` reasons and `swarm_think_aloud` notes as quotes.
 - **Release attribution:** for each signal, the first release where its rate jumps against the previous release.
 - **Sonnet 5.5** pass → `findings.json`: clusters signals into ranked findings. Falls back to the deterministic heuristic as today.
-- **Completion validity** (swarm and real users alike): a session counts only if it reaches the success step AND every required step appears in its `$pageview`s AND `shipping_submitted {success:true}` and `payment_submitted {success:true}` happened AND `order_completed` fired. (The confirmation echo is checked by the swarm agent's `done()` evidence, not PostHog.)
+- **Completion validity** (swarm and real users alike): a session counts only if it reaches the success step AND every required step appears in its `$pageview`s AND every `flow.completion` event happened (for a checkout flow: `shipping_submitted {success:true}`, `payment_submitted {success:true}`, `order_completed`). Real-user sessions that don't match `flow.attempt` are left out of the flow's N. (The confirmation echo is checked by the swarm agent's `done()` evidence, not PostHog.)
 ```ts
 type Finding = {
   id: string; severity: "high" | "medium" | "low";

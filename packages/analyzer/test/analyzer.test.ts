@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { fileSource } from "@frictionswarm/posthog";
-import { buyTshirt, type Metrics, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
-import { RELEASES } from "../../../tools/posthog-sim/sim";
+import { addToCart, buyJeans, buyTshirt, promoCheckout, type Metrics, type PostHogEvent, type RunConfig } from "@frictionswarm/shared";
+import { mulberry32, newVisitor, RELEASES, SEGMENT_PROFILES, simulateSession, visitorSegment } from "../../../tools/posthog-sim/sim";
 import {
   AnswerSchema,
   attributeRelease,
@@ -65,6 +65,52 @@ describe("validateCompletion", () => {
   });
   it("rejects a drop-off", () => {
     expect(validateCompletion(buyTshirt, session("drop-1")).reasons[0]).toBe("never reached the success step");
+  });
+});
+
+describe("other flows", () => {
+  const order = fx("valid-order");
+  const added = (product_id: number): PostHogEvent => ({ ...order[0], uuid: "v-added", event: "product_added", properties: { ...order[0].properties, product_id } });
+  const realUsers = (n: number) => {
+    const rng = mulberry32(3);
+    return Array.from({ length: n }, (_, i) => {
+      const visitor = newVisitor(rng, Date.parse("2026-10-01T12:00:00Z") + i);
+      return simulateSession({
+        rng, start: Date.parse("2026-10-01T12:00:00Z") + i * 60_000, visitor, host: "swarm-ecommerce.netlify.app", buildSha: "prod",
+        traps: RELEASES.at(-1)!.traps, profile: SEGMENT_PROFILES[visitorSegment(visitor)], promoCodes: true,
+      }).events;
+    });
+  };
+
+  it("each flow checks its own completion events", () => {
+    expect(validateCompletion(buyJeans, order).reasons).toEqual(["no product_added with product_id=2"]);
+    expect(validateCompletion(buyJeans, [...order, added(2)]).valid).toBe(true);
+    expect(validateCompletion(buyJeans, [...order, added(1)]).valid).toBe(false);
+    expect(validateCompletion(promoCheckout, order).reasons).toEqual(["no successful promo_applied"]);
+    // Add to cart ends at /cart (which this order passed): the order is irrelevant, the product_added is not.
+    expect(validateCompletion(addToCart, order).reasons).toEqual(["no product_added"]);
+    expect(validateCompletion(addToCart, [...order, added(1)]).valid).toBe(true);
+  });
+
+  it("counts only the real users who attempted the flow; every swarm agent counts", () => {
+    const sessions = realUsers(400);
+    const jeans = summarizeSessions(buyJeans, sessions.flat());
+    const viewedJeans = sessions.filter((evs) => evs.some((e) => e.event === "product_viewed" && e.properties.product_id === 2));
+    expect(jeans.length).toBe(viewedJeans.length);
+    expect(jeans.length).toBeGreaterThan(0);
+    expect(summarizeSessions(addToCart, sessions.flat()).length).toBe(sessions.length);
+    const tried = new Set(REAL.filter((e) => e.event === "promo_applied").map((e) => e.properties.$session_id));
+    expect(summarizeSessions(promoCheckout, REAL).map((x) => x.id)).toEqual([...tried]);
+    expect(summarizeSessions(buyTshirt, REAL).length).toBeGreaterThan(tried.size);
+    expect(summarizeSessions(promoCheckout, SWARM).length).toBe(summarizeSessions(buyTshirt, SWARM).length);
+  });
+
+  it("ignores friction on pages outside the flow", () => {
+    const summaries = summarizeSessions(addToCart, realUsers(600).flat());
+    const steps = new Set(addToCart.steps.map((s) => s.name));
+    const marks = summaries.flatMap((s) => s.marks);
+    expect(marks.some((m) => m.kind === "rage_click")).toBe(true);
+    for (const m of marks) expect(steps).toContain(m.step);
   });
 });
 

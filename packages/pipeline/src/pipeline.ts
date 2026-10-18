@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   FLOWS,
+  MAX_GOAL_LENGTH,
   PERSONAS,
   PRODUCTION_URL,
   type FixResult,
@@ -102,6 +103,8 @@ const DATE = /^\d{4}-\d\d-\d\d(T[\d:.]+Z?)?$/;
 
 export function validateRequest(req: StartRunRequest): void {
   if (!FLOWS[req.flowId]) throw new Error(`Unknown flow "${req.flowId}"`);
+  if (req.goal !== undefined && (typeof req.goal !== "string" || !req.goal.trim() || req.goal.length > MAX_GOAL_LENGTH))
+    throw new Error(`goal must be a non-empty string of at most ${MAX_GOAL_LENGTH} characters`);
   if (typeof req.autoFix !== "boolean") throw new Error("autoFix must be a boolean");
   if (req.source !== undefined && req.source !== "file" && req.source !== "api") throw new Error(`Unknown source "${req.source}" (file|api)`);
   if (req.window) {
@@ -123,6 +126,7 @@ export async function analysisConfig(runId: string, req: StartRunRequest, now = 
     runId,
     kind: "analysis",
     flowId: req.flowId,
+    ...(req.goal ? { goal: req.goal } : {}),
     window: req.window ?? defaultWindow(now),
     posthog: { source, buildSha: req.window ? "" : await currentReleaseSha(source) },
     personaIds: [],

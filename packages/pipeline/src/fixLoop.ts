@@ -51,6 +51,7 @@ export function retestConfig(analysis: RunConfig, o: { attempt: number; commitSh
     runId: `${analysis.runId}-retest${o.attempt}`,
     kind: "retest",
     flowId: analysis.flowId,
+    ...(analysis.goal ? { goal: analysis.goal } : {}),
     posthog: { source: analysis.posthog.source, buildSha: o.commitSha },
     personaIds,
     seeds: o.seeds,

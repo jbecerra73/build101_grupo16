@@ -202,6 +202,26 @@ export function newVisitor(rng: Rng, ts: number): Visitor {
 
 export type SwarmTag = { run: string; agent: string; persona: PersonaId };
 
+/** What a swarm agent sets out to do, per flow id (real users wander instead). */
+export type SwarmIntent = {
+  productId: Product["id"];
+  /** How the agent thinks of it, for its notes. */
+  item: string;
+  size: string;
+  color: string;
+  /** Applies WELCOME10 (otherwise only the typical persona does). */
+  promo: boolean;
+  /** Done once the item is in the cart (add-to-cart flow). */
+  stopAtCart?: boolean;
+};
+
+export const SWARM_INTENTS: Record<string, SwarmIntent> = {
+  "buy-tshirt": { productId: 1, item: "blue t-shirt", size: "Medium", color: "Blue", promo: false },
+  "buy-jeans": { productId: 2, item: "jeans", size: "Large", color: "Blue", promo: false },
+  "promo-checkout": { productId: 1, item: "t-shirt", size: "Medium", color: "Blue", promo: true },
+  "add-to-cart": { productId: 1, item: "t-shirt", size: "Medium", color: "Blue", promo: false, stopAtCart: true },
+};
+
 export type SessionOptions = {
   rng: Rng;
   start: number;
@@ -212,6 +232,8 @@ export type SessionOptions = {
   profile: Profile;
   /** Swarm agents: goal-directed, tagged, and narrate via swarm_* events. */
   swarm?: SwarmTag;
+  /** Swarm agents: the flow they were given. Default: buy-tshirt. */
+  intent?: SwarmIntent;
   referrer?: { url: string; domain: string; utm_campaign?: string };
   /** Visitor created an account in an earlier session (skips T2). */
   hasAccount?: boolean;
@@ -254,10 +276,10 @@ const QUOTES: Record<string, string[]> = {
 };
 
 const NOTES: Record<string, string[]> = {
-  Home: ["Okay, I'm on the home page. Looking for t-shirts.", "Let me find the shop."],
-  Browse: ["I see a list of products. Looking for a blue t-shirt.", "There's the t-shirt."],
-  Product: ["Product page. I need size Medium.", "I'll pick a size and add it to the cart."],
-  Cart: ["The shirt is in my cart. Going to checkout."],
+  Home: ["Okay, I'm on the home page. Looking for the {item}.", "Let me find the shop."],
+  Browse: ["I see a list of products. Looking for the {item}.", "There's the {item}."],
+  Product: ["Product page. I need size {size}.", "I'll pick a size and add it to the cart."],
+  Cart: ["The {item} is in my cart."],
   Account: ["It wants me to create an account first."],
   Shipping: ["Now the shipping form. Filling in my address."],
   Payment: ["Payment page. Entering the test card."],
@@ -271,6 +293,7 @@ export function simulateSession(o: SessionOptions): SessionResult {
   const sessionId = uuid7(rng, o.start);
   const windowId = uuid7(rng, o.start);
   const swarm = !!o.swarm;
+  const intent = o.intent ?? SWARM_INTENTS["buy-tshirt"];
   const distinctId = o.swarm ? `swarm:${o.swarm.agent}` : v.distinctId;
   let t = o.start;
   let path = "/";
@@ -332,7 +355,10 @@ export function simulateSession(o: SessionOptions): SessionResult {
       : first ? { $referrer: "$direct", $referring_domain: "$direct" } : {};
     first = false;
     emit("$pageview", extra);
-    if (swarm && rng() < 0.6) narrate("swarm_think_aloud", { note: pick(rng, NOTES[step] ?? ["Looking around."]), step });
+    if (swarm && rng() < 0.6) {
+      const note = pick(rng, NOTES[step] ?? ["Looking around."]).replace("{item}", intent.item).replace("{size}", intent.size);
+      narrate("swarm_think_aloud", { note, step });
+    }
   };
   const leave = (step: string, quoteKey?: string): SessionResult => {
     if (quoteKey) narrate("swarm_give_up", { reason: pick(rng, QUOTES[quoteKey]), step });
@@ -346,7 +372,7 @@ export function simulateSession(o: SessionOptions): SessionResult {
   const mobile = v.device === "Mobile";
 
   // --- Landing and browsing (real users wander; agents head for the shirt)
-  const product: Product = swarm ? PRODUCTS[0] : pick(rng, PRODUCTS);
+  const product: Product = swarm ? PRODUCTS.find((p) => p.id === intent.productId)! : pick(rng, PRODUCTS);
   const entry = swarm ? "home" : weighted(rng, [["home", 45], ["shop", 20], ["product", 35]] as const);
   if (entry === "home") {
     view("/", "Home");
@@ -386,14 +412,14 @@ export function simulateSession(o: SessionOptions): SessionResult {
       wait(8);
     } else return leave("Product", "size");
   }
-  const size = swarm ? "Medium" : pick(rng, SIZES);
+  const size = swarm ? intent.size : pick(rng, SIZES);
   click(ELEMENTS.sizeButton(size), size);
   track("size_selected", { product_id: product.id, size });
   wait(4);
   click(ELEMENTS.addToCart, "Add to Cart");
   track("add_to_cart_clicked", { product_id: product.id, has_size: true });
   const quantity = swarm ? 1 : weighted(rng, [[1, 85], [2, 12], [3, 3]] as const);
-  track("product_added", { product_id: product.id, size, color: swarm ? "Blue" : pick(rng, COLORS), quantity, price: product.price });
+  track("product_added", { product_id: product.id, size, color: swarm ? intent.color : pick(rng, COLORS), quantity, price: product.price });
   const cartValue = product.price * quantity;
 
   // --- Cart
@@ -402,6 +428,12 @@ export function simulateSession(o: SessionOptions): SessionResult {
   click(ELEMENTS.cartIcon);
   view("/cart", "Cart");
   wait(12);
+  if (swarm && intent.stopAtCart) {
+    narrate("swarm_done", { actions });
+    wait(4);
+    emit("$pageleave");
+    return { events, completed: true, exitStep: "Cart", createdAccount };
+  }
   if (!swarm && chance(0.24)) return leave("Cart");
   click(ELEMENTS.goToCheckout, "Go to Checkout");
   track("checkout_clicked", { cart_value: cartValue, items: quantity });
@@ -427,7 +459,7 @@ export function simulateSession(o: SessionOptions): SessionResult {
   // --- Shipping (T5 promo wipe, T1 invisible continue)
   view("/checkout", "Shipping");
   wait(35);
-  const appliesPromo = o.promoCodes && (o.swarm?.persona === "typical" || chance(o.referrer?.utm_campaign ? 0.7 : 0.18));
+  const appliesPromo = o.promoCodes && ((swarm && intent.promo) || o.swarm?.persona === "typical" || chance(o.referrer?.utm_campaign ? 0.7 : 0.18));
   let promo = false;
   if (appliesPromo) {
     const typo = !swarm && chance(0.1);

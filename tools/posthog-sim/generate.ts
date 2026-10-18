@@ -7,7 +7,7 @@
 //
 //   swarm: one re-test swarm's tracks on a deploy preview
 //     npm run posthog:generate -- --swarm <runId> --sha <preview sha> \
-//       --host deploy-preview-12--swarm-ecommerce.netlify.app --fixed T1,T2 --seeds 1001-1010
+//       --host deploy-preview-12--swarm-ecommerce.netlify.app --fixed T1,T2 --seeds 1001-1010 [--flow buy-jeans]
 //
 // Output goes to data/posthog/ (gitignored); regenerate any time, it is seeded.
 
@@ -26,6 +26,7 @@ import {
   releaseAt,
   SEGMENT_PROFILES,
   simulateSession,
+  SWARM_INTENTS,
   visitorSegment,
   type Rng,
   type TrapId,
@@ -44,6 +45,7 @@ const { values: args } = parseArgs({
     to: { type: "string", default: "2026-10-16" },
     "current-sha": { type: "string" },
     swarm: { type: "string" },
+    flow: { type: "string", default: "buy-tshirt" },
     sha: { type: "string" },
     host: { type: "string" },
     fixed: { type: "string", default: "" },
@@ -171,6 +173,8 @@ async function history() {
 async function swarm() {
   const runId = args.swarm!;
   if (!args.sha || !args.host) throw new Error("--swarm needs --sha <preview build sha> and --host <preview host>");
+  const intent = SWARM_INTENTS[args.flow];
+  if (!intent) throw new Error(`unknown flow ${args.flow} (${Object.keys(SWARM_INTENTS).join(", ")})`);
   const fixed = new Set(args.fixed.split(",").filter(Boolean) as TrapId[]);
   const traps = RELEASES.at(-1)!.traps.filter((t) => !fixed.has(t));
   const [lo, hi] = args.seeds.split("-").map(Number);
@@ -205,6 +209,7 @@ async function swarm() {
         traps,
         profile: PERSONA_PROFILES[personaId],
         swarm: { run: runId, agent, persona: personaId },
+        intent,
         promoCodes: true,
       });
       all.push(...result.events);

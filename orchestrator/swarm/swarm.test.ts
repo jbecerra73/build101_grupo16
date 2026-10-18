@@ -225,7 +225,7 @@ describe("offline runner", () => {
 
   it("builds the posthog:generate swarm-mode arguments from the RunConfig", () => {
     expect(generateArgs(config, ["T1", "T2"])).toEqual([
-      "--swarm", "r9", "--sha", "def456", "--host", "deploy-preview-12--swarm-ecommerce.netlify.app",
+      "--swarm", "r9", "--flow", "buy-tshirt", "--sha", "def456", "--host", "deploy-preview-12--swarm-ecommerce.netlify.app",
       "--personas", "rosa,kai,typical", "--seeds", "1001-1010", "--fixed", "T1,T2",
     ]);
     expect(() => generateArgs({ ...config, seeds: { ...config.seeds, kai: [1, 3] } })).toThrow(/consecutive/);
