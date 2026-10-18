@@ -20,6 +20,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import { ghInstallScript } from "@frictionswarm/shared";
 import { createStore, HEARTBEAT_STALE_MS, isOnline, KEYS, type OrchestratorHeartbeat, type RunStore } from "@frictionswarm/store";
 
 type Env = Record<string, string | undefined>;
@@ -72,6 +73,8 @@ export const HOME = "/home/tenki";
 export const REPO_DIR = `${HOME}/repo`;
 export const ENV_FILE = `${HOME}/orchestrator.env`;
 export const START_SCRIPT = `${HOME}/start-orchestrator.sh`;
+/** A current gh (see shared/gh.ts); the daemon finds it first on PATH. */
+export const GH_DIR = `${HOME}/.gh`;
 export const LOG_FILE = `${HOME}/orchestrator.log`;
 export const PID_FILE = `${HOME}/orchestrator.pid`;
 export const WORK_DIR = `${HOME}/work`;
@@ -270,6 +273,9 @@ export async function up(deps: Deps, opts: UpOptions = {}): Promise<SandboxRecor
         timeoutMs: 20 * 60_000,
       });
 
+      // The fix loop marks PRs ready / not-proven with `gh pr edit`, which the image's old gh can't do.
+      log(`installing ${await run(session, "gh", ghInstallScript(GH_DIR), { timeoutMs: 2 * 60_000 })}`);
+
       log("npm run posthog:generate (the file source's history)...");
       await run(session, "posthog:generate", `cd ${REPO_DIR} && npm run posthog:generate`, { timeoutMs: 20 * 60_000 });
 
@@ -292,7 +298,7 @@ export async function up(deps: Deps, opts: UpOptions = {}): Promise<SandboxRecor
       await session.writeFile(ENV_FILE, envFile(vars));
       await session.writeFile(
         START_SCRIPT,
-        `#!/usr/bin/env bash\nset -a\n. ${ENV_FILE}\nset +a\nmkdir -p ${WORK_DIR}\ncd ${REPO_DIR}\nexec npm run orchestrator\n`,
+        `#!/usr/bin/env bash\nset -a\n. ${ENV_FILE}\nset +a\nexport PATH="${GH_DIR}/bin:$PATH"\nmkdir -p ${WORK_DIR}\ncd ${REPO_DIR}\nexec npm run orchestrator\n`,
       );
       // Detached: both streams redirected, or exec would wait for the daemon.
       await run(

@@ -1,4 +1,4 @@
-import type { Finding, Flow } from "../shared";
+import { ghInstallScript, type Finding, type Flow } from "../shared";
 import { buildFixPrompt } from "./fix-prompt";
 import { run, ShellError, type Shell } from "./shell";
 
@@ -94,6 +94,9 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   await run(shell, `npm install -g --prefix ${shell.home}/.npm-global --no-audit --no-fund @anthropic-ai/claude-code@latest`, {
     timeoutMs: 300_000,
   });
+  // Same for gh: old versions can't open or edit PRs since Projects (classic) left the API
+  const ghBin = `${shell.home}/.gh/bin/gh`;
+  await run(shell, ghInstallScript(`${shell.home}/.gh`), { timeoutMs: 120_000 });
 
   log(`running Claude Code (${CODING_MODEL}) on ${input.findings.length} finding(s)`);
   const promptFile = `${shell.home}/fix-prompt.md`;
@@ -137,7 +140,7 @@ export async function runCodingAgent(shell: Shell, input: CodingAgentInput): Pro
   const commitSha = await run(shell, `cd ${cwd} && git rev-parse HEAD`);
   const prUrl = await run(
     shell,
-    `cd ${cwd} && gh pr create --draft --repo "$REPO" --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file ${shell.home}/pr-body.md`,
+    `cd ${cwd} && ${ghBin} pr create --draft --repo "$REPO" --base "$BASE" --head "$BRANCH" --title "$TITLE" --body-file ${shell.home}/pr-body.md`,
     { env: prEnv, timeoutMs: 60_000 },
   );
   const prNumber = Number(prUrl.match(/\/pull\/(\d+)/)?.[1]);
