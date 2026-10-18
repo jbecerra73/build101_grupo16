@@ -18,6 +18,7 @@
     ]
   },
   "include": [
+    "apps/mcp",
     "shared",
     "orchestrator",
     "packages",
