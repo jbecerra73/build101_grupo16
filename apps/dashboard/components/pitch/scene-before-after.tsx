@@ -116,7 +116,7 @@ function Stamp({ improved, rehearsal, delay }: { improved: boolean; rehearsal: b
     >
       <span className="flex items-center gap-3 text-[2.6rem] font-bold tracking-tight whitespace-nowrap uppercase">
         <Icon className="size-10" style={{ color: tone }} aria-hidden />
-        {improved ? "PR listo para review" : "No probado"}
+        {improved ? "Flujo aprobado por los agentes" : "No probado"}
       </span>
       <span className="text-lg text-muted-foreground">
         {improved ? "mejora probada contra el umbral" : "PR cerrado con las métricas, label not-proven"}
