@@ -41,7 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cancelRun, getControl, getRun, retryRun } from "@/lib/client/api";
-import type { ControlOverview, OrchestratorHeartbeat, Settings } from "@/lib/control-types";
+import type { ControlOverview, OrchestratorHeartbeat, OrchestratorLaunch, Settings } from "@/lib/control-types";
 import { usePoll, useNow } from "@/lib/hooks/use-poll";
 import { compact, duration, formatDateTime, pct1, personaShort, RETEST_PHASES, segmentColor, segmentShort, relativeTime, windowLabel } from "@/lib/format";
 import type { RunSummary } from "@/lib/types";
@@ -67,8 +67,12 @@ function PersonaStack({ ids, size = 30 }: { ids: string[]; size?: number }) {
 
 /* ------------------------------------------------------------ top tiles */
 
-function OrchestratorCard({ hb, now }: { hb?: OrchestratorHeartbeat; now: number }) {
+/** Same as BOOT_GRACE_MS in packages/store/src/launch.ts. */
+const BOOT_GRACE_MS = 20 * 60_000;
+
+function OrchestratorCard({ hb, launch, now }: { hb?: OrchestratorHeartbeat; launch?: OrchestratorLaunch; now: number }) {
   const online = !!hb && now - Date.parse(hb.lastSeenAt) <= STALE_MS;
+  const starting = !online && !!launch && launch.state !== "failed" && now - Date.parse(launch.updatedAt) < BOOT_GRACE_MS;
   const HostIcon = hb?.host === "tenki" ? Cloud : Laptop;
   return (
     <Card className={cn("relative overflow-hidden", !online && "bg-muted/40")}>
@@ -76,7 +80,7 @@ function OrchestratorCard({ hb, now }: { hb?: OrchestratorHeartbeat; now: number
         <CardDescription>Orchestrator</CardDescription>
         <CardTitle className="flex items-center gap-3 text-3xl">
           <HeartbeatDot online={online} size="lg" />
-          {online ? "Online" : "Offline"}
+          {online ? "Online" : starting ? "Starting" : "Offline"}
         </CardTitle>
         <CardAction>{online ? <PlugZap className="size-6 text-muted-foreground" aria-hidden /> : <Unplug className="size-6 text-muted-foreground" aria-hidden />}</CardAction>
       </CardHeader>
@@ -107,8 +111,16 @@ function OrchestratorCard({ hb, now }: { hb?: OrchestratorHeartbeat; now: number
         ) : (
           <p className="text-sm text-muted-foreground">No heartbeat has ever been written. Start the orchestrator daemon to pick up queued runs.</p>
         )}
-        {!online && hb && (
-          <p className="text-sm text-muted-foreground">Queued runs wait until the orchestrator writes a heartbeat again (every ~5 s).</p>
+        {starting ? (
+          <p className="text-sm text-muted-foreground">
+            Booting a tenki sandbox{launch.sandboxId && <code className="mx-1 font-mono text-xs">{launch.sandboxId}</code>}, started{" "}
+            {ago(launch.requestedAt, now)}. It usually takes 3–5 minutes; queued runs start as soon as it&apos;s up.
+          </p>
+        ) : !online && launch?.state === "failed" ? (
+          <p className="text-sm text-muted-foreground">Autostart failed {ago(launch.updatedAt, now)}: {launch.error}. It retries within a few minutes while runs are queued.</p>
+        ) : (
+          !online &&
+          hb && <p className="text-sm text-muted-foreground">Queued runs wait until the orchestrator writes a heartbeat again (every ~5 s).</p>
         )}
       </CardContent>
     </Card>
@@ -371,7 +383,7 @@ export function ControlCenter() {
       ) : (
         <>
           <div className="grid gap-4 lg:grid-cols-3">
-            <OrchestratorCard hb={c.orchestrator} now={now} />
+            <OrchestratorCard hb={c.orchestrator} launch={c.launch} now={now} />
             <ModeCard s={c.settings} />
             <UsageCard usage={c.usage} />
           </div>

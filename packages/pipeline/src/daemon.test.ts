@@ -54,7 +54,7 @@ const compare: Compare = (a, r, targetedPersonas) => ({
   comparisons: r.personas.map((after, i) => ({ personaId: after.personaId, segmentId: a.segments[i].segmentId, before: a.segments[i], after, completionDeltaPts: 50, regressions: [] })),
 });
 
-function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?: number; settingsSeen?: Settings[] } = {}) {
+function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?: number; settingsSeen?: Settings[]; idleExitMs?: number; onIdle?: () => void } = {}) {
   return (async () => {
     const workDir = o.workDir ?? (await mkdtemp(join(tmpdir(), "fs-daemon-")));
     cleanup.push(() => rm(workDir, { recursive: true, force: true }));
@@ -75,7 +75,7 @@ function setup(o: { store?: MemoryStore | FsStore; workDir?: string; durationMs?
         fixWatchMs: 5,
       };
     };
-    const orch = new Orchestrator({ store, workDir, makeDeps, pollMs: 20, heartbeatMs: 50, log: () => {}, env: {} });
+    const orch = new Orchestrator({ store, workDir, makeDeps, pollMs: 20, heartbeatMs: 50, log: () => {}, env: {}, idleExitMs: o.idleExitMs, onIdle: o.onIdle });
     cleanup.push(() => orch.stop({ abort: true, wait: true }));
     return { store, workDir, orch };
   })();
@@ -89,6 +89,19 @@ const enqueue = async (store: MemoryStore | FsStore, runId: string, r: StartRunR
 const status = (store: MemoryStore | FsStore, runId: string) => store.getJson<RunStatus>(`runs/${runId}/status.json`);
 
 describe("orchestrator daemon", () => {
+  it("calls onIdle once after idleExitMs with nothing running or queued, not while a run is going", async () => {
+    let idle = 0;
+    const { store, orch } = await setup({ idleExitMs: 150, durationMs: 300, onIdle: () => void idle++ });
+    await enqueue(store, "r-idle");
+    await orch.start();
+    await until(async () => (await status(store, "r-idle"))?.phase === "retesting");
+    expect(idle).toBe(0);
+    await until(async () => idle > 0);
+    expect((await status(store, "r-idle"))?.phase).toBe("done");
+    await sleep(300);
+    expect(idle).toBe(1);
+  });
+
   it("takes a queued run, runs the pipeline and mirrors every run file to the store", async () => {
     const { store, workDir, orch } = await setup();
     await enqueue(store, "r1");

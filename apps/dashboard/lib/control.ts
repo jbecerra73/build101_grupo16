@@ -12,7 +12,7 @@ import {
   type Settings,
   type SwarmTopology,
 } from "@frictionswarm/store";
-import type { ControlOverview } from "./control-types";
+import type { ControlOverview, OrchestratorLaunch } from "./control-types";
 import { enqueueRun } from "./orchestrator";
 import { isValidRunId, listQueue, listRuns, placeholderConfig } from "./runs";
 import { runStore } from "./store";
@@ -34,6 +34,8 @@ export async function getControlOverview(now = Date.now()): Promise<ControlOverv
     readUsage(store, new Date(now)),
     store.getJson<OrchestratorHeartbeat>(KEYS.heartbeat).catch(() => undefined),
   ]);
+  const online = isOnline(hb, now);
+  const launch = online ? undefined : await store.getJson<OrchestratorLaunch>(KEYS.launch).catch(() => undefined);
   return {
     active: runs.filter(isActive),
     recent: runs.filter((r) => !isActive(r)).slice(0, RECENT),
@@ -41,7 +43,8 @@ export async function getControlOverview(now = Date.now()): Promise<ControlOverv
     usage: { date: usage.date, runs: usage.runs, max: settings.maxRunsPerDay },
     settings,
     // Omitted when missing or stale: the UI shows the orchestrator offline.
-    ...(isOnline(hb, now) ? { orchestrator: hb } : {}),
+    ...(online ? { orchestrator: hb } : {}),
+    ...(launch ? { launch: { state: launch.state, requestedAt: launch.requestedAt, updatedAt: launch.updatedAt, sandboxId: launch.sandboxId, error: launch.error } } : {}),
   };
 }
 

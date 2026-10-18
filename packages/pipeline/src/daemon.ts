@@ -60,6 +60,10 @@ export type DaemonOptions = {
   pollMs?: number;
   /** Runs at once. One by default: a run already uses all 5 sandboxes. */
   maxConcurrent?: number;
+  /** With nothing running or queued for this long, onIdle is called once (the
+   * autostarted sandbox shuts itself down). Default: never. */
+  idleExitMs?: number;
+  onIdle?: () => void | Promise<void>;
   /** Pipeline wiring per run (tests inject fakes). Default: buildDeps from settings. */
   makeDeps?: DepsFactory;
   now?: () => Date;
@@ -97,6 +101,7 @@ export class Orchestrator {
   #timers: NodeJS.Timeout[] = [];
   #ticking?: Promise<void>;
   #stopped = false;
+  #idleSince?: number;
 
   constructor(o: DaemonOptions) {
     this.#o = o;
@@ -185,6 +190,20 @@ export class Orchestrator {
       if (this.active.size >= max || this.#stopped) break;
       await this.take(item);
       this.#queueDepth--;
+    }
+    this.#checkIdle(queued.length);
+  }
+
+  #checkIdle(queued: number) {
+    const { idleExitMs, onIdle } = this.#o;
+    if (!idleExitMs || !onIdle) return;
+    const now = this.#now().getTime();
+    if (this.active.size > 0 || queued > 0) this.#idleSince = undefined;
+    else if (this.#idleSince === undefined) this.#idleSince = now;
+    else if (now - this.#idleSince >= idleExitMs && !this.#stopped) {
+      this.#log(`idle for ${Math.round((now - this.#idleSince) / 60_000)} min, shutting down`);
+      this.#stopped = true;
+      void Promise.resolve(onIdle()).catch((e) => this.#log(`idle shutdown failed: ${errMsg(e)}`));
     }
   }
 
@@ -298,7 +317,7 @@ export async function registerP2SwarmRunner() {
   registerTenkiSwarmRunner(tenkiRunnerFactory());
 }
 
-export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestrator {
+export function orchestratorFromEnv(env: Env = process.env, log?: Log, extra: Partial<DaemonOptions> = {}): Orchestrator {
   const runsDir = resolve(/*turbopackIgnore: true*/ env.RUNS_DIR ?? join(REPO_ROOT, "runs"));
   const store = createStore(runsDir, env);
   // With a Blobs store the pipeline still needs a local folder; under /home/tenki in the sandbox.
@@ -312,7 +331,24 @@ export function orchestratorFromEnv(env: Env = process.env, log?: Log): Orchestr
     env,
     log,
     maxConcurrent: Number(env.ORCHESTRATOR_MAX_CONCURRENT ?? 1),
+    ...(Number(env.ORCHESTRATOR_IDLE_EXIT_MS) > 0 && { idleExitMs: Number(env.ORCHESTRATOR_IDLE_EXIT_MS) }),
+    ...extra,
   });
+}
+
+/** Autostarted in a sandbox (packages/store/src/launch.ts): clear the launch
+ * record and close our own sandbox, so an idle orchestrator stops billing. */
+async function shutdownSandbox(o: Orchestrator, env: Env) {
+  await o.stop();
+  await o.store.delete(KEYS.launch).catch(() => {});
+  if (env.TENKI_SANDBOX_ID && (env.TENKI_API_KEY || env.TENKI_AUTH_TOKEN)) {
+    const { tenkiClient } = await import("@frictionswarm/store/launch");
+    const client = await tenkiClient(env);
+    const session = await client.get(env.TENKI_SANDBOX_ID);
+    console.log(`[orchestrator] closing sandbox ${env.TENKI_SANDBOX_ID}`);
+    await session.closeIfOpen();
+  }
+  process.exit(0);
 }
 
 const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
@@ -320,7 +356,7 @@ if (isMain) {
   const envFile = join(REPO_ROOT, ".env.local");
   if (existsSync(envFile)) process.loadEnvFile(envFile);
   await registerP2SwarmRunner();
-  const o = orchestratorFromEnv();
+  const o: Orchestrator = orchestratorFromEnv(process.env, undefined, { onIdle: () => shutdownSandbox(o, process.env) });
   await o.start();
   const shutdown = async (sig: string) => {
     console.log(`[orchestrator] ${sig}: stopping (active runs will be marked "${RESTARTED}" on next start)`);

@@ -80,6 +80,17 @@ export type ControlOverview = {
   settings: Settings;
   /** Missing or stale (lastSeenAt > 20s ago) means the orchestrator is offline. */
   orchestrator?: OrchestratorHeartbeat;
+  /** While offline: the autostart's last launch (packages/store/src/launch.ts). */
+  launch?: OrchestratorLaunch;
+};
+
+/** A sandbox the Netlify autostart is booting, or why it couldn't. */
+export type OrchestratorLaunch = {
+  state: "launching" | "booting" | "failed";
+  requestedAt: string;
+  updatedAt: string;
+  sandboxId?: string;
+  error?: string;
 };
 
 /** API routes added alongside the existing /api/runs ones:

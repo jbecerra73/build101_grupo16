@@ -30,6 +30,7 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Everything except static build assets.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except static build assets and the orchestrator launcher
+  // (netlify/functions/), which checks its own secret.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|\\.netlify/functions/).*)"],
 };

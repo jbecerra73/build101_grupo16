@@ -10,7 +10,7 @@
 // Env (shell or <repo>/.env.local): TENKI_API_KEY (the "tenki3" key; the SDK
 // also accepts TENKI_AUTH_TOKEN), NETLIFY_SITE_ID, NETLIFY_AUTH_TOKEN, and
 // optionally TENKI_CHROME_SNAPSHOT_ID, GITHUB_TOKEN, plus the pipeline env that
-// is forwarded into the sandbox (FORWARDED_ENV below). See docs/DEPLOY.md.
+// is forwarded into the sandbox (FORWARDED_ENV in packages/store/src/launch.ts). See docs/DEPLOY.md.
 //
 // Status: unit-tested with a mocked SDK; untested against real tenki.
 import { execFileSync } from "node:child_process";
@@ -19,85 +19,47 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { createStore, HEARTBEAT_STALE_MS, isOnline, KEYS, type OrchestratorHeartbeat, type RunStore } from "@frictionswarm/store";
+import {
+  daemonEnv,
+  ENV_FILE,
+  envFile,
+  FORWARDED_ENV,
+  HOME,
+  LOG_FILE,
+  PID_FILE,
+  PUBLIC_REPO,
+  REPO_DIR,
+  SANDBOX_NAME,
+  shq,
+  START_SCRIPT,
+  tenkiClient,
+  TERMINAL_STATES,
+  WORK_DIR,
+  type SandboxClient,
+  type SandboxSession,
+} from "@frictionswarm/store/launch";
 
 type Env = Record<string, string | undefined>;
 type Log = (line: string) => void;
 
-// ------------------------------------------------------------ SDK surface
-
-/** What we use of a tenki Session (@tenkicloud/sandbox), so tests can fake it. */
-export interface SandboxSession {
-  readonly id: string;
-  state: string;
-  exec(
-    command: string[],
-    options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
-  ): Promise<{ exitCode: number; status: string; stdout: Uint8Array; stderr: Uint8Array }>;
-  writeFile(path: string, data: Uint8Array | string): Promise<void>;
-  refresh(): Promise<void>;
-  /** Terminates the sandbox (tenki bills failed sessions too). */
-  closeIfOpen(): Promise<void>;
-  timeoutAt?: Date;
-}
-
-/** What we use of TenkiSandbox. */
-export interface SandboxClient {
-  create(options: {
-    name: string;
-    cpuCores: number;
-    memoryMb: number;
-    diskSizeGb: number;
-    maxDurationMs: number;
-    snapshotId?: string;
-    tags?: string[];
-    metadata?: Record<string, string>;
-  }): Promise<SandboxSession>;
-  get(sessionId: string): Promise<SandboxSession>;
-  /** Releases the client's connections (the SDK's TenkiSandbox.close). */
-  close(): void | Promise<void>;
-}
-
-async function realClient(env: Env): Promise<SandboxClient> {
-  const authToken = env.TENKI_API_KEY || env.TENKI_AUTH_TOKEN;
-  if (!authToken) throw new Error("TENKI_API_KEY is not set (put TENKI_API_KEY=<the tenki3 key> in the repo-root .env.local)");
-  const { TenkiSandbox } = await import("@tenkicloud/sandbox");
-  return new TenkiSandbox({ authToken }) as unknown as SandboxClient;
-}
-
-// ------------------------------------------------------------ constants
-
-export const HOME = "/home/tenki";
-export const REPO_DIR = `${HOME}/repo`;
-export const ENV_FILE = `${HOME}/orchestrator.env`;
-export const START_SCRIPT = `${HOME}/start-orchestrator.sh`;
-export const LOG_FILE = `${HOME}/orchestrator.log`;
-export const PID_FILE = `${HOME}/orchestrator.pid`;
-export const WORK_DIR = `${HOME}/work`;
+// The SDK surface, sandbox layout and env file are shared with the Netlify
+// autostart (packages/store/src/launch.ts).
+export {
+  ENV_FILE,
+  envFile,
+  FORWARDED_ENV,
+  HOME,
+  LOG_FILE,
+  PID_FILE,
+  REPO_DIR,
+  shq,
+  START_SCRIPT,
+  WORK_DIR,
+  type SandboxClient,
+  type SandboxSession,
+};
+const realClient = tenkiClient;
 export const RECORD_FILE = ".tenki-orchestrator.json";
-const SANDBOX_NAME = "frictionswarm-orchestrator";
-const PUBLIC_REPO = "https://github.com/jbecerra73/build101_grupo16.git";
-
-/** Local env forwarded into the sandbox's env file when set. */
-export const FORWARDED_ENV = [
-  "NETLIFY_BLOBS_STORE",
-  "ANTHROPIC_API_KEY",
-  "CLAUDE_CODE_OAUTH_TOKEN",
-  "POSTHOG_SOURCE",
-  "POSTHOG_HOST",
-  "POSTHOG_APP_HOST",
-  "POSTHOG_PROJECT_ID",
-  "POSTHOG_PROJECT_KEY",
-  "POSTHOG_PERSONAL_API_KEY",
-  "PRODUCTION_BUILD_SHA",
-  "SWARM_RUNNER",
-  "SWARM_SPEED",
-  "FIX_LOOP",
-  "FIX_STAGE_DELAY_MS",
-  "MAX_RUNS_PER_DAY",
-  "DEFAULT_SEEDS_PER_PERSONA",
-  "ORCHESTRATOR_MAX_CONCURRENT",
-  "GITHUB_TOKEN",
-];
 
 export type SandboxRecord = {
   sandboxId: string;
@@ -126,18 +88,6 @@ export type Deps = {
 
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
 
-/** Single-quoted for bash. */
-export const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-
-export function envFile(vars: Record<string, string>): string {
-  const lines = ["# Written by npm run orchestrator:tenki -- up. Secrets: keep 0600."];
-  for (const [k, v] of Object.entries(vars)) {
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(k)) throw new Error(`bad env name ${k}`);
-    lines.push(`export ${k}=${shq(v)}`);
-  }
-  return lines.join("\n") + "\n";
-}
-
 export function readRecord(root: string): SandboxRecord | undefined {
   const p = join(root, RECORD_FILE);
   if (!existsSync(p)) return undefined;
@@ -162,7 +112,7 @@ async function run(session: SandboxSession, step: string, script: string, opts: 
   return text(r.stdout).trim();
 }
 
-const TERMINAL = new Set(["TERMINATED", "TERMINATING", "USER_SHUTDOWN"]);
+const TERMINAL = TERMINAL_STATES;
 
 function requireEnv(env: Env, names: string[]) {
   const missing = names.filter((n) => !env[n]);
@@ -269,19 +219,7 @@ export async function up(deps: Deps, opts: UpOptions = {}): Promise<SandboxRecor
       log("npm run posthog:generate (the file source's history)...");
       await run(session, "posthog:generate", `cd ${REPO_DIR} && npm run posthog:generate`, { timeoutMs: 20 * 60_000 });
 
-      const vars: Record<string, string> = {
-        RUN_STORE: "blobs",
-        NETLIFY_SITE_ID: env.NETLIFY_SITE_ID!,
-        NETLIFY_AUTH_TOKEN: env.NETLIFY_AUTH_TOKEN!,
-        ORCHESTRATOR_HOST: "tenki",
-        TENKI_SANDBOX_ID: session.id,
-        ORCHESTRATOR_VERSION: version,
-        ORCHESTRATOR_WORK_DIR: WORK_DIR,
-        POSTHOG_DATA_DIR: `${REPO_DIR}/data/posthog`,
-        SWARM_SHOTS_DIR: `${REPO_DIR}/apps/dashboard/scripts/shots`,
-        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1",
-      };
-      for (const k of FORWARDED_ENV) if (env[k] && !(k in vars)) vars[k] = env[k]!;
+      const vars = daemonEnv(env, { sandboxId: session.id, version });
       await session.writeFile(ENV_FILE, envFile(vars));
       await session.writeFile(
         START_SCRIPT,

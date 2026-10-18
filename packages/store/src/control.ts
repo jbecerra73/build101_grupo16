@@ -27,6 +27,8 @@ export type {
 export const KEYS = {
   settings: "settings.json",
   heartbeat: "orchestrator.json",
+  /** The autostart's launch record (launch.ts). */
+  launch: "orchestrator-launch.json",
   usage: "usage.json",
   queue: "queue/",
   queued: (requestId: string) => `queue/${requestId}.json`,
