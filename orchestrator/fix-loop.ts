@@ -213,6 +213,10 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
       await opts.runSwarm(retestConfig);
       await opts.collect?.(retestConfig);
       const retest = await opts.analyze(retestRunId);
+      // No agent in the analysis means the swarm's tracks never reached the analyzer: that says
+      // nothing about the fix, so it is a failure, not a "not proven" verdict.
+      if (!retest.metrics.personas.some((p) => p.n > 0))
+        throw new Error(`re-test ${retestRunId} has no agents in its events: the swarm's tracks did not reach the analyzer`);
 
       // The real users' problems stay the goal; a retry also targets whoever the swarm still saw struggle.
       const targeted = [...new Set([...original, ...targets].flatMap((f) => f.personas))].filter((p) => !PERSONAS[p]?.control);

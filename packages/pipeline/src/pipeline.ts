@@ -353,13 +353,19 @@ export function sourcesByKind(): (kind: PostHogSourceKind) => PostHogSource {
   };
 }
 
-/** The analyzer for runs under `runsDir`, on the source each run's config names. */
+/** The analyzer for runs under `runsDir`, on the source each run's config names, except a
+ * retest the agents' browsers recorded (runs/<retest>/posthog.jsonl, orchestrator/swarm/recorded.ts):
+ * that recording is the swarm's tracks, and the configured source may never see them (the file
+ * source only has the simulator's swarm-<runId>.jsonl). */
 export function moduleAnalyzer(runsDir: string, source: (kind: PostHogSourceKind) => PostHogSource, log?: (line: string) => void): Analyzer {
   return async (runId) => {
     const { createAnalyzer } = await loadAnalyzer();
     const config = await readJson<RunConfig>(join(runsDir, runId, "config.json"));
     const kind = config?.posthog.source ?? "file";
-    const result = await createAnalyzer({ runsDir, source: source(kind), log } as Parameters<AnalyzerModule["createAnalyzer"]>[0])(runId);
+    const recorded = config?.kind === "retest" && existsSync(join(runsDir, runId, "posthog.jsonl"));
+    const from = recorded ? (await loadPostHog()).snapshotSource(join(runsDir, runId)) : source(kind);
+    if (recorded) log?.(`analyzing ${runId} from the swarm's recorded events`);
+    const result = await createAnalyzer({ runsDir, source: from, log } as Parameters<AnalyzerModule["createAnalyzer"]>[0])(runId);
     await ensureSnapshot(runsDir, runId, source(kind));
     return result;
   };
