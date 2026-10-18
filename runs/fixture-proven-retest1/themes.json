@@ -4,48 +4,80 @@
     "title": "Gave up at Product",
     "segments": [
       "low_vision",
-      "mobile"
+      "mobile",
+      "desktop"
     ],
     "personas": [
       "kai",
+      "typical",
       "rosa"
     ],
-    "sessions": 6,
+    "sessions": 11,
     "quotes": [
       {
-        "sessionId": "01a14bf4-4ab0-79ca-83cf-ca4449f370c4",
-        "agentId": "kai-10",
+        "sessionId": "01a14cea-93b1-7607-baa2-4ad287667966",
+        "agentId": "kai-1",
         "personaId": "kai",
         "text": "It keeps saying select a size but I don't see any sizes."
       },
       {
-        "sessionId": "01a14bf4-4f5f-704c-805f-81ffe26f546e",
+        "sessionId": "01a14cea-947b-79ca-83cf-ca4449f370c4",
+        "agentId": "kai-10",
+        "personaId": "kai",
+        "text": "I tapped the size box but nothing opens. I can't pick a size."
+      },
+      {
+        "sessionId": "01a14cea-992a-704c-805f-81ffe26f546e",
         "agentId": "kai-3",
         "personaId": "kai",
         "text": "There's a 'Size' label but no sizes I can choose."
       },
       {
-        "sessionId": "01a14bf4-6eb9-70f0-9051-c3d2081164d6",
-        "agentId": "rosa-8",
-        "personaId": "rosa",
-        "text": "It keeps saying select a size but I don't see any sizes."
-      },
-      {
-        "sessionId": "01a14bf4-75a7-7ab1-8274-12b77ebc14f7",
-        "agentId": "kai-6",
-        "personaId": "kai",
+        "sessionId": "01a14cea-ac29-7380-b651-3b02e815c6de",
+        "agentId": "typical-10",
+        "personaId": "typical",
         "text": "There's a 'Size' label but no sizes I can choose."
       },
       {
-        "sessionId": "01a14bf4-7eb2-7faf-a608-5beb86b4a418",
-        "agentId": "kai-9",
+        "sessionId": "01a14cea-b03a-717a-a44f-ce099217d1ef",
+        "agentId": "rosa-1",
+        "personaId": "rosa",
+        "text": "There's a 'Size' label but no sizes I can choose."
+      },
+      {
+        "sessionId": "01a14cea-c1c7-729c-ad9e-f05524447153",
+        "agentId": "rosa-7",
+        "personaId": "rosa",
+        "text": "There's a 'Size' label but no sizes I can choose."
+      },
+      {
+        "sessionId": "01a14cea-c8a7-70e1-96e3-6728402ed570",
+        "agentId": "kai-7",
         "personaId": "kai",
         "text": "I tapped the size box but nothing opens. I can't pick a size."
       },
       {
-        "sessionId": "01a14bf4-85e1-7e72-9bec-40656bad09d2",
+        "sessionId": "01a14cea-c9e4-78b0-8a38-1e987f535c63",
+        "agentId": "typical-3",
+        "personaId": "typical",
+        "text": "There's a 'Size' label but no sizes I can choose."
+      },
+      {
+        "sessionId": "01a14cea-cfac-7e72-9bec-40656bad09d2",
         "agentId": "rosa-3",
         "personaId": "rosa",
+        "text": "It keeps saying select a size but I don't see any sizes."
+      },
+      {
+        "sessionId": "01a14cea-de03-714e-a9b3-3a4f45470505",
+        "agentId": "rosa-2",
+        "personaId": "rosa",
+        "text": "It keeps saying select a size but I don't see any sizes."
+      },
+      {
+        "sessionId": "01a14cea-e166-7fc8-acc9-af68b08ee707",
+        "agentId": "kai-5",
+        "personaId": "kai",
         "text": "It keeps saying select a size but I don't see any sizes."
       }
     ],
@@ -55,7 +87,7 @@
   },
   {
     "id": "T2",
-    "title": "Gave up at Payment",
+    "title": "Gave up at Browse",
     "segments": [
       "low_vision",
       "mobile"
@@ -64,31 +96,25 @@
       "kai",
       "rosa"
     ],
-    "sessions": 4,
+    "sessions": 3,
     "quotes": [
       {
-        "sessionId": "01a14bf4-49e6-7607-baa2-4ad287667966",
-        "agentId": "kai-1",
+        "sessionId": "01a14cea-a0b9-71e9-8584-d2466bbd7bb2",
+        "agentId": "kai-4",
         "personaId": "kai",
-        "text": "The total jumped at payment. I wasn't told about shipping before."
+        "text": "I tapped the color and nothing happened. I can't narrow this down."
       },
       {
-        "sessionId": "01a14bf4-4a63-70ae-87ca-34d7b526d92a",
-        "agentId": "rosa-6",
+        "sessionId": "01a14cea-c87d-7faf-a608-5beb86b4a418",
+        "agentId": "kai-9",
+        "personaId": "kai",
+        "text": "I tapped the color and nothing happened. I can't narrow this down."
+      },
+      {
+        "sessionId": "01a14cea-cf7d-7ae7-89c8-8bedd379269f",
+        "agentId": "rosa-5",
         "personaId": "rosa",
-        "text": "The total jumped at payment. I wasn't told about shipping before."
-      },
-      {
-        "sessionId": "01a14bf4-7edc-70e1-96e3-6728402ed570",
-        "agentId": "kai-7",
-        "personaId": "kai",
-        "text": "The total jumped at payment. I wasn't told about shipping before."
-      },
-      {
-        "sessionId": "01a14bf4-9235-725e-bfa7-8d2667e93cdd",
-        "agentId": "kai-8",
-        "personaId": "kai",
-        "text": "The total jumped at payment. I wasn't told about shipping before."
+        "text": "I picked Blue but the list didn't change. The filters don't work."
       }
     ],
     "findingIds": [
@@ -99,30 +125,18 @@
     "id": "T3",
     "title": "Gave up at Shipping",
     "segments": [
-      "low_vision"
+      "mobile"
     ],
     "personas": [
-      "rosa"
+      "kai"
     ],
-    "sessions": 3,
+    "sessions": 1,
     "quotes": [
       {
-        "sessionId": "01a14bf4-6dc8-7f93-aff3-8d4b2785d50c",
-        "agentId": "rosa-10",
-        "personaId": "rosa",
+        "sessionId": "01a14cea-dc00-725e-bfa7-8d2667e93cdd",
+        "agentId": "kai-8",
+        "personaId": "kai",
         "text": "Applying the promo code erased my whole address. I'm not typing it again."
-      },
-      {
-        "sessionId": "01a14bf4-934e-7add-861b-8791e96970dd",
-        "agentId": "rosa-4",
-        "personaId": "rosa",
-        "text": "Applying the promo code erased my whole address. I'm not typing it again."
-      },
-      {
-        "sessionId": "01a14bf4-9438-714e-a9b3-3a4f45470505",
-        "agentId": "rosa-2",
-        "personaId": "rosa",
-        "text": "This is taking too long."
       }
     ],
     "findingIds": [

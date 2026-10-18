@@ -69,6 +69,7 @@ describe("posthog-sim", () => {
     expect(events.some((e) => e.event === "add_to_cart_clicked" && e.properties.has_size === false)).toBe(true);
     expect(events.some((e) => e.event === "shipping_submitted" && e.properties.promo_applied === true && (e.properties.error_fields as string[]).length === 5)).toBe(true); // T5
     expect(events.some((e) => e.properties.$pathname === "/checkout/account")).toBe(true); // T2
+    expect(chain('attr__aria-label="')).toBe(true); // T6: a color swatch that seems to do nothing
   });
 
   it("swarm agents are tagged and narrate their give-ups", () => {

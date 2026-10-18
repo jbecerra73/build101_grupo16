@@ -5,16 +5,16 @@
     {
       "attempt": 1,
       "findingIds": [
-        "F2",
+        "F3",
         "F5"
       ],
       "status": "retesting",
       "branch": "frictionswarm/rehearsal-fixture-live",
-      "commitSha": "709940067489dd2344ebbf446378c4606ba94a6a",
+      "commitSha": "9ac75dfcab278cd9af8b955e9808c131c9d7a25c",
       "prNumber": 0,
       "prUrl": "about:blank#rehearsal-no-pr-opened",
       "previewUrl": "https://deploy-preview-rehearsal--swarm-ecommerce.netlify.app",
-      "summary": "[rehearsal, no PR opened] Would fix: Mobile shoppers leave at Account, a step the flow doesn't require; 229 failed 'account_submitted' submits (password, confirmPassword, birthDate); Large-text users can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
+      "summary": "[rehearsal, no PR opened] Would fix: Mobile shoppers leave at Account, a step the flow doesn't require; 205 failed 'account_submitted' submits (password, birthDate, confirmPassword); Large-text users can't find 'Continue to payment' on Shipping: rage clicks around it, then they leave",
       "retestRunId": "fixture-live-retest1"
     }
   ]

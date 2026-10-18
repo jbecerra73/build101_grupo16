@@ -79,8 +79,9 @@ Positioning: turns the analytics you already collect into fixes, and gives each 
 | T3 | Shipping cost only on final step | Everyone | Show shipping in cart | Short-dwell exits between Payment `$pageview` and `payment_submitted` |
 | T4 | Hover-only size picker | Mobile, large text / Kai, Rosa | Visible size buttons | Rage clicks on the "Size" pill; `add_to_cart_clicked {has_size:false}` |
 | T5 | Applying coupon wipes address form | Everyone with a promo / Typical | Preserve form state | `promo_applied` then `shipping_submitted {success:false, promo_applied:true}` with all five fields in `error_fields` |
+| T6 | Shop filters (color, size, price) do nothing until "Apply Filter", below the fold on desktop and at the bottom of the mobile drawer | Mobile, large text / Kai, Rosa | Apply filters on pick | Rage clicks on a color swatch on `/shop`, then exit at Browse; survivors click "Apply Filter" and reach `/shop?color=…` |
 
-Demo fix targets **T1 + T2**; T3–T5 appear as "found, not yet fixed". Ground-truth check: the report on the fake history should surface 5/5.
+Demo fix targets **T1 + T2**; T3–T6 appear as "found, not yet fixed". Ground-truth check: the report on the fake history should surface 6/6.
 
 ### Tracking plan (`shared/analytics.ts` is the source of truth)
 - **posthog-js** with `capture_pageview: "history_change"`, `capture_pageleave`, autocapture and rage clicks on. Autocapture must also be enabled in the PostHog project settings (remote config), or `$autocapture`/`$rageclick` never fire.
@@ -136,11 +137,12 @@ interface PostHogSource {
 
 | Release | Date | Traps live | Completion (low_vision / mobile / desktop) |
 |---|---|---|---|
-| Simulated checkout | 2026-04-01 | T3 | 19.1% / 17.5% / 22.5% |
-| New product page | 2026-05-20 | T3 T4 | 13.6% / 11.6% / 21.7% |
-| Checkout redesign | 2026-06-24 | T1 T3 T4 | 5.5% / 10.6% / 20.0% |
-| Promo codes | 2026-08-05 | T1 T3 T4 T5 | 6.0% / 9.7% / 17.7% |
-| Accounts (current) | 2026-09-09 | T1–T5 | 4.3% / 3.2% / 13.5% |
+| Simulated checkout | 2026-04-01 | T3 | 18.1% / 16.5% / 20.9% |
+| New product page | 2026-05-20 | T3 T4 | 12.8% / 11.4% / 24.1% |
+| Checkout redesign | 2026-06-24 | T1 T3 T4 | 5.3% / 9.9% / 19.0% |
+| Promo codes | 2026-08-05 | T1 T3 T4 T5 | 8.0% / 9.6% / 19.7% |
+| Accounts | 2026-09-09 | T1–T5 | 5.1% / 3.1% / 11.6% |
+| Shop filters (current) | 2026-09-23 | T1–T6 | 6.0% / 3.5% / 12.9% |
 
   `--current-sha <sha>` stamps the current release with production's real `build-sha`.
 - **Swarm mode** (offline stand-in for a real re-test): `npm run posthog:generate -- --swarm <runId> --sha <preview sha> --host <preview host> --fixed T1,T2 --seeds 1001-1010` writes `data/posthog/swarm-<runId>.jsonl` — swarm-tagged tracks on the preview with the fixed traps removed, including `swarm_*` narration and give-up reasons. The pipeline's offline runner calls this instead of replaying a recorded swarm.
@@ -198,12 +200,12 @@ type Finding = {
 - Dashboard pages: define flow / pick window; report (segment funnels + trend with releases, hotspots, evidence); live re-test grid; before/after + PR status; replay a past run.
 
 ### Work split (contracts to lock first: tracking plan, PostHogSource, Finding, Metrics)
-- **P1 — storefront + coding agent**: PostHog tracking + swarm tagging (FrissA/demo-ecommerce#7), traps T1–T5, build-sha meta, confirmation echo, Claude Code headless fix flow (analytics files protected), draft PR → ready/close lifecycle, preview-SHA polling, verdict against segment baselines.
+- **P1 — storefront + coding agent**: PostHog tracking + swarm tagging (FrissA/demo-ecommerce#7), traps T1–T6, build-sha meta, confirmation echo, Claude Code headless fix flow (analytics files protected), draft PR → ready/close lifecycle, preview-SHA polling, verdict against segment baselines.
 - **P2 — swarm runtime**: tenki sandbox snapshot, worker with 6 contexts, Playwright tool loop, persona filters + patience, swarm tagging on the start URL, `swarm_*` events via `window.posthog`, live-grid screenshots, `waitForSwarm`.
 - **P3 — analyzer + dashboard**: PostHogSource (file + HogQL), metrics/signals/findings over PostHog events, release attribution, fake dataset generator, PM UI (flow, window, report, live re-test grid, before/after, replay).
 
 ### Pitch (3 min)
-Problem (20s) → six months of PostHog data, report with releases that broke each segment (40s) → fix + PR (30s) → swarm re-test on the preview, live grid (30s) → before/after + PR ready (30s) → why trust it (20s: real-user evidence, perception constraints, anti-gaming invariants, control segment, fresh seeds, 5/5 traps found) → vision: CI for UX (10s).
+Problem (20s) → six months of PostHog data, report with releases that broke each segment (40s) → fix + PR (30s) → swarm re-test on the preview, live grid (30s) → before/after + PR ready (30s) → why trust it (20s: real-user evidence, perception constraints, anti-gaming invariants, control segment, fresh seeds, 6/6 traps found) → vision: CI for UX (10s).
 
 ## Testing Decisions
 
@@ -212,7 +214,7 @@ Problem (20s) → six months of PostHog data, report with releases that broke ea
 - Persona filters tested by feeding a fixture page and asserting what the agent can/can't perceive.
 - Storefront: one headless load with `?swarm=…` and a stubbed PostHog endpoint must show every event carrying the super properties and swarm tags.
 - End-to-end smoke: one agent, one persona, against a preview with a real PostHog key, then `api` source returns its session.
-- Ground truth: the report on the fake history must surface T1–T5 and attribute each to its release.
+- Ground truth: the report on the fake history must surface T1–T6 and attribute each to its release.
 
 ## Out of Scope
 

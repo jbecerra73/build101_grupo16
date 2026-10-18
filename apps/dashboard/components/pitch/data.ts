@@ -29,7 +29,7 @@ export function pitchData(run: RunDetail, retest: RunDetail | undefined, live: b
 
 /* ------------------------------------------------------------ planted traps */
 
-export type TrapId = "T1" | "T2" | "T3" | "T4" | "T5";
+export type TrapId = "T1" | "T2" | "T3" | "T4" | "T5" | "T6";
 
 /** Ground truth of the fake PostHog history (tools/posthog-sim/sim.ts RELEASES): the
  * release that first shipped each planted trap, and what it is (SPEC trap table). */
@@ -39,12 +39,14 @@ export const TRAP_TRUTH: { id: TrapId; label: string; sha: string; release: stri
   { id: "T1", label: "Invisible “Continue to payment”", sha: "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70", release: "Checkout redesign" },
   { id: "T5", label: "Promo code wipes the address", sha: "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f", release: "Promo codes" },
   { id: "T2", label: "Forced sign-up wall", sha: "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9", release: "Accounts" },
+  { id: "T6", label: "Filters wait for a hidden Apply", sha: "a9c1e3b5d7f0294b6d8f1a3c5e7b9d0f2a4c6e81", release: "Shop filters" },
 ];
 
 /** Which planted trap a finding describes; same matching as packages/pipeline/src/traps.ts. */
 export function trapOf(f: Pick<Finding, "step" | "page" | "selector" | "title">): TrapId | undefined {
   const text = `${f.selector ?? ""} ${f.title}`.toLowerCase();
   if (f.step === "Account" || f.page.includes("/checkout/account")) return "T2";
+  if (f.step === "Browse" || /filter|swatch/.test(text)) return "T6";
   if (f.step === "Product" || /size/.test(text)) return "T4";
   if (/promo|coupon|wipe|erase|discount/.test(text)) return "T5";
   if (f.step === "Payment" || /deliver|fee|shipping cost|total/.test(text)) return "T3";
@@ -58,7 +60,9 @@ export type TrapCheck = (typeof TRAP_TRUTH)[number] & { finding?: Finding; relea
 export function trapChecks(findings: Finding[]): TrapCheck[] {
   return TRAP_TRUTH.map((t) => {
     const finding = findings.find((f) => trapOf(f) === t.id);
-    return { ...t, finding, releaseRight: !!finding && finding.evidence.sinceRelease?.sha === t.sha };
+    // The generator's --current-sha restamps the newest release, so its name counts too
+    const since = finding?.evidence.sinceRelease;
+    return { ...t, finding, releaseRight: !!since && (since.sha === t.sha || since.name === t.release) };
   });
 }
 

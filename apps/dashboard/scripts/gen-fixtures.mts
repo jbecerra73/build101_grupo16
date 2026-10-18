@@ -130,7 +130,7 @@ async function liveFixture(runId: string, from: string, cut: number, createdAt: 
   const host = new URL(rc.targetUrl).host;
   const start = createdAt.getTime() + 40_000;
   const agents = rc.personaIds.flatMap((p) =>
-    rc.seeds[p].map((seed) => ({ id: `${p}-${seed}`, p, events: simulateAgent({ runId: retestId, personaId: p, seed, host, buildSha: rc.posthog.buildSha, traps: ["T3", "T4", "T5"], start }).events })),
+    rc.seeds[p].map((seed) => ({ id: `${p}-${seed}`, p, events: simulateAgent({ runId: retestId, personaId: p, seed, host, buildSha: rc.posthog.buildSha, traps: ["T3", "T4", "T5", "T6"], start }).events })),
   );
   const t = (e: PostHogEvent) => Date.parse(e.timestamp);
   const t0 = Math.min(...agents.map((x) => t(x.events[0])));

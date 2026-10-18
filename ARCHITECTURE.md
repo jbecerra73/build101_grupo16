@@ -41,7 +41,7 @@ flowchart LR
 
     subgraph Store["Storefront (FrissA/demo-ecommerce)"]
         GH["GitHub repo<br/>main + draft PRs"]
-        Prod["Netlify production<br/>posthog-js · build-sha · traps T1–T5"]
+        Prod["Netlify production<br/>posthog-js · build-sha · traps T1–T6"]
         Preview["Netlify deploy preview<br/>posthog-js · build-sha"]
     end
 
