@@ -162,7 +162,7 @@ type EventMatch = { event: string; where?: Record<string, EventValue | EventValu
 ```
 Flows (`shared/flows.ts`), all on the same store and the same PostHog events:
 - `buy-tshirt`: find a blue polo shirt and buy it in size M (the id stays `buy-tshirt` for stored runs); completion = a placed order.
-- `buy-jeans`: a broad goal, "buy jeans as a gift for your grandchild, who loves green" (no jeans come in green, so the agent has to judge); placed order + `product_added {product_id: 2|8}`; real users who viewed either pair; swarmed by Rosa only (`Flow.personas`).
+- `buy-jeans`: a broad goal, "buy jeans as a gift for your grandchild, who loves blue" (the agent picks the pair itself); placed order + `product_added {product_id: 2|8}`; real users who viewed either pair; swarmed by Rosa only (`Flow.personas`).
 - `promo-checkout`: buy with WELCOME10; placed order + `promo_applied {success: true}`; real users who tried a code (T5).
 - `add-to-cart`: pick a size and add to cart; success at `/cart`, `product_added`; steps Home → Cart (T4).
 
