@@ -3,7 +3,8 @@
 import { motion, useReducedMotion } from "motion/react";
 import type { Release, SegmentId, TrendPoint } from "@frictionswarm/shared";
 import type { ReleaseImpact } from "@/components/run/trend-chart";
-import { pct1, segmentColor, segmentShort } from "@/lib/format";
+import { pct1, segmentColor } from "@/lib/format";
+import { monthEs, segmentEs } from "./es";
 
 const SEGMENT_ORDER: SegmentId[] = ["low_vision", "mobile", "desktop"];
 const DAY = 86_400_000;
@@ -34,7 +35,7 @@ export function PitchTrend({
   const reduced = useReducedMotion();
   const m = { top: 64, right: 210, bottom: 44, left: 72 };
   const weeks = [...new Set(points.map((p) => p.weekStart))].sort();
-  if (!weeks.length) return <p className="text-2xl text-muted-foreground">No weekly data in this run.</p>;
+  if (!weeks.length) return <p className="text-2xl text-muted-foreground">No hay datos semanales en este run.</p>;
   const series = SEGMENT_ORDER.map((s) => ({ s, pts: weeks.map((w) => points.find((p) => p.segmentId === s && p.weekStart === w)) })).filter((x) => x.pts.some(Boolean));
 
   const x0 = t(weeks[0]);
@@ -76,7 +77,7 @@ export function PitchTrend({
   for (let i = 1; i < ends.length; i++) ends[i].ly = Math.max(ends[i].ly, ends[i - 1].ly + 30);
 
   return (
-    <svg width={width} height={height} role="img" aria-label="Weekly checkout completion per segment over six months, with production releases" className="block overflow-visible">
+    <svg width={width} height={height} role="img" aria-label="Completion semanal del checkout por segmento durante seis meses, con los releases a producción" className="block overflow-visible">
       {yTicks.map((v) => (
         <g key={v}>
           <line x1={m.left} x2={m.left + iw} y1={Y(v)} y2={Y(v)} className="stroke-border" strokeWidth={1} />
@@ -87,7 +88,7 @@ export function PitchTrend({
       ))}
       {months.map((ms) => (
         <text key={ms} x={X(ms)} y={height - 8} textAnchor="middle" className="fill-muted-foreground" fontSize={20}>
-          {new Date(ms).toLocaleDateString("en", { month: "short", timeZone: "UTC" })}
+          {monthEs(ms)}
         </text>
       ))}
 
@@ -156,7 +157,7 @@ export function PitchTrend({
         <motion.g key={l.s} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={reduced ? { duration: 0.2 } : { duration: 0.4, delay: 0.25 + DRAW + i * 0.12 }}>
           {Math.abs(l.ly - l.y) > 2 && <line x1={l.x + 4} y1={l.y} x2={l.x + 16} y2={l.ly} className="stroke-muted-foreground/60" strokeWidth={1.5} />}
           <text x={l.x + 20} y={l.ly} dy="0.35em" className="fill-foreground" fontSize={22} fontWeight={600}>
-            {segmentShort(l.s)} <tspan className="tabular" fontWeight={400}>{pct1(l.rate)}</tspan>
+            {segmentEs(l.s)} <tspan className="tabular" fontWeight={400}>{pct1(l.rate)}</tspan>
           </text>
         </motion.g>
       ))}

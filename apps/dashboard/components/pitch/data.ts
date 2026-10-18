@@ -34,11 +34,11 @@ export type TrapId = "T1" | "T2" | "T3" | "T4" | "T5";
 /** Ground truth of the fake PostHog history (tools/posthog-sim/sim.ts RELEASES): the
  * release that first shipped each planted trap, and what it is (SPEC trap table). */
 export const TRAP_TRUTH: { id: TrapId; label: string; sha: string; release: string }[] = [
-  { id: "T3", label: "Delivery fee hidden until Payment", sha: "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d", release: "Simulated checkout" },
-  { id: "T4", label: "Size picker fails on tap", sha: "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c", release: "New product page" },
-  { id: "T1", label: "Invisible “Continue to payment”", sha: "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70", release: "Checkout redesign" },
-  { id: "T5", label: "Promo code wipes the address", sha: "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f", release: "Promo codes" },
-  { id: "T2", label: "Forced sign-up wall", sha: "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9", release: "Accounts" },
+  { id: "T3", label: "Costo de envío oculto hasta Payment", sha: "3b1f0c9e2a7d4b6f8c1e5a9d0b2c4e6f8a1b3c5d", release: "Simulated checkout" },
+  { id: "T4", label: "El selector de talla falla con el tap", sha: "8e4d2a6c0b9f1e3a5c7d9b2f4a6c8e0d1b3f5a7c", release: "New product page" },
+  { id: "T1", label: "“Continue to payment” invisible", sha: "c7a9e1b3d5f7092a4c6e8b0d2f4a6c8e1b3d5f70", release: "Checkout redesign" },
+  { id: "T5", label: "El código promo borra la dirección", sha: "5d2f8b4a6c0e1d3f5a7b9c2e4d6f8a0b1c3e5d7f", release: "Promo codes" },
+  { id: "T2", label: "Registro obligatorio forzado", sha: "f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1d3b5f7a9", release: "Accounts" },
 ];
 
 /** Which planted trap a finding describes; same matching as packages/pipeline/src/traps.ts. */

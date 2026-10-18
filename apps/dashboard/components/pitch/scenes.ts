@@ -1,4 +1,5 @@
-import { pct1, personaShort, segmentShort, signedPts } from "@/lib/format";
+import { pct1, signedPts } from "@/lib/format";
+import { personaEs, segmentEs } from "./es";
 import type { PitchData } from "./data";
 
 export type SceneId = "problem" | "posthog" | "fix" | "swarm" | "before-after" | "trust" | "vision";
@@ -14,83 +15,83 @@ export type SceneMeta = {
 export const SCENES: SceneMeta[] = [
   {
     id: "problem",
-    title: "Problem",
+    title: "Problema",
     seconds: 20,
     notes: (d) => {
       const worst = d.impacts.toSorted((a, b) => a.deltaPts - b.deltaPts)[0];
       return [
-        "POs ship checkout changes blind: nobody watches every segment after a release.",
+        "Los POs lanzan cambios al checkout a ciegas: nadie mira cada segmento después de un release.",
         worst
-          ? `On this store, “${worst.release.name}” took ${segmentShort(worst.segmentId)} completion from ${pct1(worst.before)} to ${pct1(worst.after)}, and nobody noticed for weeks.`
-          : "Friction shows up as drop-off in the analytics, weeks after the release that caused it.",
-        "By then real customers have already left. A/B tests take weeks of traffic to say anything.",
+          ? `En esta tienda, “${worst.release.name}” bajó la completion de ${segmentEs(worst.segmentId)} de ${pct1(worst.before)} a ${pct1(worst.after)}, y nadie lo notó durante semanas.`
+          : "La fricción aparece como drop-off en analytics, semanas después del release que la causó.",
+        "Para entonces los clientes reales ya se fueron. Un A/B test necesita semanas de tráfico para decir algo.",
       ];
     },
   },
   {
     id: "posthog",
-    title: "Six months of PostHog",
+    title: "Seis meses de PostHog",
     seconds: 40,
     notes: (d) => [
-      "This is the store's real PostHog data: weekly checkout completion per segment, real users only.",
-      "Vertical lines are production releases. Wait for the rings: each marks the release that broke a segment.",
-      ...d.impacts.map((i) => `${segmentShort(i.segmentId)} broke with “${i.release.name}”: ${pct1(i.before)} → ${pct1(i.after)}.`),
-      `The analyzer turns that into ${d.findings.length} findings, each with its evidence and the release that introduced it.`,
+      "Estos son los datos reales de PostHog de la tienda: completion semanal del checkout por segmento, solo usuarios reales.",
+      "Las líneas verticales son releases a producción. Esperen los anillos: cada uno marca el release que rompió un segmento.",
+      ...d.impacts.map((i) => `${segmentEs(i.segmentId)} se rompió con “${i.release.name}”: ${pct1(i.before)} → ${pct1(i.after)}.`),
+      `El analyzer convierte eso en ${d.findings.length} findings, cada uno con su evidencia y el release que lo introdujo.`,
     ],
   },
   {
     id: "fix",
-    title: "The fix",
+    title: "El fix",
     seconds: 30,
     notes: (d) => [
-      `The top findings go to a coding agent (Claude Code, headless) with the storefront repo; it pushes a branch and opens a draft PR.`,
-      d.attempt?.findingIds.length ? `It targeted ${d.attempt.findingIds.join(" and ")}.` : "It targets the top 1–3 findings.",
-      "Say it plainly if the badge reads rehearsal: on stage the fix loop is recorded, the rest is the same pipeline.",
-      "Netlify builds a deploy preview; the orchestrator waits until the preview serves the pushed commit.",
+      `Los findings principales van a un coding agent (Claude Code, headless) con el repo del storefront; hace push de un branch y abre un draft PR.`,
+      d.attempt?.findingIds.length ? `Atacó ${d.attempt.findingIds.join(" y ")}.` : "Ataca los 1–3 findings principales.",
+      "Si el badge dice rehearsal, díganlo claro: en el escenario el fix loop está grabado, el resto es el mismo pipeline.",
+      "Netlify construye un deploy preview; el orquestador espera a que el preview sirva el commit pusheado.",
     ],
   },
   {
     id: "swarm",
-    title: "Swarm re-test",
+    title: "Re-test del swarm",
     seconds: 30,
     notes: (d) => [
-      d.live ? "This is live: the swarm is shopping the preview right now." : "Replayed from the re-test's PostHog snapshot, at speed.",
-      "Each face is an agent with a persona's constraints enforced: Rosa sees a blurred, downscaled screen; Kai misses taps under 44px.",
-      "They walk the funnel left to right. Give-ups drop into ‘Left the store’ with their reason; valid orders land in ‘Checked out’.",
-      `${d.retest?.agents.length ?? 30} agents, fresh seeds, tagged so they never touch real-user metrics.`,
+      d.live ? "Esto es en vivo: el swarm está comprando en el preview ahora mismo." : "Reproducido desde el snapshot de PostHog del re-test, acelerado.",
+      "Cada cara es un agent con las restricciones de una persona aplicadas: Rosa ve una pantalla borrosa y reducida; Kai falla los taps de menos de 44px.",
+      "Recorren el funnel de izquierda a derecha. Los que se rinden caen en ‘Salieron de la tienda’ con su motivo; las órdenes válidas llegan a ‘Checkout completo’.",
+      `${d.retest?.agents.length ?? 30} agents, seeds nuevos, etiquetados para que nunca toquen las métricas de usuarios reales.`,
     ],
   },
   {
     id: "before-after",
-    title: "Before / after",
+    title: "Antes / después",
     seconds: 30,
     notes: (d) => {
       const v = d.attempt?.verdict;
-      if (!v) return ["The verdict appears once the swarm's tracks are compared. If it's still running, go back to the swarm."];
+      if (!v) return ["El veredicto aparece cuando se comparan los tracks del swarm. Si sigue corriendo, vuelvan al swarm."];
       return [
-        "Before: the segment's real users on production. After: the persona swarm on the preview. N on both sides.",
-        ...v.comparisons.map((c) => `${segmentShort(c.segmentId)} ↔ ${personaShort(c.personaId)}: ${signedPts(c.completionDeltaPts)}${c.regressions.length ? ` (regressions: ${c.regressions.length})` : ""}.`),
-        "Different populations: a directional pre-merge check, not an A/B test.",
-        v.improved ? "Proven against the threshold: the PR is marked ready for review." : "Not proven: the PR gets a metrics comment, the not-proven label and is closed. We show failures honestly.",
+        "Antes: los usuarios reales del segmento en producción. Después: el persona swarm en el preview. N en ambos lados.",
+        ...v.comparisons.map((c) => `${segmentEs(c.segmentId)} ↔ ${personaEs(c.personaId)}: ${signedPts(c.completionDeltaPts)}${c.regressions.length ? ` (regresiones: ${c.regressions.length})` : ""}.`),
+        "Poblaciones distintas: un check direccional antes del merge, no un A/B test.",
+        v.improved ? "Probado contra el umbral: el PR queda listo para review." : "No probado: el PR recibe un comentario con las métricas, el label not-proven y se cierra. Mostramos los fallos con honestidad.",
       ];
     },
   },
   {
     id: "trust",
-    title: "Why trust it",
+    title: "Por qué confiar",
     seconds: 20,
     notes: () => [
-      "Evidence first: findings come from real users in PostHog, not from the agents.",
-      "The personas' limits are enforced on what the model sees and can do, not just prompted: that's Rosa's view, and Kai's 44px grid.",
-      "A control persona must not regress; re-tests use fresh seeds; completions need the required steps, so shortcuts don't count.",
-      "On the planted-trap history, it found all five traps and the release that introduced each.",
+      "Primero la evidencia: los findings vienen de usuarios reales en PostHog, no de los agents.",
+      "Los límites de las personas se aplican sobre lo que el modelo ve y puede hacer, no solo en el prompt: esa es la vista de Rosa y la grilla de 44px de Kai.",
+      "La persona de control no debe empeorar; los re-tests usan seeds nuevos; una completion necesita los pasos obligatorios, así que los atajos no cuentan.",
+      "En el historial con trampas plantadas, encontró las cinco trampas y el release que introdujo cada una.",
     ],
   },
   {
     id: "vision",
-    title: "Vision",
+    title: "Visión",
     seconds: 10,
-    notes: () => ["CI for UX: every storefront PR gets checked by real-user evidence plus a persona swarm, before any customer sees it.", "Thank you."],
+    notes: () => ["CI para UX: cada PR del storefront se verifica con evidencia de usuarios reales más un persona swarm, antes de que lo vea cualquier cliente.", "Gracias."],
   },
 ];
 

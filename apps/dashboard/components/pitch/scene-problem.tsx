@@ -2,7 +2,8 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { Rocket, TrendingDown, Users } from "lucide-react";
-import { pct1, segmentColor, segmentShort, shortDate } from "@/lib/format";
+import { pct1, segmentColor } from "@/lib/format";
+import { segmentEs, shortDateEs } from "./es";
 import type { PitchData } from "./data";
 import { Dot, Reveal } from "./parts";
 
@@ -25,18 +26,18 @@ export function SceneProblem({ d }: { d: PitchData }) {
 
   const steps = worst
     ? [
-        { icon: Rocket, top: shortDate(worst.release.date), main: `“${worst.release.name}” ships`, sub: "the release looks fine in review" },
-        { icon: Users, top: weeksLater ? `${weeksLater} weeks of traffic` : "weeks of traffic", main: "Customers quietly leave", sub: "nobody watches every segment" },
+        { icon: Rocket, top: shortDateEs(worst.release.date), main: `Sale “${worst.release.name}”`, sub: "el release se ve bien en el review" },
+        { icon: Users, top: weeksLater ? `${weeksLater} semanas de tráfico` : "semanas de tráfico", main: "Los clientes se van", sub: "nadie mira cada segmento" },
         {
           icon: TrendingDown,
-          top: "the dashboard, weeks later",
+          top: "el dashboard, semanas después",
           main: (
             <span className="flex items-center gap-3">
               <Dot color={segmentColor(worst.segmentId)} className="size-5" />
-              {segmentShort(worst.segmentId)} {pct1(worst.before)} → {pct1(worst.after)}
+              {segmentEs(worst.segmentId)} {pct1(worst.before)} → {pct1(worst.after)}
             </span>
           ),
-          sub: "completion, real users",
+          sub: "completion, usuarios reales",
         },
       ]
     : [];
@@ -50,17 +51,17 @@ export function SceneProblem({ d }: { d: PitchData }) {
 
       <div className="flex flex-col gap-10">
         <Reveal delay={0.15}>
-          <h1 className="max-w-[1500px] text-[8.5rem] leading-[0.95] font-semibold tracking-tight">POs ship flows blind.</h1>
+          <h1 className="max-w-[1500px] text-[8.5rem] leading-[0.95] font-semibold tracking-tight">Los POs lanzan a ciegas.</h1>
         </Reveal>
         <Reveal delay={0.55}>
-          <p className="max-w-[1400px] text-6xl leading-tight text-muted-foreground">
-            Friction shows up as <span className="text-foreground">drop-off</span>, weeks later.
+          <p className="max-w-[1600px] text-[3.4rem] leading-tight text-muted-foreground">
+            La fricción aparece como <span className="text-foreground">drop-off</span>, semanas después.
           </p>
         </Reveal>
       </div>
 
       {steps.length ? (
-        <ol className="relative grid grid-cols-3 gap-10" aria-label="How friction is found today">
+        <ol className="relative grid grid-cols-3 gap-10" aria-label="Cómo se detecta la fricción hoy">
           {/* the timeline draws left to right */}
           <motion.span
             aria-hidden

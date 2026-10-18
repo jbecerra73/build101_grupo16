@@ -14,6 +14,64 @@ import { SwarmStatsRow } from "./swarm-stats";
 
 export type MapSize = "md" | "lg";
 
+export type MapLang = "en" | "es";
+
+/** On-map copy; the pitch renders the map in Spanish (agents, checkout stay English terms). */
+export const MAP_TEXT = {
+  en: {
+    arriving: "Arriving",
+    here: "here",
+    entrance: "Store entrance",
+    checkout: "Checkout",
+    left: "Left the store",
+    checkedOut: "Checked out",
+    at: "at",
+    agents: (k: number) => `${k} agent${k === 1 ? "" : "s"}`,
+    nobodyLeft: "Nobody has left yet. Agents who give up drop here with their reason.",
+    validCompletions: "Valid completions",
+    noValid: "No valid completion yet.",
+    flagged: "Flagged: reached confirmation but invalid",
+    unknownStep: "Unknown step",
+    running: "Agents running",
+    done: (d: number, n: number) => `${d}/${n} done`,
+    aps: "Actions / s",
+    actionsTotal: (k: number) => `${k} actions total`,
+    valid: "Valid completion",
+    validSub: (v: number, n: number) => `${v}/${n} agents · N=${n}`,
+    elapsed: "Elapsed",
+    swarmTime: "swarm time",
+    checkedOutOf: "checked out",
+    leftCount: "left",
+  },
+  es: {
+    arriving: "Llegando",
+    here: "aquí",
+    entrance: "Entrada de la tienda",
+    checkout: "Checkout",
+    left: "Salieron de la tienda",
+    checkedOut: "Checkout completo",
+    at: "en",
+    agents: (k: number) => `${k} agent${k === 1 ? "" : "s"}`,
+    nobodyLeft: "Nadie se fue todavía. Los agents que se rinden caen aquí con su motivo.",
+    validCompletions: "Completions válidas",
+    noValid: "Todavía no hay completions válidas.",
+    flagged: "Marcados: llegaron a la confirmación pero no son válidos",
+    unknownStep: "Paso desconocido",
+    running: "Agents activos",
+    done: (d: number, n: number) => `${d}/${n} terminaron`,
+    aps: "Acciones / s",
+    actionsTotal: (k: number) => `${k} acciones en total`,
+    valid: "Completion válida",
+    validSub: (v: number, n: number) => `${v}/${n} agents · N=${n}`,
+    elapsed: "Tiempo",
+    swarmTime: "tiempo del swarm",
+    checkedOutOf: "checkout",
+    leftCount: "se fueron",
+  },
+} satisfies Record<MapLang, Record<string, unknown>>;
+
+export type MapText = (typeof MAP_TEXT)["en"];
+
 type Dims = { avatar: number; pitch: number; dense: number; lane: number; perDenseRow: number };
 /** Small swarms get big avatars; a full 30-agent swarm packs tighter. */
 function dimsFor(size: MapSize, n: number): Dims {
@@ -186,7 +244,9 @@ function Station({
   left,
   n,
   first,
+  t,
 }: {
+  t: MapText;
   label: string;
   required?: boolean;
   agents: AgentState[];
@@ -211,7 +271,7 @@ function Station({
         </span>
         <div className="flex items-baseline gap-2 text-xs text-muted-foreground">
           <span className="tabular">
-            <span className="text-base font-semibold text-foreground">{here}</span> here
+            <span className="text-base font-semibold text-foreground">{here}</span> {t.here}
           </span>
           {reached !== undefined && (
             <span className="tabular">
@@ -287,6 +347,7 @@ export function SwarmMap({
   live,
   caption,
   minimal,
+  lang = "en",
 }: {
   agents: AgentState[];
   metrics?: Metrics;
@@ -297,7 +358,9 @@ export function SwarmMap({
   caption?: React.ReactNode;
   /** Headline counters only (the pitch). */
   minimal?: boolean;
+  lang?: MapLang;
 }) {
+  const t = MAP_TEXT[lang];
   const n = agents.length;
   const dims = dimsFor(size, n);
   const steps = useMemo(() => trackSteps(metrics, flow, agents), [metrics, flow, agents]);
@@ -322,7 +385,7 @@ export function SwarmMap({
 
   const groups = steps
     .map((s) => ({ step: s, agents: gaveUp.filter((a) => a.step === s) }))
-    .concat([{ step: "Unknown step", agents: gaveUp.filter((a) => !a.step || !steps.includes(a.step)) }])
+    .concat([{ step: t.unknownStep, agents: gaveUp.filter((a) => !a.step || !steps.includes(a.step)) }])
     .filter((g) => g.agents.length);
 
   // Station height is fixed from N, so nothing below moves as agents walk.
@@ -332,7 +395,7 @@ export function SwarmMap({
 
   return (
     <div className="flex flex-col gap-5">
-      <SwarmStatsRow agents={agents} live={live} size={size} minimal={minimal} />
+      <SwarmStatsRow agents={agents} live={live} size={size} minimal={minimal} t={t} />
       {caption}
       <LayoutGroup>
         <div className="-mx-1 overflow-x-auto px-1 pt-10 pb-1" role="region" aria-label="Swarm map: where each agent is in the funnel">
@@ -340,9 +403,10 @@ export function SwarmMap({
             className="grid min-w-[1040px] gap-2"
             style={{ gridTemplateColumns: `minmax(0,0.8fr) ${steps.map(() => "minmax(0,1fr)").join(" ")}` }}
           >
-            <Station label="Arriving" agents={arriving} dims={dims} height={stationH} fx={fx} here={arriving.length} left={0} n={n} first />
+            <Station t={t} label={t.arriving} agents={arriving} dims={dims} height={stationH} fx={fx} here={arriving.length} left={0} n={n} first />
             {steps.map((s) => (
               <Station
+                t={t}
                 key={s}
                 label={s}
                 required={required.has(s)}
@@ -358,15 +422,15 @@ export function SwarmMap({
             ))}
           </ol>
           <div className="mt-2 flex min-w-[1040px] items-center gap-1 text-xs text-muted-foreground" aria-hidden>
-            <span>Store entrance</span>
+            <span>{t.entrance}</span>
             <span className="h-px flex-1 bg-border" />
             <ChevronRight className="size-3.5" />
-            <span>Checkout</span>
+            <span>{t.checkout}</span>
           </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
-          <Lane icon={<DoorOpen className="size-4" />} title="Left the store" count={gaveUp.length} n={n} minHeight={laneMin} tone="var(--status-critical)">
+          <Lane icon={<DoorOpen className="size-4" />} title={t.left} count={gaveUp.length} n={n} minHeight={laneMin} tone="var(--status-critical)">
             {groups.length ? (
               <ul className="flex flex-col gap-3">
                 {groups.map((g) => {
@@ -374,9 +438,9 @@ export function SwarmMap({
                   return (
                     <li key={g.step} className="grid grid-cols-[7.5rem_1fr] items-start gap-3">
                       <span className="flex flex-col">
-                        <span className="text-sm font-semibold">at {g.step}</span>
+                        <span className="text-sm font-semibold">{t.at} {g.step}</span>
                         <span className="tabular text-xs text-muted-foreground">
-                          {g.agents.length} agent{g.agents.length === 1 ? "" : "s"}
+                          {t.agents(g.agents.length)}
                         </span>
                       </span>
                       <div className="flex min-w-0 flex-col gap-1.5">
@@ -392,17 +456,17 @@ export function SwarmMap({
                 })}
               </ul>
             ) : (
-              <p className="text-sm text-muted-foreground">Nobody has left yet. Agents who give up drop here with their reason.</p>
+              <p className="text-sm text-muted-foreground">{t.nobodyLeft}</p>
             )}
           </Lane>
 
-          <Lane icon={<ShoppingBag className="size-4" />} title="Checked out" count={valid.length} n={n} minHeight={laneMin} tone="var(--status-good)">
+          <Lane icon={<ShoppingBag className="size-4" />} title={t.checkedOut} count={valid.length} n={n} minHeight={laneMin} tone="var(--status-good)">
             <div className="flex flex-col gap-3">
               {valid.length ? (
                 <div className="flex flex-col gap-1.5">
                   <span className="flex items-center gap-1.5 text-sm font-medium">
                     <CircleCheck className="size-4" style={{ color: "var(--status-good)" }} aria-hidden />
-                    Valid completions
+                    {t.validCompletions}
                   </span>
                   <div className="flex flex-wrap gap-1">
                     {valid.map((a) => (
@@ -411,13 +475,13 @@ export function SwarmMap({
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No valid completion yet.</p>
+                <p className="text-sm text-muted-foreground">{t.noValid}</p>
               )}
               {invalid.length > 0 && (
                 <div className="flex flex-col gap-1.5 rounded-lg bg-muted/60 p-2">
                   <span className="flex items-center gap-1.5 text-sm font-medium">
                     <TriangleAlert className="size-4" style={{ color: "var(--status-warning)" }} aria-hidden />
-                    Flagged: reached confirmation but invalid
+                    {t.flagged}
                     <span className="tabular text-muted-foreground">{invalid.length}</span>
                   </span>
                   <div className="flex flex-wrap gap-1">

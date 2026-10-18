@@ -157,7 +157,7 @@ export function PitchDeck({ initial, initialRetest, startScene }: { initial: Run
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-background text-foreground" role="region" aria-roledescription="presentation" aria-label="FrictionSwarm pitch">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-background text-foreground" role="region" aria-roledescription="presentation" aria-label="Pitch de FrictionSwarm" lang="es">
       <div
         className="absolute top-1/2 left-1/2 origin-center"
         style={{ width: STAGE_W, height: STAGE_H, transform: `translate(-50%, -50%) scale(${scale})` }}
@@ -173,7 +173,7 @@ export function PitchDeck({ initial, initialRetest, startScene }: { initial: Run
             exit="exit"
             transition={{ duration: reduced ? 0.15 : 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="absolute inset-0 px-24 pt-14 pb-24"
-            aria-label={`Scene ${index + 1} of ${SCENES.length}: ${scene.title}`}
+            aria-label={`Escena ${index + 1} de ${SCENES.length}: ${scene.title}`}
           >
             {body}
           </motion.section>
@@ -190,7 +190,7 @@ export function PitchDeck({ initial, initialRetest, startScene }: { initial: Run
 /** Thin bottom bar: one segment per scene, as wide as its time budget. */
 function Progress({ index, onJump }: { index: number; onJump: (i: number) => void }) {
   return (
-    <nav className="absolute right-24 bottom-8 left-24 flex items-center gap-6" aria-label="Scenes">
+    <nav className="absolute right-24 bottom-8 left-24 flex items-center gap-6" aria-label="Escenas">
       <span className="tabular w-56 shrink-0 text-lg text-muted-foreground">
         {index + 1}/{SCENES.length} · {SCENES[index].title}
       </span>
@@ -201,7 +201,7 @@ function Progress({ index, onJump }: { index: number; onJump: (i: number) => voi
               type="button"
               onClick={() => onJump(i)}
               className="group block w-full py-2 outline-none"
-              aria-label={`Scene ${i + 1}: ${s.title}, ${s.seconds}s`}
+              aria-label={`Escena ${i + 1}: ${s.title}, ${s.seconds}s`}
               aria-current={i === index ? "step" : undefined}
             >
               <span className={cn("block h-1.5 rounded-full transition-colors", i < index ? "bg-foreground/45" : i === index ? "bg-foreground" : "bg-muted group-hover:bg-foreground/25")} />
@@ -210,7 +210,7 @@ function Progress({ index, onJump }: { index: number; onJump: (i: number) => voi
         ))}
       </ol>
       <span className="tabular w-56 shrink-0 text-right text-lg text-muted-foreground">
-        {mmss(sceneStart(index))}–{mmss(sceneStart(index) + SCENES[index].seconds)} of {mmss(TOTAL_SECONDS)} · N notes
+        {mmss(sceneStart(index))}–{mmss(sceneStart(index) + SCENES[index].seconds)} de {mmss(TOTAL_SECONDS)} · N notas
       </span>
     </nav>
   );

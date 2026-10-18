@@ -4,7 +4,8 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeftRight, CircleCheck, CircleSlash, Info, Target, TriangleAlert } from "lucide-react";
 import { PERSONAS, type PersonaComparison } from "@frictionswarm/shared";
 import { PersonaAvatar } from "@/components/persona/avatar";
-import { compact, pct1, personaColor, personaShort, segmentShort } from "@/lib/format";
+import { compact, pct1, personaColor } from "@/lib/format";
+import { personaEs, segmentEs } from "./es";
 import { cn } from "@/lib/utils";
 import { isRehearsal, type PitchData } from "./data";
 import { FitBox, Reveal, SceneHeader, useCountUp } from "./parts";
@@ -50,31 +51,31 @@ function Row({ c, i, targeted, dense }: { c: PersonaComparison; i: number; targe
         <PersonaAvatar personaId={c.personaId} size={72} mood={c.completionDeltaPts > 0 && !c.regressions.length ? "success" : c.regressions.length ? "gave-up" : "idle"} label="" />
         <div className="flex flex-col gap-1">
           <span className="flex items-center gap-2.5 text-3xl font-semibold whitespace-nowrap">
-            {segmentShort(c.segmentId)}
-            <ArrowLeftRight className="size-6 text-muted-foreground" aria-label="stood in by" />
-            {personaShort(c.personaId)}
+            {segmentEs(c.segmentId)}
+            <ArrowLeftRight className="size-6 text-muted-foreground" aria-label="representado por" />
+            {personaEs(c.personaId)}
           </span>
           <span className="flex items-center gap-2 text-xl text-muted-foreground">
             {targeted ? (
               <>
-                <Target className="size-5" aria-hidden /> targeted by the fix
+                <Target className="size-5" aria-hidden /> atacado por el fix
               </>
             ) : control ? (
-              "control: must not regress"
+              "control: no debe empeorar"
             ) : (
-              "not targeted"
+              "no atacado"
             )}
           </span>
         </div>
       </div>
 
       <div className="grid grid-cols-[auto_1fr_290px] items-center gap-x-5 gap-y-3 text-xl whitespace-nowrap">
-        <span className="text-muted-foreground">Real users</span>
+        <span className="text-muted-foreground">Usuarios reales</span>
         <Bar rate={c.before.completionRate} color="var(--muted-foreground)" delay={delay + 0.15} muted />
         <span className="tabular">
           <span className="text-2xl font-semibold">{pct1(c.before.completionRate)}</span>{" "}
           <span className="text-muted-foreground">
-            {compact(c.before.completed)}/{compact(c.before.n)} sessions
+            {compact(c.before.completed)}/{compact(c.before.n)} sesiones
           </span>
         </span>
         <span className="text-muted-foreground">Persona swarm</span>
@@ -89,7 +90,7 @@ function Row({ c, i, targeted, dense }: { c: PersonaComparison; i: number; targe
           <p className="col-span-3 flex items-start gap-2 text-lg leading-snug whitespace-normal">
             <TriangleAlert className="mt-0.5 size-5 shrink-0" style={{ color: "var(--status-critical)" }} aria-hidden />
             <span>
-              <span className="font-semibold">Regression{c.regressions.length > 1 ? "s" : ""}:</span> {c.regressions.join(" · ")}
+              <span className="font-semibold">{c.regressions.length > 1 ? "Regresiones" : "Regresión"}:</span> {c.regressions.join(" · ")}
             </span>
           </p>
         )}
@@ -115,10 +116,10 @@ function Stamp({ improved, rehearsal, delay }: { improved: boolean; rehearsal: b
     >
       <span className="flex items-center gap-3 text-[2.6rem] font-bold tracking-tight whitespace-nowrap uppercase">
         <Icon className="size-10" style={{ color: tone }} aria-hidden />
-        {improved ? "PR ready for review" : "Not proven"}
+        {improved ? "PR listo para review" : "No probado"}
       </span>
       <span className="text-lg text-muted-foreground">
-        {improved ? "improvement proven against the threshold" : "PR closed with the metrics, labelled not-proven"}
+        {improved ? "mejora probada contra el umbral" : "PR cerrado con las métricas, label not-proven"}
         {rehearsal ? " · rehearsal" : ""}
       </span>
     </motion.div>
@@ -131,14 +132,14 @@ export function SceneBeforeAfter({ d, index }: { d: PitchData; index: number }) 
   if (!v)
     return (
       <div className="flex h-full flex-col gap-10">
-        <SceneHeader index={index} kicker="Before / after" title="Waiting for the verdict" />
-        <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "The before/after appears once the swarm's tracks are compared."}</p>
+        <SceneHeader index={index} kicker="Antes / después" title="Esperando el veredicto" />
+        <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "El antes/después aparece cuando se comparan los tracks del swarm."}</p>
       </div>
     );
   const stampAt = ROW_AT + v.comparisons.length * ROW_STEP + 1.4;
   return (
     <div className="flex h-full flex-col gap-6">
-      <SceneHeader index={index} kicker="Before / after · per segment" title="Real users before, persona swarm after" />
+      <SceneHeader index={index} kicker="Antes / después · por segmento" title="Usuarios reales antes, persona swarm después" />
       <FitBox className="flex-1" innerClassName="gap-6">
       <ul className="flex flex-col">
         {v.comparisons.map((c, i) => (
@@ -149,8 +150,8 @@ export function SceneBeforeAfter({ d, index }: { d: PitchData; index: number }) 
         <Reveal delay={stampAt - 0.6} className="flex flex-1 items-center gap-4 rounded-2xl border p-5 text-2xl">
           <Info className="size-7 shrink-0 text-muted-foreground" aria-hidden />
           <p className="leading-snug">
-            <span className="font-semibold">Different populations.</span>{" "}
-            <span className="text-muted-foreground">A directional pre-merge check, not an A/B test.</span>
+            <span className="font-semibold">Poblaciones distintas.</span>{" "}
+            <span className="text-muted-foreground">Un check direccional antes del merge, no un A/B test.</span>
           </p>
         </Reveal>
         <Stamp improved={v.improved} rehearsal={isRehearsal(a)} delay={stampAt} />
