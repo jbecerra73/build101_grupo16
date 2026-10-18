@@ -38,9 +38,12 @@ function fakeBlobs() {
       if (opts?.etag === v.etag) return { data: null, etag: v.etag };
       return { data: typeof v.body === "string" ? v.body : new TextDecoder().decode(v.body), etag: v.etag };
     },
-    async set(key, body) {
+    async set(key, body, opts) {
       calls.push(`set ${key}`);
+      const cur = data.get(key);
+      if ((opts?.onlyIfNew && cur) || (opts?.onlyIfMatch && cur?.etag !== opts.onlyIfMatch)) return { modified: false };
       data.set(key, { body, etag: `"${++n}"` });
+      return { modified: true };
     },
     async delete(key) {
       data.delete(key);
@@ -63,6 +66,19 @@ function fakeBlobs() {
 
 function contract(name: string, make: () => Promise<RunStore>) {
   describe(`${name} (RunStore contract)`, () => {
+    it("compare-and-set: writes only while the version it read is current", async () => {
+      const s = await make();
+      const k = "orchestrator-launch.json";
+      expect(await s.getJsonVersioned(k)).toEqual({});
+      expect(await s.putJsonIf(k, { n: 1 }, undefined)).toBe(true);
+      expect(await s.putJsonIf(k, { n: 2 }, undefined)).toBe(false);
+      const v1 = await s.getJsonVersioned<{ n: number }>(k);
+      expect(v1.value).toEqual({ n: 1 });
+      expect(await s.putJsonIf(k, { n: 2 }, v1.version)).toBe(true);
+      expect(await s.putJsonIf(k, { n: 3 }, v1.version)).toBe(false);
+      expect(await s.getJson(k)).toEqual({ n: 2 });
+    });
+
     it("round-trips text, json and bytes, and reports missing keys as undefined", async () => {
       const s = await make();
       expect(await s.getText("runs/r1/status.json")).toBeUndefined();

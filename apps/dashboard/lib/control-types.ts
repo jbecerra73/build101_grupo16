@@ -69,7 +69,13 @@ export type QueuedRun = {
   requestedAt: string;
 };
 
-export type CancelRequest = { runId: string; requestedAt: string; reason?: string };
+export type CancelRequest = {
+  runId: string;
+  requestedAt: string;
+  reason?: string;
+  /** Only stop it from starting (Clear queue): a run already in progress ignores it. */
+  queuedOnly?: boolean;
+};
 
 /** GET /api/control */
 export type ControlOverview = {
@@ -86,7 +92,7 @@ export type ControlOverview = {
 
 /** A sandbox the Netlify autostart is booting, or why it couldn't. */
 export type OrchestratorLaunch = {
-  state: "launching" | "booting" | "failed";
+  state: "launching" | "booting" | "closing" | "failed";
   requestedAt: string;
   updatedAt: string;
   sandboxId?: string;

@@ -1,6 +1,8 @@
 // Scheduled every 5 minutes: if runs are queued and the orchestrator is
 // neither online nor booting, pokes orchestrator-launch. Catches a missed poke
-// and a sandbox that died mid-boot.
+// and a sandbox that died mid-boot. Also pokes while the record owns a sandbox
+// and the orchestrator is offline, queue or not: the launcher checks a booting
+// sandbox's bootstrap and closes a dead, closing or orphaned one.
 import { createStore, KEYS, type OrchestratorHeartbeat } from "@frictionswarm/store";
 import { LAUNCH_HEADER, LAUNCH_PATH, launchDecision, launchSecret, type LaunchRecord } from "@frictionswarm/store/launch";
 
@@ -12,11 +14,12 @@ export default async () => {
     store.list(KEYS.queue),
   ]);
   const decision = launchDecision(hb, lock, Date.now());
-  if (!queue.length || !decision.launch) return;
+  const owned = decision.launch || decision.why !== "online" ? lock?.sandboxId : undefined;
+  if (!(queue.length && decision.launch) && !owned) return;
   const base = process.env.URL;
   if (!base) return console.log("[watch] URL is not set, cannot poke the launcher");
   const res = await fetch(`${base}${LAUNCH_PATH}?reason=watch`, { method: "POST", headers: { [LAUNCH_HEADER]: launchSecret() } });
-  console.log(`[watch] ${queue.length} queued, orchestrator offline: launcher answered ${res.status}`);
+  console.log(`[watch] ${queue.length} queued, orchestrator offline${owned ? `, sandbox ${owned} to check` : ""}: launcher answered ${res.status}`);
 };
 
 export const config = { schedule: "*/5 * * * *" };

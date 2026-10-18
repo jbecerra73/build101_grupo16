@@ -43,10 +43,14 @@ clone → `npm ci` → `posthog:generate` → `npm run orchestrator` inside the
 sandbox, so the first heartbeat arrives **3–5 minutes** after the click. While
 it boots, /control shows **Starting**. `orchestrator-watch` runs every 5
 minutes and launches again if runs are queued and nothing is online or booting.
-That covers a missed poke and a sandbox that died during boot.
+That covers a missed poke and a sandbox that died during boot. While the
+record owns a sandbox and nothing is online, it also pokes the launcher with
+an empty queue, so a broken or orphaned sandbox gets closed.
 
-- **One at a time:** `orchestrator-launch.json` in Blobs is the launch record. A new launch happens only when there's no fresh heartbeat and either no record exists, the last launch is older than 20 minutes without a heartbeat, or it failed more than 5 minutes ago. A stale sandbox from an earlier launch is closed first.
-- **Idle shutdown:** the autostarted daemon gets `ORCHESTRATOR_IDLE_EXIT_MS` (default 30 min). After that long with nothing running or queued, it deletes the launch record and closes its own sandbox. `TENKI_MAX_HOURS` (default 3 for autostart) is the hard ceiling.
+- **One at a time:** `orchestrator-launch.json` in Blobs is the launch record, and every write that claims it is a conditional Blobs write (`onlyIfNew` / `onlyIfMatch` on the etag), so two launchers can't both win. A new launch happens only when there's no fresh heartbeat and one of these holds: no record exists; the record is `closing`; the sandbox never sent a heartbeat within 20 minutes of launch; its daemon was online and its heartbeat has been quiet for 3 minutes; or the last launch failed long enough ago (5 minutes, doubling per failure in a row, at most 1 hour). A stale sandbox from an earlier launch is closed first.
+- **Failed boot:** the bootstrap script writes `~/bootstrap.status` (`booting`, `started`, or `failed: exit N at line L`). While a launch is booting, the launcher reads it; on a failure it closes the sandbox and records the error with the log tail, which /control shows.
+- **Idle shutdown:** the autostarted daemon gets `ORCHESTRATOR_IDLE_EXIT_MS` (default 30 min). After that long with nothing running or queued, it marks the launch record `closing` and closes its own sandbox. If that close fails, the launcher closes it on the next poke.
+- **Time limit:** `TENKI_MAX_HOURS` (default 3 for autostart) is the hard ceiling. The daemon gets the deadline as `ORCHESTRATOR_DEADLINE`. From 30 minutes before it (`ORCHESTRATOR_DRAIN_MS`), it takes no new runs, lets the active ones finish, then shuts down like an idle exit, and the next poke launches a fresh sandbox for what is still queued.
 - **Secret:** the launcher accepts only requests carrying `AUTH_SECRET` (or `DASHBOARD_PASSWORD`) in `x-frictionswarm-launch`. The password gate (`proxy.ts`) skips `/.netlify/functions/`. Even with the secret, the launcher does nothing unless runs are queued.
 - **Code:** `packages/store/src/launch.ts`, shared with the `npm run orchestrator:tenki` CLI.
 - **Credentials:** the autostart forwards `TENKI_API_KEY` into the sandbox, unlike the CLI. Its daemon needs the key for the tenki swarm, the real fix loop and its own shutdown.
@@ -62,7 +66,7 @@ Set these in the Netlify UI (Functions scope), on top of `DASHBOARD_PASSWORD`:
 | `TENKI_SNAPSHOT_ID` | for `SWARM_RUNNER=tenki` | the swarm's Chrome snapshot |
 | `SWARM_RUNNER`, `FIX_LOOP`, `POSTHOG_*`, `PRODUCTION_BUILD_SHA`, ... | optional | forwarded as with the CLI (`FORWARDED_ENV`) |
 | `ORCHESTRATOR_REF` | optional | branch the sandbox clones, default `main` |
-| `ORCHESTRATOR_IDLE_EXIT_MS`, `TENKI_MAX_HOURS` | optional | idle shutdown (default 30 min) and sandbox lifetime (default 3 h) |
+| `ORCHESTRATOR_IDLE_EXIT_MS`, `TENKI_MAX_HOURS`, `ORCHESTRATOR_DRAIN_MS` | optional | idle shutdown (default 30 min), sandbox lifetime (default 3 h), and how long before it the daemon stops taking runs (default 30 min) |
 
 The rest of this page (the CLI) still works. Use it to run a branch, follow the logs, or stop a sandbox by hand.
 

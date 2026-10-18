@@ -73,7 +73,7 @@ const BOOT_GRACE_MS = 20 * 60_000;
 
 function OrchestratorCard({ hb, launch, now }: { hb?: OrchestratorHeartbeat; launch?: OrchestratorLaunch; now: number }) {
   const online = !!hb && now - Date.parse(hb.lastSeenAt) <= STALE_MS;
-  const starting = !online && !!launch && launch.state !== "failed" && now - Date.parse(launch.updatedAt) < BOOT_GRACE_MS;
+  const starting = !online && !!launch && (launch.state === "launching" || launch.state === "booting") && now - Date.parse(launch.updatedAt) < BOOT_GRACE_MS;
   const HostIcon = hb?.host === "tenki" ? Cloud : Laptop;
   return (
     <Card className={cn("relative overflow-hidden", !online && "bg-muted/40")}>

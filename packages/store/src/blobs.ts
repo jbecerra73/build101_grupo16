@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { assertKey, folder, parseJson, type RunStore } from "./types";
+import { assertKey, folder, jsonText, parseJson, type RunStore, type Versioned } from "./types";
 
 export const BLOBS_STORE_NAME = "frictionswarm";
 
@@ -7,7 +7,7 @@ export const BLOBS_STORE_NAME = "frictionswarm";
 export interface BlobsClient {
   get(key: string, opts: { type: "arrayBuffer" }): Promise<ArrayBuffer | null>;
   getWithMetadata(key: string, opts?: { etag?: string }): Promise<{ data: string | null; etag?: string } | null>;
-  set(key: string, data: string | ArrayBuffer): Promise<unknown>;
+  set(key: string, data: string | ArrayBuffer, opts?: { onlyIfMatch?: string; onlyIfNew?: boolean }): Promise<{ modified?: boolean } | void>;
   delete(key: string): Promise<void>;
   list(opts: { prefix?: string; directories?: boolean; paginate: true }): AsyncIterable<{
     blobs: { key: string; etag: string }[];
@@ -104,7 +104,32 @@ export class BlobsStore implements RunStore {
     await this.client.set(key, text);
   }
   putJson(key: string, data: unknown) {
-    return this.putText(key, JSON.stringify(data, null, 2) + "\n");
+    return this.putText(key, jsonText(data));
+  }
+  /** Uncached read: the etag must be the stored one for putJsonIf. */
+  async getJsonVersioned<T>(key: string): Promise<Versioned<T>> {
+    assertKey(key);
+    const res = await this.client.getWithMetadata(key);
+    if (!res || res.data === null) return {};
+    const version = res.etag ?? (await this.#listedEtag(key));
+    // Without it putJsonIf would treat the key as missing and never win.
+    if (!version) throw new Error(`Blobs returned no ETag for ${key}`);
+    return { value: parseJson<T>(res.data), version };
+  }
+  /** The local BlobsServer sends no ETag on reads, only in listings. */
+  async #listedEtag(key: string) {
+    for await (const page of this.client.list({ prefix: key, paginate: true })) {
+      const b = page.blobs.find((x) => x.key === key);
+      if (b) return b.etag;
+    }
+    return undefined;
+  }
+  /** Blobs' conditional set: onlyIfMatch the etag, or onlyIfNew. */
+  async putJsonIf(key: string, data: unknown, version: string | undefined) {
+    assertKey(key);
+    this.#cache.delete(key);
+    const res = await this.client.set(key, jsonText(data), version ? { onlyIfMatch: version } : { onlyIfNew: true });
+    return !!res?.modified;
   }
   async putBytes(key: string, data: Uint8Array) {
     assertKey(key);
