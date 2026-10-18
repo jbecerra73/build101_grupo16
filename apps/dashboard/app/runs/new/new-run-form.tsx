@@ -268,7 +268,7 @@ export function NewRunForm({ releases, today, defaultSource }: { releases: Relea
         </Card>
       </div>
 
-      <div className="flex flex-col gap-6 xl:sticky xl:top-20 xl:self-start">
+      <div className="flex flex-col gap-6 xl:sticky xl:top-6 xl:self-start">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">4. Analyze</CardTitle>

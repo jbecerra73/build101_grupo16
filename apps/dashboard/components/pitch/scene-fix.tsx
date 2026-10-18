@@ -1,8 +1,8 @@
 "use client";
 
-import { Bot, FileCode2, FolderGit2, GitBranch, GitCommitVertical, GitPullRequest, Globe, ScanSearch, Users } from "lucide-react";
+import { Bot, GitBranch, GitCommitVertical, GitPullRequest, Globe, ScanSearch, Users } from "lucide-react";
 import { shortSha } from "@/lib/format";
-import { cleanSummary, isRehearsal, type PitchData } from "./data";
+import { isRehearsal, type PitchData } from "./data";
 import { PitchFindingCard } from "./finding-card";
 import { FitBox, Panel, Reveal, SceneHeader } from "./parts";
 
@@ -16,7 +16,6 @@ const PIPE = [
 
 export function SceneFix({ d, index }: { d: PitchData; index: number }) {
   const a = d.attempt;
-  const fix = d.run.fix;
   if (!a)
     return (
       <div className="flex h-full flex-col gap-10">
@@ -26,8 +25,6 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
     );
   const rehearsal = isRehearsal(a);
   const targets = a.findingIds.map((id) => d.findings.find((f) => f.id === id)).filter((f) => !!f);
-  const files = (a as { files?: string[] }).files;
-  const repo = fix?.repo.replace(/\s*\(rehearsal\)\s*$/i, "");
 
   return (
     <div className="flex h-full flex-col gap-8">
@@ -52,7 +49,7 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
       <FitBox className="flex-1" innerClassName="">
       <div className="grid min-h-0 flex-1 grid-cols-[1.08fr_1fr] gap-10">
         <Reveal delay={0.3} className="min-h-0">
-          <Panel className="flex h-full flex-col gap-6 bg-card p-8">
+          <Panel className="flex flex-col gap-8 bg-card p-8">
             <div className="flex items-center gap-4">
               <span className="flex size-16 items-center justify-center rounded-2xl bg-[var(--status-good)]/15">
                 <GitPullRequest className="size-9" style={{ color: "var(--status-good)" }} aria-hidden />
@@ -70,54 +67,20 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
               )}
             </div>
 
-            <div className="flex flex-col gap-2 text-xl">
-              {repo && (
-                <span className="flex items-center gap-3 text-muted-foreground">
-                  <FolderGit2 className="size-6" aria-hidden />
-                  <code className="font-mono text-foreground">{repo}</code>
-                </span>
-              )}
+            <div className="flex flex-col gap-3 text-2xl">
               {a.branch && (
                 <span className="flex items-center gap-3">
-                  <GitBranch className="size-6 text-muted-foreground" aria-hidden />
-                  <code className="font-mono">{a.branch}</code>
+                  <GitBranch className="size-7 text-muted-foreground" aria-hidden />
+                  <code className="truncate font-mono">{a.branch}</code>
                 </span>
               )}
               {a.commitSha && (
                 <span className="flex items-center gap-3 text-muted-foreground">
-                  <GitCommitVertical className="size-6" aria-hidden />
+                  <GitCommitVertical className="size-7" aria-hidden />
                   commit <code className="font-mono text-foreground">{shortSha(a.commitSha)}</code>
                 </span>
               )}
-              {a.previewUrl && (
-                <span className="flex items-center gap-3 text-muted-foreground">
-                  <Globe className="size-6" aria-hidden />
-                  <code className="truncate font-mono text-lg text-foreground">{a.previewUrl.replace(/^https?:\/\//, "")}</code>
-                </span>
-              )}
             </div>
-
-            {a.summary && (
-              <Reveal delay={0.8} className="flex flex-col gap-2 rounded-2xl bg-muted/60 p-5">
-                <span className="flex items-center gap-2 text-xl text-muted-foreground">
-                  <Bot className="size-6" aria-hidden />
-                  The coding agent&apos;s summary
-                </span>
-                <p className="text-xl leading-snug text-pretty">{cleanSummary(a.summary)}</p>
-              </Reveal>
-            )}
-
-            {files?.length ? (
-              <div className="flex flex-wrap gap-2 text-lg">
-                {files.map((f) => (
-                  <span key={f} className="flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono">
-                    <FileCode2 className="size-4" aria-hidden />
-                    {f}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
           </Panel>
         </Reveal>
 
@@ -127,7 +90,7 @@ export function SceneFix({ d, index }: { d: PitchData; index: number }) {
           </Reveal>
           {targets.map((f, i) => (
             <Reveal key={f.id} delay={0.6 + i * 0.2} x={24} y={0}>
-              <PitchFindingCard f={f} compactTitle />
+              <PitchFindingCard f={f} minimal />
             </Reveal>
           ))}
         </div>

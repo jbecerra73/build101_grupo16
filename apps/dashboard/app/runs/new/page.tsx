@@ -10,7 +10,7 @@ export default async function NewRunPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Analyze</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Analyze</h1>
         <p className="text-muted-foreground">
           Find where real users stumble, per segment, from the store&apos;s PostHog data. Optionally fix the top findings and verify the
           fix with a persona swarm on the preview.

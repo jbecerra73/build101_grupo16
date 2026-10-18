@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowLeftRight, ArrowRight, CircleCheck, CircleSlash, CircleX, ExternalLink, Bot, Info, Target, TriangleAlert } from "lucide-react";
 import { PERSONAS, type Finding, type PersonaComparison } from "@frictionswarm/shared";
 import { FixStatusBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
+import { RunId } from "@/components/run-meta";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,9 +138,9 @@ function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Find
             </span>
           )}
           {a.retestRunId && (
-            <Link className="underline underline-offset-4" href={`/runs/${a.retestRunId}`}>
-              Re-test run {a.retestRunId}
-            </Link>
+            <span className="inline-flex items-center gap-1.5">
+              Re-test run <RunId runId={a.retestRunId} href={`/runs/${a.retestRunId}`} retest className="text-foreground" />
+            </span>
           )}
         </CardDescription>
         <CardAction className="flex flex-wrap gap-2">

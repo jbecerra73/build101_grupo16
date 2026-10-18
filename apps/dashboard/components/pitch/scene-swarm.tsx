@@ -4,10 +4,10 @@ import { useMemo } from "react";
 import { History, Radio } from "lucide-react";
 import { SwarmMap } from "@/components/swarm/swarm-map";
 import { deriveAgents, deriveMetrics } from "@/lib/derive";
-import { personaShort, shortSha } from "@/lib/format";
+import { shortSha } from "@/lib/format";
 import { useReplay } from "@/lib/hooks/use-replay";
 import type { RunDetail } from "@/lib/types";
-import { seedLabel, type PitchData } from "./data";
+import type { PitchData } from "./data";
 import { FitBox, Reveal, SceneHeader } from "./parts";
 
 /** On-screen length of the replay: the whole swarm fits in the scene's 30 s. */
@@ -38,13 +38,13 @@ function Replayed({ retest }: { retest: RunDetail }) {
       flow={flow}
       size="lg"
       live={!r.atEnd}
+      minimal
     />
   );
 }
 
 export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
   const retest = d.retest;
-  const seeds = retest ? Object.entries(retest.config.seeds) : [];
   return (
     <div className="flex h-full flex-col gap-5">
       <SceneHeader
@@ -62,26 +62,20 @@ export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
         }
         aside={
           retest && (
-            <div className="flex flex-col items-end gap-1 text-xl text-muted-foreground">
-              {d.live && (
-                <span className="flex items-center gap-2 font-semibold text-foreground">
+            <span className="flex items-center gap-2 text-xl text-muted-foreground">
+              {d.live ? (
+                <>
                   <Radio className="size-5 animate-pulse" style={{ color: "var(--status-running)" }} aria-hidden />
-                  Live
-                </span>
-              )}
-              {!d.live && retest.events?.length ? (
-                <span className="flex items-center gap-2">
-                  <History className="size-5" aria-hidden />
-                  replay of the PostHog snapshot · {retest.events.length} events · build{" "}
-                  <code className="font-mono text-foreground">{shortSha(retest.config.posthog.buildSha)}</code>
-                </span>
+                  <span className="font-semibold text-foreground">Live</span>
+                </>
               ) : (
-                <span>
-                  build <code className="font-mono text-foreground">{shortSha(retest.config.posthog.buildSha)}</code>
-                </span>
+                <>
+                  <History className="size-5" aria-hidden />
+                  Replay
+                </>
               )}
-              <span className="tabular">fresh seeds · {seeds.map(([p, s]) => `${personaShort(p)} ${seedLabel(s)}`).join(" · ")}</span>
-            </div>
+              <span aria-hidden>·</span> build <code className="font-mono text-foreground">{shortSha(retest.config.posthog.buildSha)}</code>
+            </span>
           )
         }
       />
@@ -90,7 +84,7 @@ export function SceneSwarm({ d, index }: { d: PitchData; index: number }) {
         {!retest ? (
           <p className="text-4xl text-muted-foreground">{d.run.status.message ?? "The re-test starts once the preview is up."}</p>
         ) : d.live || !retest.events?.length ? (
-          <SwarmMap agents={retest.agents} metrics={retest.metrics ?? retest.provisionalMetrics} flow={retest.flow} size="lg" live={d.live} />
+          <SwarmMap agents={retest.agents} metrics={retest.metrics ?? retest.provisionalMetrics} flow={retest.flow} size="lg" live={d.live} minimal />
         ) : (
           <Replayed retest={retest} />
         )}

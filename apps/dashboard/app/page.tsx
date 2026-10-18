@@ -2,13 +2,14 @@ import Link from "next/link";
 import { FlaskConical, Play, ScanSearch } from "lucide-react";
 import { runFlow } from "@frictionswarm/shared";
 import { FixStatusBadge, PhaseBadge } from "@/components/bits";
+import { RunId, TimeAgo } from "@/components/run-meta";
 import { PersonaAvatar } from "@/components/persona/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { compact, formatDateTime, pct1, personaShort, segmentColor, segmentShort, shortSha, windowLabel } from "@/lib/format";
+import { compact, pct1, personaShort, segmentColor, segmentShort, shortSha, windowLabel } from "@/lib/format";
 import { listRuns, runsDir } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
@@ -20,8 +21,8 @@ export default async function RunsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-semibold tracking-tight">Runs</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Runs</h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">
             Every analysis and re-test, newest first. Open one to read the report or watch it live; replay a re-test offline from its PostHog snapshot.
           </p>
         </div>
@@ -54,15 +55,15 @@ export default async function RunsPage() {
             <CardDescription>All runs found in the runs folder</CardDescription>
           </CardHeader>
           <CardContent className="px-0">
-            <Table className="text-base">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-4">Run</TableHead>
+                  <TableHead>Created</TableHead>
                   <TableHead>Flow</TableHead>
                   <TableHead>Completion by segment / persona</TableHead>
                   <TableHead className="text-right">N</TableHead>
-                  <TableHead>Phase</TableHead>
-                  <TableHead>Fix</TableHead>
+                  <TableHead>Phase · Fix</TableHead>
                   <TableHead className="pr-4 text-right">
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -71,29 +72,30 @@ export default async function RunsPage() {
               <TableBody>
                 {runs.map((r) => (
                   <TableRow key={r.runId}>
-                    <TableCell className="max-w-96 pl-4 whitespace-normal">
+                    <TableCell className="pl-4">
                       <div className="flex flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <Link href={`/runs/${r.runId}`} className="font-mono text-sm font-medium break-all hover:underline">
-                            {r.runId}
-                          </Link>
-                          <Badge variant={r.config.kind === "retest" ? "secondary" : "outline"}>{r.config.kind}</Badge>
-                        </div>
-                        <span className="text-sm text-muted-foreground">{formatDateTime(r.config.createdAt)}</span>
+                        <RunId runId={r.runId} href={`/runs/${r.runId}`} retest={r.config.kind === "retest"} />
                         {r.config.baselineRunId && (
-                          <span className="text-sm break-all text-muted-foreground">retest of {r.config.baselineRunId}</span>
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            of <RunId runId={r.config.baselineRunId} href={`/runs/${r.config.baselineRunId}`} />
+                          </span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="max-w-56 whitespace-normal">
+                    <TableCell>
+                      <TimeAgo iso={r.config.createdAt} stacked />
+                    </TableCell>
+                    <TableCell className="max-w-80 min-w-56 whitespace-normal">
                       <div className="flex flex-col">
-                        <span className="line-clamp-2">{runFlow(r.config)?.goal ?? r.config.flowId}</span>
+                        <Link href={`/runs/${r.runId}`} className="line-clamp-2 font-medium hover:underline hover:decoration-primary hover:underline-offset-4">
+                          {runFlow(r.config)?.goal ?? r.config.flowId}
+                        </Link>
                         <span className="text-sm text-muted-foreground">
                           {r.config.kind === "retest" ? `preview ${shortSha(r.config.posthog.buildSha)}` : windowLabel(r.config.window)}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="min-w-64 whitespace-normal">
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
                         {r.groups.map((g) => (
                           <span key={g.id} className="inline-flex items-center gap-1.5">
@@ -114,21 +116,24 @@ export default async function RunsPage() {
                       {compact(r.sessions)} <span className="text-muted-foreground">{r.config.kind === "retest" ? "agents" : "sessions"}</span>
                     </TableCell>
                     <TableCell>
-                      <PhaseBadge phase={r.status.phase} />
+                      <div className="flex flex-col items-start gap-1">
+                        <PhaseBadge phase={r.status.phase} />
+                        {r.fixStatus ? <FixStatusBadge status={r.fixStatus} /> : <span className="px-1 text-xs text-muted-foreground">No fix</span>}
+                      </div>
                     </TableCell>
-                    <TableCell>{r.fixStatus ? <FixStatusBadge status={r.fixStatus} /> : <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell className="pr-4">
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" asChild>
-                          <Link href={`/runs/${r.runId}`}>Open</Link>
-                        </Button>
                         {(r.config.kind === "retest" || r.retestRunId) && (
-                          <Button variant="secondary" asChild>
-                            <Link href={`/runs/${r.config.kind === "retest" ? r.runId : r.retestRunId}?replay=1`}>
-                              <Play data-icon="inline-start" />
-                              Replay
-                            </Link>
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="secondary" size="icon-sm" asChild>
+                                <Link href={`/runs/${r.config.kind === "retest" ? r.runId : r.retestRunId}?replay=1`} aria-label="Replay re-test">
+                                  <Play />
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Replay re-test</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </TableCell>

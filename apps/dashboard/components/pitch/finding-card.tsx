@@ -7,8 +7,36 @@ import { cn } from "@/lib/utils";
 import { Dot } from "./parts";
 
 /** One finding, sized for the projector: trap title, segments, evidence counts, introducing release. */
-export function PitchFindingCard({ f, rank, compactTitle, className }: { f: Finding; rank?: number; compactTitle?: boolean; className?: string }) {
+export function PitchFindingCard({
+  f,
+  rank,
+  compactTitle,
+  minimal,
+  className,
+}: {
+  f: Finding;
+  rank?: number;
+  compactTitle?: boolean;
+  /** Id, segments and title only: no severity or evidence counts. */
+  minimal?: boolean;
+  className?: string;
+}) {
   const e = f.evidence;
+  if (minimal)
+    return (
+      <article className={cn("flex flex-col gap-3 rounded-2xl border bg-card p-6", className)}>
+        <div className="flex items-center gap-3 text-lg">
+          <span className="rounded-md border px-2 py-0.5 font-mono text-base">{f.id}</span>
+          {f.segments.map((s) => (
+            <span key={s} className="flex items-center gap-2 whitespace-nowrap">
+              <Dot color={segmentColor(s)} />
+              {segmentShort(s)}
+            </span>
+          ))}
+        </div>
+        <h3 className="text-2xl leading-snug font-semibold text-pretty">{f.title}</h3>
+      </article>
+    );
   return (
     <article className={cn("flex h-full flex-col rounded-2xl border bg-card", compactTitle ? "gap-3 p-5" : "gap-4 p-6", className)}>
       <div className="flex items-center gap-3 text-lg">
