@@ -26,13 +26,17 @@ export function resolveStep(flow: Flow, url: string): string | undefined {
 const urlOf = (e: PostHogEvent) => (e.properties.$current_url as string | undefined) ?? (e.properties.$pathname as string | undefined);
 
 export const matchesEvent = (m: EventMatch, e: PostHogEvent) =>
-  e.event === m.event && Object.entries(m.where ?? {}).every(([k, v]) => (e.properties as Record<string, unknown>)[k] === v);
+  e.event === m.event &&
+  Object.entries(m.where ?? {}).every(([k, v]) => {
+    const actual = (e.properties as Record<string, unknown>)[k];
+    return Array.isArray(v) ? v.some((x) => x === actual) : actual === v;
+  });
 
-/** "a successful shipping_submitted", "a product_added with product_id=2". */
+/** "a successful shipping_submitted", "a product_added with product_id=2", "… with product_id=2|8". */
 export function describeEvent(m: EventMatch): string {
   const where = Object.entries(m.where ?? {});
   if (where.length === 1 && where[0][0] === "success" && where[0][1] === true) return `a successful ${m.event}`;
-  return `a ${m.event}${where.length ? ` with ${where.map(([k, v]) => `${k}=${v}`).join(", ")}` : ""}`;
+  return `a ${m.event}${where.length ? ` with ${where.map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("|") : v}`).join(", ")}` : ""}`;
 }
 
 /** Whether a real user's session counts towards the flow (Flow.attempt). */

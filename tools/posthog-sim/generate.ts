@@ -17,6 +17,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import type { PostHogEvent } from "../../shared/analytics";
 import { PERSONAS } from "../../shared/personas";
+import { FLOWS, flowPersonas } from "../../shared/flows";
 import {
   mulberry32,
   newVisitor,
@@ -49,7 +50,7 @@ const { values: args } = parseArgs({
     sha: { type: "string" },
     host: { type: "string" },
     fixed: { type: "string", default: "" },
-    personas: { type: "string", default: "rosa,kai,typical" },
+    personas: { type: "string" },
     seeds: { type: "string", default: "1001-1010" },
     start: { type: "string" },
   },
@@ -185,7 +186,8 @@ async function swarm() {
   const results: { agent: string; persona: string; completed: boolean; exitStep: string }[] = [];
   const all: PostHogEvent[] = [];
 
-  for (const personaId of args.personas.split(",")) {
+  const personaIds = args.personas ? args.personas.split(",") : flowPersonas(FLOWS[args.flow]);
+  for (const personaId of personaIds) {
     const persona = PERSONAS[personaId];
     if (!persona) throw new Error(`unknown persona ${personaId}`);
     for (const seed of seeds) {

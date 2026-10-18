@@ -1,4 +1,5 @@
-import type { EventMatch, Flow, FlowStep } from "./contracts";
+import { SEGMENTS } from "./analytics";
+import type { EventMatch, Flow, FlowStep, PersonaId } from "./contracts";
 
 export const PRODUCTION_URL = "https://swarm-ecommerce.netlify.app";
 
@@ -38,20 +39,28 @@ const checkout = {
   doneWhen: "When the order is placed and confirmed, call done.",
 } satisfies Omit<Flow, "id" | "goal" | "completion">;
 
+// The id stays buy-tshirt (stored runs use it); the store has two blue polos (12, 14), and
+// any placed order counts, as before.
 export const buyTshirt: Flow = {
   ...checkout,
   id: "buy-tshirt",
-  goal: "Buy a size M blue t-shirt and check out.",
+  goal: "Find a blue polo shirt, buy it in size M and check out.",
   completion: ORDER_PLACED,
 };
 
-/** The same checkout for one other product; real users count only if they viewed it. */
+/** The store's jeans: Skinny Fit (2) and Faded Skinny (8). Neither comes in green. */
+const JEANS = [2, 8];
+
+/** A broad goal: the agent picks the jeans itself (there are no green ones), so any pair counts.
+ * Rosa only: it is her judgment under a vague goal we want to see. Real users count only if they
+ * viewed a pair of jeans. */
 export const buyJeans: Flow = {
   ...checkout,
   id: "buy-jeans",
-  goal: "Buy the Skinny Fit Jeans in size Large and check out.",
-  completion: [...ORDER_PLACED, { event: "product_added", where: { product_id: 2 } }],
-  attempt: { event: "product_viewed", where: { product_id: 2 } },
+  goal: "Buy a pair of jeans as a gift for your grandchild, who loves the color green, and check out.",
+  completion: [...ORDER_PLACED, { event: "product_added", where: { product_id: JEANS } }],
+  attempt: { event: "product_viewed", where: { product_id: JEANS } },
+  personas: ["rosa"],
 };
 
 /** Checkout with the WELCOME10 code (T5 lives in the promo box); real users count only if they tried a code. */
@@ -78,6 +87,9 @@ export const addToCart: Flow = {
 export const FLOWS: Record<string, Flow> = Object.fromEntries([buyTshirt, buyJeans, promoCheckout, addToCart].map((f) => [f.id, f]));
 
 export const MAX_GOAL_LENGTH = 300;
+
+/** The personas that swarm a flow: its own list, else every segment's persona. */
+export const flowPersonas = (flow: Flow): PersonaId[] => flow.personas ?? SEGMENTS.map((s) => s.personaId);
 
 /** A run's flow with the goal the PM typed (if any) in place of the preset's. Steps, success and
  * required stay the preset's: they are what the run is measured against. */

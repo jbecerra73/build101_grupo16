@@ -20,7 +20,7 @@ import type { PostHogSource } from "@frictionswarm/posthog";
 import { fakeFixLoop, pickTargets } from "./fakeFix";
 import { realFixLoop, retestConfig, type Analyzer, type Compare, type FixLoop } from "./fixLoop";
 import { fixedTrapsFromFix, ingested, offlineSwarmRunner, swarmFile } from "./offline";
-import { analysisConfig, defaultWindow, startPipeline, validateRequest, type StartOptions } from "./pipeline";
+import { analysisConfig, defaultWindow, seedsFor, startPipeline, validateRequest, type StartOptions } from "./pipeline";
 import { RunCapError } from "./runs";
 import { trapOf, trapsOf } from "./traps";
 
@@ -93,6 +93,14 @@ async function setup(over: StartOptions = {}) {
   };
   return { runsDir, phases, analyzed, waited, swarms, opts };
 }
+
+describe("seedsFor", () => {
+  it("re-tests the flow's own personas, else every segment's", () => {
+    expect(seedsFor([1, 2], "buy-jeans")).toEqual({ rosa: [1, 2] });
+    expect(Object.keys(seedsFor([1], "buy-tshirt"))).toEqual(["rosa", "kai", "typical"]);
+    expect(Object.keys(seedsFor([1]))).toEqual(["rosa", "kai", "typical"]);
+  });
+});
 
 describe("startPipeline", () => {
   it("happy path: analysis, fix, preview, retest, collecting, comparing, done", async () => {
@@ -184,7 +192,7 @@ describe("startPipeline", () => {
     const retest = retestConfig(config, { attempt: 1, commitSha: "abc", previewUrl: "https://p.example", seeds: { rosa: [1] } });
     expect(retest.goal).toBe("Buy black sneakers and check out.");
     expect(runFlow(retest)).toMatchObject({ id: "buy-tshirt", goal: "Buy black sneakers and check out." });
-    expect(runFlow({ flowId: "buy-tshirt" })!.goal).toBe("Buy a size M blue t-shirt and check out.");
+    expect(runFlow({ flowId: "buy-tshirt" })!.goal).toBe("Find a blue polo shirt, buy it in size M and check out.");
   });
 
   it("defaults to the last 28 days, today included", () => {

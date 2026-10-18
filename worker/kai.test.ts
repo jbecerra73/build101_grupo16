@@ -126,7 +126,7 @@ describe("Kai: taps", () => {
 describe("Kai: budget", () => {
   it("draws the budget per seed from maxActionsRange", () => {
     const budgets = Array.from({ length: 50 }, (_, seed) => actionBudget(kai, seed));
-    expect(budgets.every((b) => b >= 8 && b <= 12)).toBe(true);
+    expect(budgets.every((b) => b >= 16 && b <= 22)).toBe(true);
     expect(new Set(budgets).size).toBeGreaterThan(1);
     expect(actionBudget(kai, 7)).toBe(actionBudget(kai, 7));
   });

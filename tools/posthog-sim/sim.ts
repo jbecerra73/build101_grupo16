@@ -216,8 +216,8 @@ export type SwarmIntent = {
 };
 
 export const SWARM_INTENTS: Record<string, SwarmIntent> = {
-  "buy-tshirt": { productId: 1, item: "blue t-shirt", size: "Medium", color: "Blue", promo: false },
-  "buy-jeans": { productId: 2, item: "jeans", size: "Large", color: "Blue", promo: false },
+  "buy-tshirt": { productId: 12, item: "blue polo shirt", size: "Medium", color: "Blue", promo: false },
+  "buy-jeans": { productId: 8, item: "jeans for a grandchild", size: "Medium", color: "Blue", promo: false },
   "promo-checkout": { productId: 1, item: "t-shirt", size: "Medium", color: "Blue", promo: true },
   "add-to-cart": { productId: 1, item: "t-shirt", size: "Medium", color: "Blue", promo: false, stopAtCart: true },
 };

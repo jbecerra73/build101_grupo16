@@ -83,8 +83,9 @@ describe("other flows", () => {
   };
 
   it("each flow checks its own completion events", () => {
-    expect(validateCompletion(buyJeans, order).reasons).toEqual(["no product_added with product_id=2"]);
+    expect(validateCompletion(buyJeans, order).reasons).toEqual(["no product_added with product_id=2|8"]);
     expect(validateCompletion(buyJeans, [...order, added(2)]).valid).toBe(true);
+    expect(validateCompletion(buyJeans, [...order, added(8)]).valid).toBe(true);
     expect(validateCompletion(buyJeans, [...order, added(1)]).valid).toBe(false);
     expect(validateCompletion(promoCheckout, order).reasons).toEqual(["no successful promo_applied"]);
     // Add to cart ends at /cart (which this order passed): the order is irrelevant, the product_added is not.
@@ -95,7 +96,7 @@ describe("other flows", () => {
   it("counts only the real users who attempted the flow; every swarm agent counts", () => {
     const sessions = realUsers(400);
     const jeans = summarizeSessions(buyJeans, sessions.flat());
-    const viewedJeans = sessions.filter((evs) => evs.some((e) => e.event === "product_viewed" && e.properties.product_id === 2));
+    const viewedJeans = sessions.filter((evs) => evs.some((e) => e.event === "product_viewed" && [2, 8].includes(e.properties.product_id as number)));
     expect(jeans.length).toBe(viewedJeans.length);
     expect(jeans.length).toBeGreaterThan(0);
     expect(summarizeSessions(addToCart, sessions.flat()).length).toBe(sessions.length);

@@ -4,7 +4,7 @@ import {
   FLOWS,
   PERSONAS,
   previewUrl,
-  SEGMENTS,
+  flowPersonas,
   PRODUCTION_URL,
   type FixAttempt,
   type FixResult,
@@ -89,11 +89,12 @@ export async function runFixLoop(opts: FixLoopOptions): Promise<FixResult> {
   const baseline = await readJson<Metrics>(join(baseDir, "metrics.json"));
   const flow = FLOWS[config.flowId];
   if (!flow) throw new Error(`unknown flow ${config.flowId}`);
-  // Every segment's persona re-tests, control included, so a fix can't quietly hurt the others.
+  // The flow's personas re-test (by default every segment's, control included, so a fix can't
+  // quietly hurt the others).
   const seedsFor = (n: number) =>
     opts.retestSeeds
       ? Object.fromEntries(Object.entries(opts.retestSeeds).map(([p, seeds]) => [p, seeds.map((x) => x + (n - 1) * 1000)]))
-      : retestSeeds(SEGMENTS.map((s) => s.personaId), seedsPerPersona, n);
+      : retestSeeds(flowPersonas(flow), seedsPerPersona, n);
 
   const result: FixResult = { baselineRunId, repo, attempts: [] };
   const save = () => writeJson(join(baseDir, "fix.json"), result);

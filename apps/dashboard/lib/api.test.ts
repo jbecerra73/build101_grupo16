@@ -76,7 +76,7 @@ describe("POST /api/runs (enqueue)", () => {
     expect(detail.flow.goal).toBe("Buy a pair of black sneakers in size 42 and check out.");
     expect(detail.flow.required.steps).toContain("Payment");
 
-    const preset = await (await runs.POST(post("/api/runs", { ...req, goal: "Buy a size M blue t-shirt and check out." }))).json();
+    const preset = await (await runs.POST(post("/api/runs", { ...req, goal: "Find a blue polo shirt, buy it in size M and check out." }))).json();
     const queued = await Promise.all((await store.list("queue/")).map((k) => store.getJson<QueuedRun>(k)));
     expect(queued.find((x) => x!.runId === preset.runId)!.req).not.toHaveProperty("goal");
     const long = await runs.POST(post("/api/runs", { ...req, goal: "x".repeat(301) }));
