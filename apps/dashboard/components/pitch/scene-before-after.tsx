@@ -139,7 +139,7 @@ export function SceneBeforeAfter({ d, index }: { d: PitchData; index: number }) 
   const stampAt = ROW_AT + v.comparisons.length * ROW_STEP + 1.4;
   return (
     <div className="flex h-full flex-col gap-6">
-      <SceneHeader index={index} kicker="Antes / después · por segmento" title="Usuarios reales antes, persona swarm después" />
+      <SceneHeader index={index} kicker="Antes / después · por segmento" title="Personas reales antes, usuarios sintéticos después" />
       <FitBox className="flex-1" innerClassName="gap-6">
       <ul className="flex flex-col">
         {v.comparisons.map((c, i) => (
