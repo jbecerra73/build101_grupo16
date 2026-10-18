@@ -328,7 +328,7 @@ export type DepsConfig = {
   /** Offline swarm speed (>1 is faster); 1 = ~30 s on screen. */
   swarmSpeed: number;
   fixStageDelayMs?: number;
-  /** Real fix loop attempts (default 3: up to two retries on the same PR while not proven). */
+  /** Real fix loop attempts (default 2: one retry on the same PR when not proven). */
   fixAttempts?: number;
   signal?: AbortSignal;
   log?: (line: string) => void;
@@ -363,7 +363,7 @@ export function buildDeps(c: DepsConfig): PipelineDeps {
 
 /** Wiring from env: SWARM_RUNNER=offline|tenki (p2 is an alias), RUNS_DIR,
  * SWARM_SPEED, FIX_LOOP=real|fake (fake = offline rehearsal, default with the
- * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 3). */
+ * offline swarm), FIX_STAGE_DELAY_MS, FIX_ATTEMPTS (real fix loop, default 2). */
 export function defaultDeps(runsDir = defaultRunsDir(), log?: (line: string) => void): PipelineDeps {
   const env = process.env.SWARM_RUNNER ?? "offline";
   if (!["offline", "replay", "tenki", "p2"].includes(env)) throw new Error(`Unknown SWARM_RUNNER "${env}" (offline|tenki)`);

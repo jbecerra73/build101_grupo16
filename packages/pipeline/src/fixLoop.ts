@@ -68,11 +68,11 @@ type P1Module = { runFixLoop?: FixLoop };
  * polling, PR finalization), imported at call time from FIX_LOOP_MODULE or
  * <repo>/orchestrator/fix-loop.ts. The specifier is computed so neither tsc nor
  * the Next bundler needs the file; when it is missing the run fails with
- * "P1 fix loop not available". maxAttempts defaults to 3: up to two retries on
- * the same PR while the fix isn't proven (#16). */
+ * "P1 fix loop not available". maxAttempts defaults to 2: one retry on the
+ * same PR, from the swarm's findings, when the first fix isn't proven (#16). */
 export function realFixLoop(
   modulePath = process.env.FIX_LOOP_MODULE ?? join(REPO_ROOT, "orchestrator", "fix-loop.ts"),
-  { maxAttempts = 3 }: { maxAttempts?: number } = {},
+  { maxAttempts = 2 }: { maxAttempts?: number } = {},
 ): FixLoop {
   return async (o) => {
     let mod: P1Module;
