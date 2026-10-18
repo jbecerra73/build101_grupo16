@@ -168,7 +168,7 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
   const fixSection = showFix && (
     <Section key="fix" id="fix" title="Fix & before/after">
       {fix ? (
-        <FixPanel fix={fix} findings={findings ?? []} />
+        <FixPanel runId={config.runId} awaitingDecision={phase === "awaiting-decision"} fix={fix} findings={findings ?? []} />
       ) : (
         <Card>
           <CardContent className="flex items-center gap-3">
@@ -297,6 +297,9 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
                 {config.posthog.buildSha && <code className="font-mono text-foreground">{shortSha(config.posthog.buildSha)}</code>}
               </span>
               <span>{sourceLabel(run)}</span>
+              <Link href={`/flows/${encodeURIComponent(config.flowId)}`} className="underline underline-offset-4 hover:text-foreground">
+                Flow
+              </Link>
               {sessions !== undefined && (
                 <span className="tabular">
                   N=<span className="text-foreground">{compact(sessions)}</span> sessions · {compact(users ?? 0)} users
@@ -333,7 +336,7 @@ function AnalysisView({ initial }: { initial: RunDetail }) {
                   {status.message && <span>{status.message}</span>}
                   {latestFix && (
                     <span className="ml-auto flex items-center gap-2">
-                      <FixStatusBadge status={latestFix.status} />
+                      <FixStatusBadge status={latestFix.status} rehearsal={latestFix.decision?.rehearsal} />
                       {latestFix.prUrl && !!latestFix.prNumber && (
                         <Button variant="link" size="sm" asChild>
                           <a href={latestFix.prUrl} target="_blank" rel="noreferrer">

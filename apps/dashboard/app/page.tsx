@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FlaskConical, Play, ScanSearch } from "lucide-react";
-import { FLOWS } from "@frictionswarm/shared";
+import { flowOf } from "@frictionswarm/shared";
 import { FixStatusBadge, PhaseBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +87,7 @@ export default async function RunsPage() {
                     </TableCell>
                     <TableCell className="max-w-56 whitespace-normal">
                       <div className="flex flex-col">
-                        <span className="line-clamp-2">{FLOWS[r.config.flowId]?.goal ?? r.config.flowId}</span>
+                        <span className="line-clamp-2">{flowOf(r.config)?.goal ?? r.config.flowId}</span>
                         <span className="text-sm text-muted-foreground">
                           {r.config.kind === "retest" ? `preview ${shortSha(r.config.posthog.buildSha)}` : windowLabel(r.config.window)}
                         </span>

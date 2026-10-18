@@ -7,15 +7,18 @@ export const PIPELINE: { phase: RunPhase; label: string; hint: string }[] = [
   { phase: "retesting", label: "Re-test", hint: "Persona swarm shops the preview with fresh seeds" },
   { phase: "collecting", label: "Collect", hint: "Waiting for PostHog ingestion of the swarm's events" },
   { phase: "comparing", label: "Compare", hint: "Each persona against its segment's real users" },
+  { phase: "awaiting-decision", label: "Decide", hint: "The re-test is compared; accept or reject the fix" },
   { phase: "done", label: "Done", hint: "" },
 ];
 
-export const FIX_PHASES: RunPhase[] = ["fixing", "waiting-preview", "retesting", "collecting", "comparing"];
+export const FIX_PHASES: RunPhase[] = ["fixing", "waiting-preview", "retesting", "collecting", "comparing", "awaiting-decision"];
 /** Phases during which the re-test swarm is (or was just) on screen. */
 export const RETEST_PHASES: RunPhase[] = ["retesting", "collecting", "comparing"];
 
-export const phaseLabel = (p: RunPhase) =>
-  p === "failed" ? "Failed" : p === "awaiting-decision" ? "Awaiting decision" : (PIPELINE.find((x) => x.phase === p)?.label ?? p);
+/** Labels that differ from the (shorter) stepper label of the same phase. */
+const PHASE_LABELS: Partial<Record<RunPhase, string>> = { failed: "Failed", "awaiting-decision": "Awaiting decision" };
+
+export const phaseLabel = (p: RunPhase) => PHASE_LABELS[p] ?? PIPELINE.find((x) => x.phase === p)?.label ?? p;
 
 export const isTerminal = (p: RunPhase) => p === "done" || p === "failed";
 

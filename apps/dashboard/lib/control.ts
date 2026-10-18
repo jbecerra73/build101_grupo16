@@ -20,10 +20,11 @@ import { withRunLock } from "./run-lock";
 import { MAX_SEEDS_PER_PERSONA } from "./validate";
 import type { RunSummary } from "./types";
 
-const TERMINAL = new Set(["done", "failed"]);
+const TERMINAL = new Set(["done", "failed", "awaiting-decision"]);
 const RECENT = 20;
 
-/** Active = not done/failed. Retests are shown through their baseline, and the
+/** Active = not done/failed/parked. A run awaiting a decision waits on a human, not on the pipeline; it
+ * lists with the recent runs. Retests are shown through their baseline, and the
  * frozen fixture-* demo folders are never active. */
 export const isActive = (r: RunSummary) => !TERMINAL.has(r.status.phase) && r.config.kind !== "retest" && !r.runId.startsWith("fixture-");
 

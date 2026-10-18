@@ -1,16 +1,30 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { toast } from "sonner";
 import { ArrowLeftRight, ArrowRight, CircleCheck, CircleSlash, CircleX, ExternalLink, Bot, Info, Target, TriangleAlert } from "lucide-react";
 import { PERSONAS, type Finding, type PersonaComparison } from "@frictionswarm/shared";
 import { FixStatusBadge } from "@/components/bits";
 import { PersonaAvatar } from "@/components/persona/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { compact, duration, pct, pct1, personaShort, segmentColor, segmentShort, shortSha, signedPts } from "@/lib/format";
+import { decideRun } from "@/lib/client/api";
+import { compact, duration, formatDateTime, pct, pct1, personaShort, segmentColor, segmentShort, shortSha, signedPts } from "@/lib/format";
 import type { FixAttemptView, FixResultView } from "@/lib/types";
 
 function Delta({ pts }: { pts: number }) {
@@ -115,7 +129,107 @@ export function PopulationsNote() {
   );
 }
 
-function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Finding[]; total: number }) {
+/** Accept / Reject for the fix a run is parked on. A fix that is not proven needs an explicit "Accept anyway". */
+function DecisionBar({ runId, a }: { runId: string; a: FixAttemptView }) {
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("");
+  const override = a.status === "not-proven";
+
+  async function send(body: { decision: "accept" | "reject"; reason?: string; override?: boolean }) {
+    setBusy(true);
+    try {
+      await decideRun(runId, body);
+      toast.success(body.decision === "accept" ? "Accepted: merging" : "Rejected");
+      // Stays busy: the run's next poll moves the phase to done and this bar goes away.
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Decision failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
+      <span className="mr-auto font-medium">{override ? "The fix is not proven. Decide anyway?" : "The fix is proven. Merge it?"}</span>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" disabled={busy}>
+            Reject
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject this fix?</AlertDialogTitle>
+            <AlertDialogDescription>The fix is not merged. A reason is optional.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <textarea
+            aria-label="Reason (optional)"
+            placeholder="Reason (optional)"
+            maxLength={500}
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => send({ decision: "reject", ...(reason.trim() ? { reason: reason.trim() } : {}) })}>
+              Reject
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button disabled={busy}>{override ? "Accept anyway" : "Accept"}</Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{a.prNumber ? `Merge PR #${a.prNumber} into production main?` : "Accept this rehearsal fix?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {a.prNumber ? "This ships the change to production." : "The rehearsal fix loop opened no PR, so nothing is merged."}
+              {override && " The re-test did not prove the improvement; you are overriding that."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => send({ decision: "accept", ...(override ? { override: true } : {}) })}>
+              {override ? "Accept anyway" : a.prNumber ? "Merge" : "Accept"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** What the human decided: shown on the attempt once the daemon applied it. */
+function DecisionNote({ d }: { d: NonNullable<FixAttemptView["decision"]> }) {
+  const accepted = d.decision === "accept";
+  return (
+    <Alert>
+      {accepted ? <CircleCheck style={{ color: "var(--status-good)" }} /> : <CircleX />}
+      <AlertTitle className="text-base">
+        {accepted ? "Accepted" : "Rejected"}
+        {d.rehearsal ? " (rehearsal)" : ""}
+        {d.override ? " · overrode the verdict" : ""}
+      </AlertTitle>
+      <AlertDescription>
+        {d.reason && <p className="text-base text-foreground">{d.reason}</p>}
+        <span className="text-sm">
+          {formatDateTime(d.decidedAt)}
+          {d.mergeSha && (
+            <>
+              {" · merge commit "}
+              <code className="font-mono">{shortSha(d.mergeSha)}</code>
+            </>
+          )}
+        </span>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function AttemptCard({ a, runId, deciding, findings, total }: { a: FixAttemptView; runId: string; deciding: boolean; findings: Finding[]; total: number }) {
   const fixed = a.findingIds.map((id) => findings.find((f) => f.id === id) ?? ({ id, title: id } as Pick<Finding, "id" | "title">));
   const v = a.verdict;
   return (
@@ -124,7 +238,7 @@ function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Find
         <CardTitle className="flex flex-wrap items-center gap-3 text-lg">
           Attempt {a.attempt}
           {total > 1 && <span className="text-sm font-normal text-muted-foreground">of {total}</span>}
-          <FixStatusBadge status={a.status} />
+          <FixStatusBadge status={a.status} rehearsal={a.decision?.rehearsal} />
         </CardTitle>
         <CardDescription className="flex flex-wrap gap-x-4 gap-y-1">
           {a.branch && (
@@ -198,6 +312,9 @@ function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Find
           </Alert>
         )}
 
+        {deciding && <DecisionBar runId={runId} a={a} />}
+        {a.decision && <DecisionNote d={a.decision} />}
+
         {v ? (
           <>
             <ComparisonTable comparisons={v.comparisons} targeted={v.targetedPersonas} />
@@ -230,7 +347,18 @@ function AttemptCard({ a, findings, total }: { a: FixAttemptView; findings: Find
   );
 }
 
-export function FixPanel({ fix, findings }: { fix: FixResultView; findings: Finding[] }) {
+export function FixPanel({
+  runId,
+  awaitingDecision,
+  fix,
+  findings,
+}: {
+  runId: string;
+  /** The run is parked: the latest attempt can be accepted or rejected. */
+  awaitingDecision: boolean;
+  fix: FixResultView;
+  findings: Finding[];
+}) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-muted-foreground">
@@ -238,7 +366,14 @@ export function FixPanel({ fix, findings }: { fix: FixResultView; findings: Find
         <span className="tabular">{fix.attempts.length}</span> attempt{fix.attempts.length === 1 ? "" : "s"}
       </p>
       {[...fix.attempts].reverse().map((a) => (
-        <AttemptCard key={a.attempt} a={a} findings={findings} total={fix.attempts.length} />
+        <AttemptCard
+          key={a.attempt}
+          a={a}
+          runId={runId}
+          deciding={awaitingDecision && a === fix.attempts.at(-1) && (a.status === "ready" || a.status === "not-proven")}
+          findings={findings}
+          total={fix.attempts.length}
+        />
       ))}
     </div>
   );
