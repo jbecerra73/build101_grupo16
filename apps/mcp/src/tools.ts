@@ -321,8 +321,9 @@ export function registerTools(server: McpServer, api: ApiClient, links: Links, o
     "cancel_run",
     { title: "Cancel a run", description: "Cancels a queued or running run.", inputSchema: { runId } },
     guarded(async ({ runId: id }: { runId: string }) => {
+      const warning = await orchestratorWarning();
       await api.post(`/api/runs/${seg(id)}/cancel`);
-      return reply(`Cancel requested for run \`${id}\`.\nRun: ${runLink(links, id)}`, { runId: id, cancelled: true });
+      return reply(withWarning(warning, `Cancel requested for run \`${id}\`.\nRun: ${runLink(links, id)}`), { runId: id, cancelled: true });
     }),
   );
 }

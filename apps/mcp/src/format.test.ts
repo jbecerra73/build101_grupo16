@@ -169,10 +169,23 @@ describe("decisionPackage", () => {
     expect(pkg).toContain("Accept merges to production main; reject closes the PR.");
   });
 
+  it("shows N next to every per-step conversion", () => {
+    const pkg = decisionPackage(r, undefined, links);
+    const section3 = pkg.split("### 3.")[1].split("### 4.")[0];
+    const rows = section3.split("\n").filter((l) => l.startsWith("| ") && !l.startsWith("| Step"));
+    expect(rows.length).toBe(2 * buyTshirt.steps.length);
+    for (const row of rows) expect(row).toMatch(/^\| [^|]+ \| [\d.]+% \(\d+\/\d+\) \| [\d.]+% \(\d+\/\d+\) \|$/);
+  });
+
+  it("fences the diff so a ``` line inside it can't close the block", () => {
+    const pkg = decisionPackage(r, "diff --git a/README.md b/README.md\n+```\n+code", links);
+    expect(pkg).toContain("````diff\ndiff --git a/README.md b/README.md\n+```\n+code\n````");
+  });
+
   it("truncates a long diff and lists its files", () => {
     const diff = ["diff --git a/a.ts b/a.ts", ...Array.from({ length: 199 }, (_, i) => `+a${i}`), "diff --git a/b.ts b/b.ts", ...Array.from({ length: 199 }, (_, i) => `+b${i}`)].join("\n");
     const pkg = decisionPackage(r, diff, links);
-    const body = pkg.split("```diff\n")[1].split("\n```")[0];
+    const body = pkg.split("````diff\n")[1].split("\n````")[0];
     expect(body.split("\n").length).toBeLessThanOrEqual(300);
     expect(pkg).toContain("… 100 more lines; files: a.ts, b.ts");
   });

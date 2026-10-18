@@ -149,6 +149,13 @@ describe("tools", () => {
     expect(res.text.startsWith("⚠ Orchestrator offline")).toBe(true);
   });
 
+  it("cancel_run warns first when the orchestrator heartbeat is stale", async () => {
+    const { call } = await connect({ "GET /api/control": offline, "POST /api/runs/run-1/cancel": { body: { ok: true } } });
+    const res = await call("cancel_run", { runId: "run-1" });
+    expect(res.text.startsWith("⚠ Orchestrator offline")).toBe(true);
+    expect(res.text).toContain("Cancel requested");
+  });
+
   it("get_decision refuses before the run awaits a decision", async () => {
     const { call } = await connect({ "GET /api/runs/run-1": { body: run("retesting") } });
     const res = await call("get_decision", { runId: "run-1" });

@@ -152,10 +152,13 @@ const comparisonRow = (c: PersonaComparison, targeted: boolean) =>
 
 function stepTable(c: PersonaComparison): string[] {
   const steps = [...new Set([...c.before.funnel.map((f) => f.step), ...c.after.funnel.map((f) => f.step)])];
-  const reach = (funnel: { step: string; reached: number }[], n: number, step: string) => pct(ratio(funnel.find((f) => f.step === step)?.reached ?? 0, n));
+  const reach = (funnel: { step: string; reached: number }[], n: number, step: string) => {
+    const reached = funnel.find((f) => f.step === step)?.reached ?? 0;
+    return `${pct(ratio(reached, n))} (${reached}/${n})`;
+  };
   return [
     `**${c.personaId}** vs real \`${c.segmentId}\` users (reached each step)`,
-    "| Step | Before (real users) | After (agents) |",
+    "| Step | Before (real users, reached/N) | After (agents, reached/N) |",
     "|---|---|---|",
     ...steps.map((s) => `| ${s} | ${reach(c.before.funnel, c.before.n, s)} | ${reach(c.after.funnel, c.after.n, s)} |`),
   ];
@@ -208,7 +211,7 @@ export function decisionPackage(run: RunDetail, diff: string | undefined, links:
   else {
     const files = changedFiles(diff);
     const lines = diff.replace(/\n$/, "").split("\n");
-    out.push("", `Changed files (${files.length}): ${files.join(", ") || "none"}`, "", "```diff", ...lines.slice(0, MAX_DIFF_LINES), "```");
+    out.push("", `Changed files (${files.length}): ${files.join(", ") || "none"}`, "", "````diff", ...lines.slice(0, MAX_DIFF_LINES), "````");
     if (lines.length > MAX_DIFF_LINES) out.push(`… ${lines.length - MAX_DIFF_LINES} more lines; files: ${files.join(", ")}`);
   }
 
